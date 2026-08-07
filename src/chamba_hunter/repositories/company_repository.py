@@ -1,5 +1,6 @@
 from dataclasses import replace
 import sqlite3
+from chamba_hunter.domain.common import utc_now
 
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.converters import (
@@ -33,7 +34,7 @@ def _row_to_company(row: sqlite3.Row) -> Company:
         status=CompanyStatus(row["status"]),
         notes=row["notes"],
         created_at=datetime_from_db(row["created_at"]),
-updated_at=datetime_from_db(row["updated_at"]),
+        updated_at=datetime_from_db(row["updated_at"]),
     )
 
 
@@ -167,3 +168,61 @@ class CompanyRepository:
             _row_to_company(row)
             for row in rows
         ]
+
+    def update_enrichment(
+        self,
+        company_id: int,
+        website_url: str | None = None,
+        domain: str | None = None,
+        company_type: CompanyType | None = None,
+    ) -> Company:
+        company = self.get_by_id(company_id)
+
+        if company is None:
+            raise ValueError(
+                f"Company does not exist: {company_id}"
+            )
+
+        updated_at = utc_now()
+
+        updated = replace(
+            company,
+            website_url=(
+                website_url
+                if website_url is not None
+                else company.website_url
+            ),
+            domain=(
+                domain
+                if domain is not None
+                else company.domain
+            ),
+            company_type=(
+                company_type
+                if company_type is not None
+                else company.company_type
+            ),
+            updated_at=updated_at,
+        )
+
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE companies
+                SET
+                    website_url = ?,
+                    domain = ?,
+                    company_type = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    updated.website_url,
+                    updated.domain,
+                    updated.company_type.value,
+                    datetime_to_db(updated.updated_at),
+                    company_id,
+                ),
+            )
+
+        return updated

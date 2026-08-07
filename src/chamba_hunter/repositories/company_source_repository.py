@@ -231,3 +231,23 @@ class CompanySourceRepository:
             return None
 
         return _row_to_company_source(row)
+
+    def list_by_source_type(
+        self,
+        source_type: SourceType,
+    ) -> list[CompanySource]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM company_sources
+                WHERE source_type = ?
+                ORDER BY id
+                """,
+                (source_type.value,),
+            ).fetchall()
+
+        return [
+            _row_to_company_source(row)
+            for row in rows
+        ]

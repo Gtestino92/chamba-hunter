@@ -178,3 +178,17 @@ class Application:
 
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
+
+@dataclass(slots=True)
+class CompanyClassification:
+    company_id: int
+    company_type: CompanyType
+    confidence: float
+    method: str
+
+    id: int | None = None
+
+    source_url: str | None = None
+    evidence: JsonObject | None = None
+
+    created_at: datetime = field(default_factory=utc_now)
