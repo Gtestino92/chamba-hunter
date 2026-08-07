@@ -1,31 +1,19 @@
 from dataclasses import replace
-from datetime import datetime
 import sqlite3
 
 from chamba_hunter.db.connection import Database
+from chamba_hunter.db.converters import (
+    bool_from_db,
+    bool_to_db,
+    datetime_from_db,
+    datetime_to_db,
+)
 from chamba_hunter.domain.enums import (
     CompanyStatus,
     CompanyType,
     TargetPriority,
 )
 from chamba_hunter.domain.models import Company
-
-
-def _to_db_datetime(value: datetime) -> str:
-    return value.isoformat().replace("+00:00", "Z")
-
-
-def _from_db_datetime(value: str) -> datetime:
-    return datetime.fromisoformat(
-        value.replace("Z", "+00:00")
-    )
-
-
-def _from_db_bool(value: int | None) -> bool | None:
-    if value is None:
-        return None
-
-    return bool(value)
 
 
 def _row_to_company(row: sqlite3.Row) -> Company:
@@ -40,12 +28,12 @@ def _row_to_company(row: sqlite3.Row) -> Company:
         careers_url=row["careers_url"],
         general_application_url=row["general_application_url"],
         country=row["country"],
-        remote_latam=_from_db_bool(row["remote_latam"]),
-        remote_argentina=_from_db_bool(row["remote_argentina"]),
+        remote_latam=bool_from_db(row["remote_latam"]),
+        remote_argentina=bool_from_db(row["remote_argentina"]),
         status=CompanyStatus(row["status"]),
         notes=row["notes"],
-        created_at=_from_db_datetime(row["created_at"]),
-        updated_at=_from_db_datetime(row["updated_at"]),
+        created_at=datetime_from_db(row["created_at"]),
+updated_at=datetime_from_db(row["updated_at"]),
     )
 
 
@@ -91,12 +79,12 @@ class CompanyRepository:
                     company.careers_url,
                     company.general_application_url,
                     company.country,
-                    company.remote_latam,
-                    company.remote_argentina,
+                    bool_to_db(company.remote_latam),
+                    bool_to_db(company.remote_argentina),
                     company.status.value,
                     company.notes,
-                    _to_db_datetime(company.created_at),
-                    _to_db_datetime(company.updated_at),
+                    datetime_to_db(company.created_at),
+                    datetime_to_db(company.updated_at),
                 ),
             )
 

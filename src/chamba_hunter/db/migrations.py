@@ -3,16 +3,12 @@ import re
 import sqlite3
 
 from chamba_hunter.db.connection import Database, PROJECT_ROOT
+from chamba_hunter.db.converters import datetime_to_db
 from chamba_hunter.domain.common import utc_now
-
 
 DEFAULT_MIGRATIONS_DIR = PROJECT_ROOT / "migrations"
 
 MIGRATION_FILENAME_PATTERN = re.compile(r"^\d{3}_.+\.sql$")
-
-
-def _to_db_datetime() -> str:
-    return utc_now().isoformat().replace("+00:00", "Z")
 
 
 def _sql_literal(value: str) -> str:
@@ -75,8 +71,8 @@ def migrate(
             migration_sql = migration_file.read_text(encoding="utf-8")
 
             version = _sql_literal(migration_file.name)
-            applied_at = _sql_literal(_to_db_datetime())
-
+            applied_at = _sql_literal(datetime_to_db(utc_now()))
+            
             script = f"""
             BEGIN IMMEDIATE;
 

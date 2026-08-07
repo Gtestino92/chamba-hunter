@@ -11,5 +11,11 @@ dependencies = [
     "pydantic>=2.13,<3"
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8"
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
