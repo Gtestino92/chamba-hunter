@@ -223,6 +223,50 @@ class CompanyAtsRepository:
             id=company_ats_id,
         )
 
+    def list_active_primary_by_provider(
+        self,
+        provider: AtsProvider,
+    ) -> list[CompanyAts]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT *
+                FROM company_ats
+                WHERE provider = ?
+                  AND is_primary = 1
+                  AND is_active = 1
+                  AND external_identifier IS NOT NULL
+                ORDER BY company_id, id
+                """,
+                (
+                    provider.value,
+                ),
+            ).fetchall()
+
+        return [
+            _row_to_company_ats(row)
+            for row in rows
+        ]
+
+    def mark_successful_sync(
+        self,
+        company_ats_id: int,
+    ) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE company_ats
+                SET last_successful_sync_at = ?
+                WHERE id = ?
+                """,
+                (
+                    datetime_to_db(
+                        utc_now()
+                    ),
+                    company_ats_id,
+                ),
+            )
+
     def _find_existing(
         self,
         company_ats: CompanyAts,

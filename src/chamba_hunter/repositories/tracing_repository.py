@@ -13,6 +13,7 @@ from chamba_hunter.domain.enums import (
 )
 from chamba_hunter.domain.tracing import (
     AtsDetection,
+    AtsSync,
     CompanyScan,
     Run,
     RunStep,
@@ -377,3 +378,111 @@ class TracingRepository:
             detection,
             id=detection_id,
         )
+
+    def add_ats_sync(
+        self,
+        ats_sync: AtsSync,
+    ) -> AtsSync:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO ats_syncs (
+                    run_step_id,
+                    company_ats_id,
+                    started_at,
+                    finished_at,
+                    status,
+                    http_status,
+                    jobs_received,
+                    jobs_created,
+                    jobs_updated,
+                    jobs_deactivated,
+                    error_type,
+                    error_message
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    ats_sync.run_step_id,
+                    ats_sync.company_ats_id,
+                    datetime_to_db(
+                        ats_sync.started_at
+                    ),
+                    (
+                        datetime_to_db(
+                            ats_sync.finished_at
+                        )
+                        if ats_sync.finished_at
+                        is not None
+                        else None
+                    ),
+                    ats_sync.status.value,
+                    ats_sync.http_status,
+                    ats_sync.jobs_received,
+                    ats_sync.jobs_created,
+                    ats_sync.jobs_updated,
+                    ats_sync.jobs_deactivated,
+                    ats_sync.error_type,
+                    ats_sync.error_message,
+                ),
+            )
+
+            ats_sync_id = cursor.lastrowid
+
+        if ats_sync_id is None:
+            raise RuntimeError(
+                "SQLite did not return "
+                "an ATS sync id."
+            )
+
+        return replace(
+            ats_sync,
+            id=ats_sync_id,
+        )
+
+    def finish_ats_sync(
+        self,
+        ats_sync_id: int,
+        status: RunStatus,
+        http_status: int | None,
+        jobs_received: int,
+        jobs_created: int,
+        jobs_updated: int,
+        jobs_deactivated: int,
+        error_type: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE ats_syncs
+                SET
+                    finished_at = ?,
+                    status = ?,
+                    http_status = ?,
+                    jobs_received = ?,
+                    jobs_created = ?,
+                    jobs_updated = ?,
+                    jobs_deactivated = ?,
+                    error_type = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    datetime_to_db(
+                        utc_now()
+                    ),
+                    status.value,
+                    http_status,
+                    jobs_received,
+                    jobs_created,
+                    jobs_updated,
+                    jobs_deactivated,
+                    error_type,
+                    error_message,
+                    ats_sync_id,
+                ),
+            )
