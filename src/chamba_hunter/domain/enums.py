@@ -36,6 +36,8 @@ class AtsProvider(StrEnum):
     ASHBY = "ASHBY"
     LEVER = "LEVER"
     SMARTRECRUITERS = "SMARTRECRUITERS"
+    WORKABLE = "WORKABLE"
+    BAMBOOHR = "BAMBOOHR"
     CUSTOM = "CUSTOM"
 
 
@@ -102,6 +104,7 @@ class ScanReviewStatus(StrEnum):
 class AtsScanStatus(StrEnum):
     DETECTED = "DETECTED"
     NOT_DETECTED = "NOT_DETECTED"
+    BLOCKED = "BLOCKED"
     ERROR = "ERROR"
 
 
@@ -113,4 +116,6 @@ class AtsDetectionMethod(StrEnum):
     SCRIPT_REFERENCE = "SCRIPT_REFERENCE"
     URL_PARAMETER = "URL_PARAMETER"
     REDIRECT = "REDIRECT"
+    PUBLIC_API_PROBE = "PUBLIC_API_PROBE"
+    BOARD_PROBE = "BOARD_PROBE"
     OTHER = "OTHER"
