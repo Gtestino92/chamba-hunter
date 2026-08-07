@@ -4,13 +4,13 @@ import unicodedata
 
 from pydantic import AnyHttpUrl
 
-from chamba_hunter.domain.models import Company
-from chamba_hunter.repositories.company_repository import CompanyRepository
-from chamba_hunter.schemas.inputs import CompanySeedInput
 from chamba_hunter.domain.models import Company, CompanySource
+from chamba_hunter.repositories.company_repository import CompanyRepository
 from chamba_hunter.repositories.company_source_repository import (
     CompanySourceRepository,
 )
+from chamba_hunter.schemas.inputs import CompanySeedInput
+
 
 def clean_company_name(name: str) -> str:
     """
@@ -48,10 +48,6 @@ def extract_domain(url: AnyHttpUrl) -> str:
 def normalize_website_url(url: AnyHttpUrl) -> str:
     """
     Canonicalizes a company website URL.
-
-    Examples:
-        https://www.pomelo.la/ -> https://pomelo.la
-        HTTPS://EXAMPLE.COM/   -> https://example.com
     """
     parsed = urlsplit(str(url))
 
@@ -91,9 +87,9 @@ class CompanyImportResult:
 
 class CompanyImportService:
     def __init__(
-    self,
-    company_repository: CompanyRepository,
-    company_source_repository: CompanySourceRepository,
+        self,
+        company_repository: CompanyRepository,
+        company_source_repository: CompanySourceRepository,
     ) -> None:
         self.company_repository = company_repository
         self.company_source_repository = company_source_repository
@@ -101,7 +97,8 @@ class CompanyImportService:
     def import_seed(
         self,
         seed: CompanySeedInput,
-        ) -> CompanyImportResult:
+        source_metadata: dict | None = None,
+    ) -> CompanyImportResult:
         name = clean_company_name(seed.name)
         normalized_name = normalize_company_name(seed.name)
 
@@ -112,16 +109,47 @@ class CompanyImportService:
             website_url = normalize_website_url(seed.website_url)
             domain = extract_domain(seed.website_url)
 
+        source_url = (
+            str(seed.source_url)
+            if seed.source_url is not None
+            else None
+        )
+
         existing: Company | None = None
         matched_by: str | None = None
 
-        if domain is not None:
+        # 1. Strongest identity: same external source.
+        source_company_id = self.company_source_repository.find_company_id(
+            source_type=seed.source_type,
+            external_id=seed.external_id,
+            source_url=source_url,
+        )
+
+        if source_company_id is not None:
+            existing = self.company_repository.get_by_id(
+                source_company_id
+            )
+
+            if existing is None:
+                raise RuntimeError(
+                    "Company source references a missing company."
+                )
+
+            matched_by = "SOURCE"
+
+        # 2. Official domain.
+        if existing is None and domain is not None:
             existing = self.company_repository.get_by_domain(domain)
 
             if existing is not None:
                 matched_by = "DOMAIN"
 
-        elif normalized_name:
+        # 3. Fallback for seeds without a domain.
+        if (
+            existing is None
+            and domain is None
+            and normalized_name
+        ):
             existing = self.company_repository.get_by_normalized_name(
                 normalized_name
             )
@@ -150,12 +178,6 @@ class CompanyImportService:
                 "Imported company must have an id before recording its source."
             )
 
-        source_url = (
-            str(seed.source_url)
-            if seed.source_url is not None
-            else None
-        )
-
         self.company_source_repository.add_or_touch(
             CompanySource(
                 company_id=company.id,
@@ -163,6 +185,7 @@ class CompanyImportService:
                 external_id=seed.external_id,
                 source_url=source_url,
                 raw_name=seed.name,
+                metadata=source_metadata,
             )
         )
 

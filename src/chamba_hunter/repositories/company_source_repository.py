@@ -30,6 +30,51 @@ class CompanySourceRepository:
     def __init__(self, database: Database) -> None:
         self.database = database
 
+    def find_company_id(
+        self,
+        source_type: SourceType,
+        external_id: str | None = None,
+        source_url: str | None = None,
+    ) -> int | None:
+        if external_id is None and source_url is None:
+            return None
+
+        with self.database.connection() as connection:
+            if external_id is not None:
+                row = connection.execute(
+                    """
+                    SELECT company_id
+                    FROM company_sources
+                    WHERE source_type = ?
+                      AND external_id = ?
+                    LIMIT 1
+                    """,
+                    (
+                        source_type.value,
+                        external_id,
+                    ),
+                ).fetchone()
+
+            else:
+                row = connection.execute(
+                    """
+                    SELECT company_id
+                    FROM company_sources
+                    WHERE source_type = ?
+                      AND source_url = ?
+                    LIMIT 1
+                    """,
+                    (
+                        source_type.value,
+                        source_url,
+                    ),
+                ).fetchone()
+
+        if row is None:
+            return None
+
+        return row["company_id"]
+
     def add_or_touch(
         self,
         source: CompanySource,
