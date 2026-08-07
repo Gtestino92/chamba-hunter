@@ -5,11 +5,16 @@ from chamba_hunter.db.converters import (
     datetime_to_db,
     json_to_db,
 )
-from chamba_hunter.domain.models import CompanyClassification
+from chamba_hunter.domain.models import (
+    CompanyClassification,
+)
 
 
 class CompanyClassificationRepository:
-    def __init__(self, database: Database) -> None:
+    def __init__(
+        self,
+        database: Database,
+    ) -> None:
         self.database = database
 
     def add(
@@ -36,8 +41,12 @@ class CompanyClassificationRepository:
                     classification.confidence,
                     classification.method,
                     classification.source_url,
-                    json_to_db(classification.evidence),
-                    datetime_to_db(classification.created_at),
+                    json_to_db(
+                        classification.evidence
+                    ),
+                    datetime_to_db(
+                        classification.created_at
+                    ),
                 ),
             )
 
@@ -45,10 +54,33 @@ class CompanyClassificationRepository:
 
         if classification_id is None:
             raise RuntimeError(
-                "SQLite did not return a classification id."
+                "SQLite did not return a "
+                "classification id."
             )
 
         return replace(
             classification,
             id=classification_id,
         )
+
+    def exists_for_company_and_method(
+        self,
+        company_id: int,
+        method: str,
+    ) -> bool:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM company_classifications
+                WHERE company_id = ?
+                  AND method = ?
+                LIMIT 1
+                """,
+                (
+                    company_id,
+                    method,
+                ),
+            ).fetchone()
+
+        return row is not None

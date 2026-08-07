@@ -10,6 +10,7 @@ class CompanyType(StrEnum):
 
 
 class TargetPriority(StrEnum):
+    VERY_HIGH = "VERY_HIGH"
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"

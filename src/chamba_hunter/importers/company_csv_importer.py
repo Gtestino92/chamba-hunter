@@ -13,6 +13,7 @@ from chamba_hunter.services.company_import_service import (
 CSV_FIELDS = {
     "name",
     "website_url",
+    "careers_url",
     "country",
     "source_type",
     "external_id",
@@ -34,7 +35,9 @@ class CsvImportSummary:
     existing: int = 0
     invalid: int = 0
 
-    errors: list[CsvImportError] = field(default_factory=list)
+    errors: list[CsvImportError] = field(
+        default_factory=list
+    )
 
 
 def import_companies_csv(
@@ -42,7 +45,9 @@ def import_companies_csv(
     service: CompanyImportService,
 ) -> CsvImportSummary:
     if not path.exists():
-        raise FileNotFoundError(f"CSV file not found: {path}")
+        raise FileNotFoundError(
+            f"CSV file not found: {path}"
+        )
 
     summary = CsvImportSummary()
 
@@ -54,7 +59,9 @@ def import_companies_csv(
         reader = csv.DictReader(file)
 
         if reader.fieldnames is None:
-            raise ValueError("CSV does not contain a header.")
+            raise ValueError(
+                "CSV does not contain a header."
+            )
 
         fieldnames = {
             name.strip()
@@ -67,15 +74,22 @@ def import_companies_csv(
                 "CSV must contain a 'name' column."
             )
 
-        unknown_fields = fieldnames - CSV_FIELDS
+        unknown_fields = (
+            fieldnames - CSV_FIELDS
+        )
 
         if unknown_fields:
             raise ValueError(
                 "Unknown CSV columns: "
-                + ", ".join(sorted(unknown_fields))
+                + ", ".join(
+                    sorted(unknown_fields)
+                )
             )
 
-        for row_number, row in enumerate(reader, start=2):
+        for row_number, row in enumerate(
+            reader,
+            start=2,
+        ):
             summary.total += 1
 
             payload = {
@@ -87,16 +101,24 @@ def import_companies_csv(
             }
 
             try:
-                seed = CompanySeedInput.model_validate(payload)
+                seed = (
+                    CompanySeedInput
+                    .model_validate(payload)
+                )
 
-                result = service.import_seed(seed)
+                result = service.import_seed(
+                    seed
+                )
 
                 if result.created:
                     summary.created += 1
                 else:
                     summary.existing += 1
 
-            except (ValidationError, ValueError) as exc:
+            except (
+                ValidationError,
+                ValueError,
+            ) as exc:
                 summary.invalid += 1
 
                 summary.errors.append(
