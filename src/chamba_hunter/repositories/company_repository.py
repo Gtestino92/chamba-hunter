@@ -132,6 +132,27 @@ class CompanyRepository:
 
         return _row_to_company(row)
 
+    def get_by_normalized_name(
+        self,
+        normalized_name: str,
+        ) -> Company | None:
+            with self.database.connection() as connection:
+                row = connection.execute(
+                    """
+                    SELECT *
+                    FROM companies
+                    WHERE normalized_name = ?
+                    ORDER BY id
+                    LIMIT 1
+                    """,
+                    (normalized_name,),
+                ).fetchone()
+
+            if row is None:
+                return None
+
+            return _row_to_company(row)
+
     def list_all(self) -> list[Company]:
         with self.database.connection() as connection:
             rows = connection.execute(
