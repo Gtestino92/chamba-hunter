@@ -23,16 +23,28 @@ class CompanySeedInput(BaseModel):
     notes: str | None = None
 
     @field_validator(
-        "country",
-        "external_id",
-        "notes",
-        mode="before",
+    "website_url",
+    "country",
+    "external_id",
+    "source_url",
+    "notes",
+    mode="before",
     )
     @classmethod
     def blank_strings_to_none(cls, value: Any) -> Any:
         if isinstance(value, str) and not value.strip():
             return None
+
         return value
+
+
+@field_validator("source_type", mode="before")
+@classmethod
+def normalize_source_type(cls, value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip().upper()
+
+    return value
 
 
 class SearchProfileInput(BaseModel):

@@ -1,8 +1,11 @@
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.migrations import migrate
-from chamba_hunter.repositories.company_repository import CompanyRepository
+from chamba_hunter.repositories.company_source_repository import (
+    CompanySourceRepository,
+)
 from chamba_hunter.schemas.inputs import CompanySeedInput
 from chamba_hunter.services.company_import_service import CompanyImportService
+from chamba_hunter.repositories.company_repository import CompanyRepository
 
 
 def test_import_company_normalizes_and_deduplicates(tmp_path):
@@ -10,8 +13,12 @@ def test_import_company_normalizes_and_deduplicates(tmp_path):
     migrate(database)
 
     repository = CompanyRepository(database)
-    service = CompanyImportService(repository)
+    source_repository = CompanySourceRepository(database)
 
+    service = CompanyImportService(
+        repository,
+        source_repository,
+    )
     first = service.import_seed(
         CompanySeedInput(
             name="  Pomelo  ",
@@ -39,3 +46,10 @@ def test_import_company_normalizes_and_deduplicates(tmp_path):
     assert second.company.id == first.company.id
 
     assert len(repository.list_all()) == 1
+
+    sources = source_repository.list_for_company(
+        first.company.id
+    )
+
+    assert len(sources) == 1
+    assert sources[0].source_type.value == "MANUAL"

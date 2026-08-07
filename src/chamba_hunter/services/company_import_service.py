@@ -7,7 +7,10 @@ from pydantic import AnyHttpUrl
 from chamba_hunter.domain.models import Company
 from chamba_hunter.repositories.company_repository import CompanyRepository
 from chamba_hunter.schemas.inputs import CompanySeedInput
-
+from chamba_hunter.domain.models import Company, CompanySource
+from chamba_hunter.repositories.company_source_repository import (
+    CompanySourceRepository,
+)
 
 def clean_company_name(name: str) -> str:
     """
@@ -88,15 +91,17 @@ class CompanyImportResult:
 
 class CompanyImportService:
     def __init__(
-        self,
-        company_repository: CompanyRepository,
+    self,
+    company_repository: CompanyRepository,
+    company_source_repository: CompanySourceRepository,
     ) -> None:
         self.company_repository = company_repository
+        self.company_source_repository = company_source_repository
 
     def import_seed(
         self,
         seed: CompanySeedInput,
-    ) -> CompanyImportResult:
+        ) -> CompanyImportResult:
         name = clean_company_name(seed.name)
         normalized_name = normalize_company_name(seed.name)
 
@@ -125,24 +130,44 @@ class CompanyImportService:
                 matched_by = "NORMALIZED_NAME"
 
         if existing is not None:
-            return CompanyImportResult(
-                company=existing,
-                created=False,
-                matched_by=matched_by,
+            company = existing
+            created = False
+        else:
+            company = Company(
+                name=name,
+                normalized_name=normalized_name,
+                domain=domain,
+                website_url=website_url,
+                country=seed.country,
+                notes=seed.notes,
             )
 
-        company = Company(
-            name=name,
-            normalized_name=normalized_name,
-            domain=domain,
-            website_url=website_url,
-            country=seed.country,
-            notes=seed.notes,
+            company = self.company_repository.add(company)
+            created = True
+
+        if company.id is None:
+            raise RuntimeError(
+                "Imported company must have an id before recording its source."
+            )
+
+        source_url = (
+            str(seed.source_url)
+            if seed.source_url is not None
+            else None
         )
 
-        saved = self.company_repository.add(company)
+        self.company_source_repository.add_or_touch(
+            CompanySource(
+                company_id=company.id,
+                source_type=seed.source_type,
+                external_id=seed.external_id,
+                source_url=source_url,
+                raw_name=seed.name,
+            )
+        )
 
         return CompanyImportResult(
-            company=saved,
-            created=True,
+            company=company,
+            created=created,
+            matched_by=matched_by,
         )
