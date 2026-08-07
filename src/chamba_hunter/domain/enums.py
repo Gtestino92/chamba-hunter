@@ -1,0 +1,115 @@
+from enum import StrEnum
+
+
+class CompanyType(StrEnum):
+    PRODUCT = "PRODUCT"
+    CONSULTANCY = "CONSULTANCY"
+    RECRUITER = "RECRUITER"
+    OTHER = "OTHER"
+    UNKNOWN = "UNKNOWN"
+
+
+class TargetPriority(StrEnum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    UNKNOWN = "UNKNOWN"
+
+
+class CompanyStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    IGNORED = "IGNORED"
+
+
+class SourceType(StrEnum):
+    MANUAL = "MANUAL"
+    YC = "YC"
+    GETONBOARD = "GETONBOARD"
+    HIMALAYAS = "HIMALAYAS"
+    WELLFOUND = "WELLFOUND"
+    OTHER = "OTHER"
+
+
+class AtsProvider(StrEnum):
+    GREENHOUSE = "GREENHOUSE"
+    ASHBY = "ASHBY"
+    LEVER = "LEVER"
+    SMARTRECRUITERS = "SMARTRECRUITERS"
+    CUSTOM = "CUSTOM"
+
+
+class ContactType(StrEnum):
+    CAREERS_EMAIL = "CAREERS_EMAIL"
+    RECRUITING_EMAIL = "RECRUITING_EMAIL"
+    GENERAL_APPLICATION_URL = "GENERAL_APPLICATION_URL"
+
+
+class ContactReviewStatus(StrEnum):
+    UNREVIEWED = "UNREVIEWED"
+    VALID = "VALID"
+    INVALID = "INVALID"
+
+
+class WorkplaceType(StrEnum):
+    REMOTE = "REMOTE"
+    HYBRID = "HYBRID"
+    ONSITE = "ONSITE"
+    UNKNOWN = "UNKNOWN"
+
+
+class MatchLevel(StrEnum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class ApplicationType(StrEnum):
+    JOB = "JOB"
+    SPONTANEOUS_EMAIL = "SPONTANEOUS_EMAIL"
+    GENERAL_APPLICATION = "GENERAL_APPLICATION"
+
+
+class ApplicationStatus(StrEnum):
+    PENDING = "PENDING"
+    APPLIED = "APPLIED"
+    SENT = "SENT"
+    INTERVIEW = "INTERVIEW"
+    REJECTED = "REJECTED"
+    WITHDRAWN = "WITHDRAWN"
+    NO_RESPONSE = "NO_RESPONSE"
+
+
+class RunStatus(StrEnum):
+    RUNNING = "RUNNING"
+    SUCCESS = "SUCCESS"
+    PARTIAL = "PARTIAL"
+    FAILED = "FAILED"
+
+
+class RunCreatedBy(StrEnum):
+    MANUAL = "MANUAL"
+    CRON = "CRON"
+
+
+class ScanReviewStatus(StrEnum):
+    UNREVIEWED = "UNREVIEWED"
+    CORRECT = "CORRECT"
+    FALSE_POSITIVE = "FALSE_POSITIVE"
+    FALSE_NEGATIVE = "FALSE_NEGATIVE"
+
+
+class AtsScanStatus(StrEnum):
+    DETECTED = "DETECTED"
+    NOT_DETECTED = "NOT_DETECTED"
+    ERROR = "ERROR"
+
+
+class AtsDetectionMethod(StrEnum):
+    HOMEPAGE_LINK = "HOMEPAGE_LINK"
+    CAREERS_LINK = "CAREERS_LINK"
+    HTML_LINK = "HTML_LINK"
+    EMBED_URL = "EMBED_URL"
+    SCRIPT_REFERENCE = "SCRIPT_REFERENCE"
+    URL_PARAMETER = "URL_PARAMETER"
+    REDIRECT = "REDIRECT"
+    OTHER = "OTHER"
