@@ -744,7 +744,7 @@ class CareersAtsDetectionService:
         }
 
         if provider_hints:
-            candidates.extend(
+            probed_candidates = (
                 _probe_ats_providers(
                     client=client,
                     company=company,
@@ -758,6 +758,19 @@ class CareersAtsDetectionService:
                     ),
                     existing_candidates=(
                         candidates
+                    ),
+                )
+            )
+
+            candidates.extend(
+                probed_candidates
+            )
+
+            candidates = (
+                _filter_smartrecruiters_candidates_by_probe(
+                    candidates=candidates,
+                    probed_candidates=(
+                        probed_candidates
                     ),
                 )
             )
@@ -2384,6 +2397,50 @@ def _canonical_board_url(
         )
 
     return fallback
+
+
+def _filter_smartrecruiters_candidates_by_probe(
+    candidates: list[AtsCandidate],
+    probed_candidates: list[AtsCandidate],
+) -> list[AtsCandidate]:
+    has_smartrecruiters_hint = any(
+        candidate.provider
+        == AtsProvider.SMARTRECRUITERS
+        for candidate in candidates
+    )
+
+    if not has_smartrecruiters_hint:
+        return candidates
+
+    validated_identifiers = {
+        candidate.external_identifier
+        for candidate in probed_candidates
+        if (
+            candidate.provider
+            == AtsProvider.SMARTRECRUITERS
+            and candidate.method
+            == AtsDetectionMethod.PUBLIC_API_PROBE
+            and candidate.external_identifier
+            is not None
+        )
+    }
+
+    # SmartRecruiters returns HTTP 200 with
+    # an empty collection for unknown company
+    # identifiers. URL-derived candidates are
+    # therefore only trustworthy when the
+    # public Posting API validates the same
+    # identifier with active postings.
+    return [
+        candidate
+        for candidate in candidates
+        if (
+            candidate.provider
+            != AtsProvider.SMARTRECRUITERS
+            or candidate.external_identifier
+            in validated_identifiers
+        )
+    ]
 
 
 def _deduplicate_candidates(
