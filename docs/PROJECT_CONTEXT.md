@@ -9,8 +9,8 @@
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-ad9f92222630893cd97e7a75abb48ec197670f79
-seniority
+fab7c1cac64068562209c415eb26a86723f66806
+matching
 ```
 
 Ese `main` ya contiene:
@@ -21,19 +21,26 @@ Ese `main` ya contiene:
 - occupation / IT / backend classification v1;
 - skills classification v1;
 - seniority classification v1;
-- migraciones `004`, `005`, `006`, `007` y `008`;
-- limpieza de artefactos locales históricos `.zip` / `.txt`.
+- professional matching v1;
+- migraciones `004` a `009`;
+- `BACKEND_SOFTWARE_V1`;
+- `MATCHING_V1`.
 
-El trabajo de **professional matching v1** fue implementado, calibrado, aplicado y validado sobre la DB local después de ese commit y todavía está pendiente de publicación en GitHub.
+El trabajo de **content freshness + operational/application priority v1** fue implementado, validado, aplicado sobre la DB local y todavía está pendiente de publicación en GitHub.
 
-Estado local esperado antes de publicar matching:
+Estado local esperado antes de publicar este slice:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-?? migrations/009_job_professional_matches.sql
-?? src/chamba_hunter/commands/match_jobs.py
-?? src/chamba_hunter/repositories/job_matching_repository.py
-?? src/chamba_hunter/services/job_matching_service.py
+M  src/chamba_hunter/repositories/job_lead_repository.py
+M  src/chamba_hunter/repositories/job_repository.py
+?? migrations/010_job_content_freshness.sql
+?? migrations/011_job_operational_priorities.sql
+?? src/chamba_hunter/commands/prioritize_jobs.py
+?? src/chamba_hunter/domain/job_content.py
+?? src/chamba_hunter/repositories/job_freshness_repository.py
+?? src/chamba_hunter/repositories/job_operational_priority_repository.py
+?? src/chamba_hunter/services/job_operational_priority_service.py
 ```
 
 La DB SQLite local contiene los últimos resultados persistidos de evaluación:
@@ -48,6 +55,10 @@ SENIORITY_V1
 Run 83
 MATCHING_V1
 BACKEND_SOFTWARE_V1
+
+Run 84
+OPERATIONAL_PRIORITY_V1
+baseline
 ```
 
 GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
@@ -152,9 +163,9 @@ seniority
     ↓
 professional matching
     ↓
-operational / application priority          ← PRÓXIMO VERTICAL
+operational / application priority
     ↓
-shortlist / Excel report / manual action
+shortlist / Excel report / manual action     ← PRÓXIMO VERTICAL
 ```
 
 El end game debe soportar además un refresh manual orientado a **early application**:
@@ -167,6 +178,7 @@ refresh acquisition / ATS
 → skills
 → seniority
 → matching
+→ operational priority
 → shortlist de oportunidades nuevas/relevantes
 ```
 
@@ -354,12 +366,14 @@ Migraciones confirmadas en GitHub `main`:
 006_job_occupation_classifications.sql
 007_job_skill_classifications.sql
 008_job_seniority_classifications.sql
+009_job_professional_matches.sql
 ```
 
-Migración local implementada y aplicada, pendiente de publicación:
+Migraciones locales implementadas y aplicadas, pendientes de publicación:
 
 ```text
-009_job_professional_matches.sql
+010_job_content_freshness.sql
+011_job_operational_priorities.sql
 ```
 
 Tablas/vistas relevantes:
@@ -386,6 +400,7 @@ job_occupation_classifications
 job_skill_classifications
 job_seniority_classifications
 job_professional_matches
+job_operational_priorities
 view job_candidates
 ```
 
@@ -491,39 +506,97 @@ Estos números son DB local observada y pueden cambiar.
 
 ### Semántica importante de freshness
 
-`JobRepository.sync_board_jobs()` actualmente:
-
-- crea nuevos jobs con `first_seen_at = last_seen_at = seen_at`;
-- para un `external_id` existente actualiza contenido y `last_seen_at`;
-- vuelve a marcar `is_active = 1`;
-- cuenta ese registro como `updated` aunque el contenido no haya cambiado;
-- desactiva IDs activos ausentes de un snapshot ATS completo.
-
-Por lo tanto:
+Antes de migration `010`, `JobRepository.sync_board_jobs()` y `JobLeadRepository.upsert_source_jobs()` sólo podían distinguir:
 
 ```text
-updated
+first_seen_at
+last_seen_at
+is_active
 ```
 
-no significa necesariamente “contenido modificado”, y:
+El contador `updated` de los syncs históricos significa “registro existente re-observado/escrito”, no necesariamente “contenido cambió”.
+
+Desde el slice local pendiente de publicación se agrega:
+
+```text
+content_hash
+content_hash_version
+last_changed_at
+```
+
+a:
+
+```text
+jobs
+job_leads
+```
+
+Hash version:
+
+```text
+JOB_CONTENT_V1
+```
+
+Contenido material incluido:
+
+```text
+title
+description
+location_text
+workplace_type
+employment_type
+job_url
+apply_url
+published_at
+expires_at   # sólo job_leads
+```
+
+No se incluyen:
 
 ```text
 last_seen_at
+is_active
+raw_payload_json
 ```
 
-significa “observado nuevamente”, no “cambió”.
-
-Broad `JobLeadRepository.upsert_source_jobs()` también actualiza `last_seen_at` para existentes, pero ausencia broad no implica cierre.
-
-Actualmente no existe:
+Semántica:
 
 ```text
-last_changed_at
-content_hash
-per-job change history
+first observation
+→ content_hash current
+→ last_changed_at = NULL
+
+same content observed again
+→ update last_seen_at
+→ preserve last_changed_at
+
+material content hash changes
+→ last_changed_at = seen_at
 ```
 
-No resolver esto dentro de skills ni seniority.
+La inicialización de migration `010` se hace desde Python porque SQLite no tiene SHA-256 built-in.
+
+El baseline inicializó hashes para:
+
+```text
+jobs       3662
+job_leads   400
+```
+
+sin fabricar cambios históricos:
+
+```text
+jobs last_changed_at != NULL        0
+job_leads last_changed_at != NULL   0
+```
+
+`last_seen_at` sigue significando “observado nuevamente”, no “cambió”.
+
+ATS snapshot absence puede desactivar `jobs`.
+
+Broad source absence sigue sin implicar cierre automático.
+
+Freshness es parte del shared job search engine y permanece separada de `MATCHING_V1`.
 
 ---
 
@@ -2388,245 +2461,771 @@ o posterior, con decisión explícita de recalcular.
 
 ---
 
-## 19. Próximo vertical: operational / application priority
+## 19. Content freshness + operational/application priority v1 — TERMINADO
+
+### Objetivo
+
+Separar explícitamente:
+
+```text
+professional fit
+```
+
+de:
+
+```text
+what should be reviewed/applied first
+```
+
+sin degradar `MATCHING_V1` ni usar timestamps débiles como sustitutos de cambios reales.
+
+Dos responsabilidades separadas:
+
+```text
+010_job_content_freshness.sql
+→ shared job corpus freshness
+
+011_job_operational_priorities.sql
+→ search-profile-specific operational state
+```
+
+### Freshness compartido
+
+Migration:
+
+```text
+010_job_content_freshness.sql
+```
+
+Agrega a `jobs` y `job_leads`:
+
+```text
+content_hash
+content_hash_version
+last_changed_at
+```
+
+Hash version:
+
+```text
+JOB_CONTENT_V1
+```
+
+Helper:
+
+```text
+src/chamba_hunter/domain/job_content.py
+```
+
+Los dos puntos comunes de escritura fueron actualizados:
+
+```text
+src/chamba_hunter/repositories/job_repository.py
+src/chamba_hunter/repositories/job_lead_repository.py
+```
+
+No fue necesario modificar cada adapter ATS individual.
+
+Regla:
+
+```text
+new record
+→ write current hash
+→ last_changed_at NULL
+
+existing + same hash
+→ preserve last_changed_at
+
+existing + different hash
+→ last_changed_at = seen_at
+```
+
+No usar:
+
+```text
+last_seen_at
+```
+
+como prueba de modificación.
+
+### Baseline de hash
+
+Repository:
+
+```text
+src/chamba_hunter/repositories/job_freshness_repository.py
+```
+
+La primera ejecución real inicializó:
+
+```text
+3662 jobs
+400 job_leads
+```
+
+Todos quedaron con:
+
+```text
+content_hash_version = JOB_CONTENT_V1
+```
+
+y:
+
+```text
+last_changed_at = NULL
+```
+
+No se inventó historial previo a la existencia de esta feature.
+
+### Operational priority
+
+Migration:
+
+```text
+011_job_operational_priorities.sql
+```
+
+Tabla:
+
+```text
+job_operational_priorities
+```
+
+Identidad:
+
+```text
+UNIQUE(
+    record_kind,
+    record_id,
+    search_profile_id
+)
+```
+
+Soporta:
+
+```text
+ATS
+LEAD
+```
+
+A diferencia de `job_professional_matches`, operational priority **retiene** filas históricas cuando una oportunidad deja de formar parte del current professional scope.
+
+Eso permite representar:
+
+```text
+INACTIVE
+SUPERSEDED
+OUT_OF_SCOPE
+```
+
+sin perder el último snapshot profesional conocido.
+
+### Archivos locales pendientes de publicación
+
+```text
+migrations/010_job_content_freshness.sql
+migrations/011_job_operational_priorities.sql
+src/chamba_hunter/domain/job_content.py
+src/chamba_hunter/repositories/job_repository.py
+src/chamba_hunter/repositories/job_lead_repository.py
+src/chamba_hunter/repositories/job_freshness_repository.py
+src/chamba_hunter/repositories/job_operational_priority_repository.py
+src/chamba_hunter/services/job_operational_priority_service.py
+src/chamba_hunter/commands/prioritize_jobs.py
+```
+
+Rule version:
+
+```text
+OPERATIONAL_PRIORITY_V1
+```
+
+Search profile:
+
+```text
+BACKEND_SOFTWARE_V1
+```
+
+### Estados operativos
+
+```text
+NEW
+UPDATED
+KNOWN
+INACTIVE
+SUPERSEDED
+OUT_OF_SCOPE
+```
+
+Semántica:
+
+#### `NEW`
+
+No usa “últimas N horas”.
+
+Usa como watermark:
+
+```text
+finished_at
+```
+
+del último:
+
+```text
+prioritize_jobs
+status = SUCCESS
+```
+
+Entonces:
+
+```text
+first_seen_at > previous successful watermark
+→ NEW
+```
+
+La primera corrida no tiene watermark anterior:
+
+```text
+initial baseline
+→ KNOWN
+```
+
+Esto evita marcar artificialmente como nuevos todos los jobs existentes cuando se instala la feature.
+
+#### `UPDATED`
+
+```text
+last_changed_at > previous successful watermark
+→ UPDATED
+```
+
+No deriva `UPDATED` desde:
+
+```text
+last_seen_at
+ATS jobs_updated counters
+```
+
+Si una fila previamente no accionable vuelve al current professional scope:
+
+```text
+INACTIVE / SUPERSEDED / OUT_OF_SCOPE
+→ current scope again
+→ UPDATED
+```
+
+#### `KNOWN`
+
+```text
+first_seen_at <= watermark
+and no recorded content change after watermark
+→ KNOWN
+```
+
+#### `INACTIVE`
+
+Se usa cuando la oportunidad previamente retenida:
+
+```text
+source missing/inactive
+```
+
+o cuando:
+
+```text
+expires_at <= now
+```
+
+para una fuente que expone expiry.
+
+#### `SUPERSEDED`
+
+Para un `LEAD` previamente retenido cuando existe:
+
+```text
+canonical_job_id
+```
+
+y el canonical ATS job está activo.
+
+#### `OUT_OF_SCOPE`
+
+El source sigue activo pero ya no existe current professional match para ese search profile.
+
+### Orden de prioridad
+
+No se creó otro score 0–100.
+
+El orden es lexicográfico y auditable:
+
+```text
+1. actionable before non-actionable
+
+2. professional match level
+   VERY_HIGH
+   HIGH
+   MEDIUM
+   LOW
+
+3. operational state
+   NEW
+   UPDATED
+   KNOWN
+
+4. professional score DESC
+
+5. application channel
+   DIRECT_APPLY_URL
+   JOB_URL
+   GENERAL_APPLICATION_URL
+   PUBLIC_CONTACT
+   NONE
+
+6. first_seen_at DESC
+```
+
+Consecuencia intencional:
+
+```text
+NEW VERY_HIGH 88
+> KNOWN VERY_HIGH 92
+```
+
+pero:
+
+```text
+KNOWN VERY_HIGH 92
+> NEW HIGH 77
+```
+
+Freshness puede ordenar dentro del nivel profesional, pero no destruir la jerarquía profesional.
+
+### Application channel
+
+Orden:
+
+```text
+DIRECT_APPLY_URL
+JOB_URL
+GENERAL_APPLICATION_URL
+PUBLIC_CONTACT
+NONE
+```
+
+`apply_url` es conveniencia operacional, no professional quality.
+
+El discovery mostró fuerte dependencia del provider, por lo que no debe dominar el ranking.
+
+Para `GENERAL_APPLICATION_URL` y recruiting/careers email vía `public_contacts`, sólo se consideran contactos:
+
+```text
+is_active = 1
+review_status = VALID
+```
+
+Tipos públicos soportados:
+
+```text
+GENERAL_APPLICATION_URL
+CAREERS_EMAIL
+RECRUITING_EMAIL
+```
+
+No inferir emails personales.
+
+### `published_at`
+
+No participa de `OPERATIONAL_PRIORITY_V1`.
+
+Coverage observada:
+
+```text
+46 / 993
+4.6%
+```
+
+y entre `HIGH`:
+
+```text
+0 / 36
+```
+
+Se preserva para reporting cuando existe.
+
+### Dry-run aislada
+
+La validación usó una copia temporal de la DB real.
+
+Baseline esperado observado:
+
+```text
+Candidates: 993
+
+NEW          0
+UPDATED      0
+KNOWN      993
+INACTIVE     0
+SUPERSEDED   0
+OUT_OF_SCOPE 0
+```
+
+Application channels:
+
+```text
+DIRECT_APPLY_URL   606
+JOB_URL            387
+```
+
+Hash baseline:
+
+```text
+jobs       3662
+job_leads   400
+```
+
+Luego se ejercitaron cambios sintéticos sobre la copia:
+
+```text
+1 NEW
+1 UPDATED
+991 KNOWN
+```
+
+Además:
+
+```text
+ATS unchanged → no last_changed_at
+LEAD unchanged → no last_changed_at
+
+ATS changed → last_changed_at set
+LEAD changed → last_changed_at set
+```
+
+Resultado:
+
+```text
+PASS
+```
+
+La DB real no fue modificada durante esa validación.
+
+### Run 84 — baseline real
+
+Primera ejecución real:
+
+```text
+Rule version:   OPERATIONAL_PRIORITY_V1
+Search profile: BACKEND_SOFTWARE_V1
+Mode:           APPLY
+Candidates:     993
+Watermark:      INITIAL BASELINE
+
+Created:        993
+Updated:          0
+
+Run id:          84
+Profile id:       1
+```
+
+Operational states:
+
+```text
+NEW               0
+UPDATED           0
+KNOWN           993
+INACTIVE          0
+SUPERSEDED        0
+OUT_OF_SCOPE      0
+```
+
+States por professional match:
+
+```text
+VERY_HIGH    KNOWN 12
+HIGH         KNOWN 36
+MEDIUM       KNOWN 120
+LOW          KNOWN 825
+```
+
+Application channels:
+
+```text
+DIRECT_APPLY_URL   606
+JOB_URL            387
+GENERAL_APPLICATION_URL 0
+PUBLIC_CONTACT      0
+NONE                0
+```
+
+Freshness invariants:
+
+```text
+jobs total                       3662
+job_leads total                   400
+jobs missing JOB_CONTENT_V1         0
+leads missing JOB_CONTENT_V1        0
+jobs last_changed_at baseline        0
+leads last_changed_at baseline       0
+```
+
+Operational invariants:
+
+```text
+priority rows                    993
+duplicate keys                     0
+wrong priority rule version        0
+wrong professional rule version    0
+```
+
+Professional snapshot preservado:
+
+```text
+VERY_HIGH   12
+HIGH        36
+MEDIUM     120
+LOW        825
+```
+
+Tracing:
+
+```text
+Run id:       84
+Command:      prioritize_jobs
+Status:       SUCCESS
+
+Step:         operational_priority
+Step status:  SUCCESS
+Items:        993 / 993 / 0 failed / 0 skipped
+```
+
+Validación final:
+
+```text
+PASS
+```
+
+### Refresh semantics a partir de Run 84
+
+Run 84 constituye el primer watermark real.
+
+Un refresh futuro debe ejecutar la cadena correspondiente:
+
+```text
+acquisition / ATS refresh
+→ canonicalization
+→ geography
+→ occupation
+→ skills
+→ seniority
+→ professional matching
+→ operational priority
+```
+
+Entonces:
+
+```text
+new source record after Run 84
+→ NEW
+
+same record, same content hash
+→ KNOWN
+
+same record, content hash changed after Run 84
+→ UPDATED
+
+previous opportunity no longer active/current
+→ retained as INACTIVE / SUPERSEDED / OUT_OF_SCOPE
+```
+
+No volver a correr `prioritize_jobs --apply` sin un refresh previo sólo para “actualizar” el watermark.
+
+### Regla de versionado
+
+No modificar materialmente las reglas anteriores manteniendo:
+
+```text
+JOB_CONTENT_V1
+OPERATIONAL_PRIORITY_V1
+```
+
+Cambios materiales futuros deben usar nuevas versiones explícitas.
+
+---
+
+## 20. Próximo vertical: shortlist / report / manual action
 
 ### Estado
 
 NO implementado todavía.
 
-Este es el **último vertical lógico** antes de generar el shortlist/reporte accionable.
-
-Pipeline inmediato:
+Todos los verticales de comprensión/evaluación necesarios para producir una lista accionable están implementados localmente:
 
 ```text
+canonicalization
+geography
+occupation/backend
+skills
+seniority
 professional matching
-    ↓
-operational / application priority      ← NEXT
-    ↓
-shortlist / Excel report
-    ↓
-manual application / outreach
+freshness
+operational priority
 ```
+
+El próximo objetivo es convertir ese estado en una salida cómoda para revisión manual y aplicación.
 
 ### Objetivo
 
-Ordenar las oportunidades ya evaluadas profesionalmente según **qué conviene revisar/aplicar primero**, sin modificar el professional match.
-
-Debe responder preguntas como:
-
-```text
-¿es nueva?
-¿cuándo la vimos por primera vez?
-¿sigue activa?
-¿tiene apply URL directo?
-¿qué tan confiable es published_at?
-¿es HIGH/VERY_HIGH profesionalmente?
-¿ya era conocida?
-¿cambió realmente?
-```
-
-### Señales ya disponibles
-
-Por candidate:
-
-```text
-first_seen_at
-last_seen_at
-published_at
-is_active
-job_url
-apply_url
-```
-
-En el scope observado:
-
-```text
-first_seen_at   993 / 993  100.0%
-last_seen_at    993 / 993  100.0%
-job_url         993 / 993  100.0%
-apply_url       606 / 993   61.0%
-published_at     46 / 993    4.6%
-```
-
-Por lo tanto:
-
-```text
-first_seen_at
-```
-
-es la señal más sólida para NEW.
-
-`published_at` es complementaria y sólo debe pesar cuando exista y sea confiable.
-
-### Estados operativos mínimos
-
-Diseñar al menos:
-
-```text
-NEW
-KNOWN
-UPDATED
-CLOSED / INACTIVE
-```
-
-pero no inventar `UPDATED` desde `last_seen_at`.
-
-El sync actual cuenta muchos records como `updated` aunque sólo hayan sido vistos nuevamente.
-
-Por eso:
-
-```text
-last_seen_at
-!=
-last_changed_at
-```
-
-### NEW
-
-La definición de NEW debe basarse en estado del sistema, no sólo en antigüedad publicada.
-
-Punto de partida:
-
-```text
-first_seen_at
-```
-
-El diseño debe resolver explícitamente la ventana/semántica de:
-
-```text
-NEW
-```
-
-para refreshes manuales sucesivos.
-
-No fijar una ventana arbitraria sin inspeccionar el flujo real de refresh.
-
-### UPDATED
-
-Actualmente no existe evidencia suficiente para afirmar cambios reales de contenido.
-
-Antes de etiquetar `UPDATED` de forma fuerte, evaluar si hace falta introducir:
-
-```text
-content_hash
-last_changed_at
-change history / event
-```
-
-Esto es un problema de freshness, no de matching.
-
-### Application channel quality
-
-Orden conceptual actual:
-
-```text
-1. apply_url directo
-2. job_url / careers page
-3. general_application_url
-4. public recruiting/careers email
-```
-
-Para los 993 candidatos actuales:
-
-```text
-job_url    993
-apply_url  606
-```
-
-La prioridad puede usar calidad del canal, pero no debe convertir ausencia de `apply_url` en descarte.
-
-### Professional score como input
-
-Operational priority puede usar:
-
-```text
-professional score
-match_level
-```
-
-como una señal importante, pero no debe recalcular el professional fit.
-
-Ejemplo:
-
-```text
-match 88 + NEW + direct apply
-```
-
-puede ordenarse antes que:
-
-```text
-match 92 + KNOWN + older discovery
-```
-
-sin cambiar ninguno de los dos match scores.
-
-### Salida deseada
-
-El end game debe poder mostrar rápidamente:
+Producir un shortlist/reporte que permita ver rápidamente:
 
 ```text
 NEW + VERY_HIGH
+UPDATED + VERY_HIGH
 NEW + HIGH
+UPDATED + HIGH
 KNOWN + VERY_HIGH
 KNOWN + HIGH
 ```
 
-con:
+seguido de niveles inferiores cuando sea necesario.
+
+Campos mínimos:
 
 ```text
 company
 title
-match score
+operational state
+professional match level
+professional score
 match reasons
 first_seen_at
+last_changed_at
 published_at when available
 application channel
-job/apply URL
+application target
+job_url
+apply_url
+origin/provider
+record_kind + record_id
 ```
 
-y después producir el shortlist/reporte.
+Debe usar:
 
-### Discovery antes de implementar
+```text
+job_operational_priorities
+```
 
-Antes de fijar score/schema de operational priority:
+como fuente de estado operacional y:
 
-1. inspeccionar distribución real de `first_seen_at` en los 993;
-2. distinguir qué timestamps vienen de ATS vs broad leads;
-3. inspeccionar `published_at` por provider;
-4. medir direct `apply_url` por match level;
-5. revisar cómo se ejecutaría un refresh manual completo hoy;
-6. decidir si `NEW` necesita estado persistido entre refreshes o puede derivarse de una referencia de run;
-7. estudiar si `UPDATED` requiere `content_hash` / `last_changed_at`;
-8. decidir si operational priority necesita tabla persistida o puede ser una proyección/reporting layer;
-9. preservar CLOSED/INACTIVE sin mezclarlos con match score.
+```text
+job_professional_matches
+```
 
-No implementar todavía antes de ese discovery.
+para razones profesionales detalladas cuando hagan falta.
+
+### Primer formato recomendado
+
+Mantener CLI/local-first.
+
+Antes de agregar UI, generar un reporte reproducible y fácil de abrir.
+
+Formato probable:
+
+```text
+Excel / XLSX
+```
+
+con al menos:
+
+```text
+Actionable
+New or Updated
+Very High / High
+All Current
+Non-actionable / historical
+```
+
+o una organización equivalente que surja del discovery.
+
+No implementar todavía una web UI.
+
+### Manual action
+
+El reporte debe exponer el mejor canal:
+
+```text
+DIRECT_APPLY_URL
+JOB_URL
+GENERAL_APPLICATION_URL
+PUBLIC_CONTACT
+```
+
+pero no debe:
+
+```text
+auto-apply
+auto-email
+infer recruiter emails
+```
+
+El usuario decide manualmente qué oportunidades accionar.
+
+### Applications
+
+La tabla existente:
+
+```text
+applications
+```
+
+sigue disponible para tracking manual posterior.
+
+Estado observado antes de este vertical:
+
+```text
+0 rows
+```
+
+No ampliar su schema preventivamente hasta ver qué necesita realmente el workflow de shortlist/manual action.
+
+### Discovery antes de implementar reporte
+
+Antes de decidir workbook/schema final:
+
+1. inspeccionar `job_operational_priorities` real;
+2. revisar el top `VERY_HIGH/HIGH` con estados/channels;
+3. decidir cuántas filas mostrar por defecto;
+4. decidir hojas/columnas del XLSX;
+5. definir qué parte de `reasons_json` debe expandirse a columnas;
+6. preservar URLs clickeables;
+7. distinguir current actionable vs historical/non-actionable;
+8. decidir si applications existentes deben excluir, marcar o simplemente mostrarse;
+9. no cambiar las reglas de matching/freshness/priority para acomodar el reporte.
 
 ---
 
-## 20. Restricciones para operational priority
+## 21. Restricciones para shortlist / reporting
 
-- No modificar materialmente `ARGENTINA_V1`; usar versión nueva si hiciera falta.
-- No modificar materialmente `OCCUPATION_V1`.
-- No modificar materialmente `SKILLS_V1`.
-- No modificar materialmente `SENIORITY_V1`.
-- No modificar materialmente `MATCHING_V1`; usar `MATCHING_V2`.
-- No introducir freshness dentro de `job_professional_matches`.
-- No usar `last_seen_at` como prueba de cambio.
-- No llamar `UPDATED` a todo registro que el ATS sync reporte como updated.
-- No depender de `published_at` porque su cobertura actual es baja.
-- No convertir ausencia de direct `apply_url` en rechazo.
-- No borrar CLOSED/INACTIVE del corpus histórico.
-- No mezclar operational priority con professional score semantics.
-- No agregar auto-apply.
-- No agregar UI/web API todavía.
-- No hacer scraping evasivo para obtener mejores timestamps o apply URLs.
-- No ampliar acquisition como parte de este vertical salvo defecto concreto que bloquee el objetivo.
-- No sobrearquitecturar múltiples search profiles durante este vertical.
+- No modificar `ARGENTINA_V1`.
+- No modificar `OCCUPATION_V1`.
+- No modificar `SKILLS_V1`.
+- No modificar `SENIORITY_V1`.
+- No modificar `MATCHING_V1`.
+- No modificar `JOB_CONTENT_V1`.
+- No modificar `OPERATIONAL_PRIORITY_V1`.
+- No recalcular professional fit en reporting.
+- No redefinir `NEW` con una ventana de horas.
+- No usar `last_seen_at` como `UPDATED`.
+- No hacer auto-apply.
+- No enviar emails automáticamente.
+- No inferir emails personales.
+- No agregar web UI todavía.
+- No introducir una dependencia pesada si `openpyxl`/CSV existente es suficiente.
+- No borrar estados históricos `INACTIVE`, `SUPERSEDED` u `OUT_OF_SCOPE`.
+- No hacer acquisition/ATS discovery como parte del reporte salvo defecto concreto que bloquee la salida.
 
 ---
 
-## 21. Runs y estados actuales
+## 22. Runs y estados actuales
 
 Últimos runs relevantes:
 
@@ -2645,6 +3244,7 @@ No implementar todavía antes de ese discovery.
 81 skills classification apply
 82 seniority classification apply
 83 professional matching apply
+84 operational priority initial baseline apply
 ```
 
 Estados actuales:
@@ -2707,33 +3307,59 @@ MATCHING_V1 / BACKEND_SOFTWARE_V1
   duplicate keys        0
   wrong rule version    0
   invalid scores        0
+
+JOB_CONTENT_V1
+  jobs total                    3662
+  job_leads total                400
+  jobs missing current hash        0
+  leads missing current hash       0
+  baseline changed jobs            0
+  baseline changed leads           0
+
+OPERATIONAL_PRIORITY_V1
+  scope               993
+  new                   0
+  updated               0
+  known               993
+  inactive              0
+  superseded            0
+  out of scope          0
+  direct apply        606
+  job URL             387
+  duplicate keys        0
+  wrong rule version    0
 ```
 
-Run 83 es el último estado persistido confirmado.
+Run 84 es el último estado persistido confirmado.
 
 ---
 
-## 22. Checklist antes de publicar matching
+## 23. Checklist antes de publicar operational priority
 
 El worktree debería contener exactamente:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-?? migrations/009_job_professional_matches.sql
-?? src/chamba_hunter/commands/match_jobs.py
-?? src/chamba_hunter/repositories/job_matching_repository.py
-?? src/chamba_hunter/services/job_matching_service.py
+M  src/chamba_hunter/repositories/job_lead_repository.py
+M  src/chamba_hunter/repositories/job_repository.py
+?? migrations/010_job_content_freshness.sql
+?? migrations/011_job_operational_priorities.sql
+?? src/chamba_hunter/commands/prioritize_jobs.py
+?? src/chamba_hunter/domain/job_content.py
+?? src/chamba_hunter/repositories/job_freshness_repository.py
+?? src/chamba_hunter/repositories/job_operational_priority_repository.py
+?? src/chamba_hunter/services/job_operational_priority_service.py
 ```
 
 No versionar diagnósticos temporales:
 
 ```text
-matching-v1-discovery.*
-matching-v1-dry-run.*
-matching-v1-r2-dry-run.*
-matching-v1-r3-dry-run.*
-matching-v1-apply-validation.*
-matching-v1-post-apply-validation.*
+operational-priority-discovery.ps1
+operational-priority-discovery.txt
+operational-priority-v1-dry-run.ps1
+operational-priority-v1-dry-run.txt
+operational-priority-v1-apply-and-validate.ps1
+operational-priority-v1-apply-validation.txt
 ```
 
 Antes de commit/push:
@@ -2742,30 +3368,36 @@ Antes de commit/push:
 python -m compileall -q src
 
 git add -N -- `
-    "migrations/009_job_professional_matches.sql" `
-    "src/chamba_hunter/commands/match_jobs.py" `
-    "src/chamba_hunter/repositories/job_matching_repository.py" `
-    "src/chamba_hunter/services/job_matching_service.py"
+    "migrations/010_job_content_freshness.sql" `
+    "migrations/011_job_operational_priorities.sql" `
+    "src/chamba_hunter/commands/prioritize_jobs.py" `
+    "src/chamba_hunter/domain/job_content.py" `
+    "src/chamba_hunter/repositories/job_freshness_repository.py" `
+    "src/chamba_hunter/repositories/job_operational_priority_repository.py" `
+    "src/chamba_hunter/services/job_operational_priority_service.py"
 
 git diff --check
 
 git reset -- `
-    "migrations/009_job_professional_matches.sql" `
-    "src/chamba_hunter/commands/match_jobs.py" `
-    "src/chamba_hunter/repositories/job_matching_repository.py" `
-    "src/chamba_hunter/services/job_matching_service.py"
+    "migrations/010_job_content_freshness.sql" `
+    "migrations/011_job_operational_priorities.sql" `
+    "src/chamba_hunter/commands/prioritize_jobs.py" `
+    "src/chamba_hunter/domain/job_content.py" `
+    "src/chamba_hunter/repositories/job_freshness_repository.py" `
+    "src/chamba_hunter/repositories/job_operational_priority_repository.py" `
+    "src/chamba_hunter/services/job_operational_priority_service.py"
 
 git diff --stat
 git status --short
 ```
 
-Los warnings LF→CRLF de Git en Windows son informativos. Evaluar el exit code de Git, no el hecho de que PowerShell represente stderr como `NativeCommandError`.
+Los warnings LF→CRLF de Git en Windows son informativos si `git diff --check` retorna exit code `0`.
 
 El usuario decide y ejecuta commit/push manualmente.
 
 ---
 
-## 23. Prompt operativo para nueva conversación
+## 24. Prompt operativo para nueva conversación
 
 ```text
 Repositorio: Gtestino92/chamba-hunter
@@ -2774,24 +3406,24 @@ Base: main
 Primero:
 - verificar HEAD y últimos commits reales en GitHub;
 - leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si migration 009 y matching repository/service/command ya están publicados;
+- confirmar si migrations 010/011 y operational priority ya están publicados;
 - distinguir GitHub code vs DB local observed state;
-- no asumir que conteos históricos siguen vigentes;
-- inspeccionar código real de ingestion/freshness, canonicalization, geography, occupation, skills, seniority y matching;
-- no modificar código todavía;
-- preparar discovery del último vertical: operational/application priority;
-- preservar MATCHING_V1 como professional fit independiente;
-- no incorporar first_seen_at, published_at, application channel ni freshness dentro de MATCHING_V1;
-- inspeccionar distribución real de first_seen_at;
-- inspeccionar published_at por provider;
-- inspeccionar apply_url por match level;
-- diseñar NEW/KNOWN/CLOSED de forma explícita;
-- no usar last_seen_at como prueba de UPDATED;
-- evaluar si UPDATED necesita content_hash / last_changed_at;
-- decidir si priority se persiste o se deriva por run/report;
-- mantener application order: direct apply_url, job_url/careers, general_application_url, public recruiting/careers email;
+- no asumir que los conteos históricos siguen vigentes;
+- preservar ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1 y OPERATIONAL_PRIORITY_V1;
+- no modificar matching para necesidades de reporting;
+- no redefinir NEW por una ventana temporal fija;
+- no usar last_seen_at como UPDATED;
+- usar Run 84 como baseline/watermark histórico confirmado hasta que exista un refresh posterior;
+- siguiente vertical: shortlist / report / manual action;
+- comenzar por discovery read-only del output real de job_operational_priorities;
+- diseñar un reporte local reproducible, probablemente XLSX;
+- mostrar NEW/UPDATED antes de KNOWN dentro de cada professional match level;
+- preservar application channel y URLs;
+- incluir professional reasons sin duplicar la lógica del matcher;
+- separar current actionable de retained historical/non-actionable;
 - no auto-apply;
-- no UI;
-- no evasión anti-bot;
-- mantener reusable search_profiles como principio, sin sobrearquitectura preventiva.
+- no auto-email;
+- no inferir emails personales;
+- no UI web todavía;
+- no evasión anti-bot.
 ```

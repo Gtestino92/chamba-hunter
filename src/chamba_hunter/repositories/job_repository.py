@@ -7,6 +7,10 @@ from chamba_hunter.db.converters import (
     datetime_to_db,
     json_to_db,
 )
+from chamba_hunter.domain.job_content import (
+    JOB_CONTENT_HASH_VERSION,
+    build_job_content_hash,
+)
 from chamba_hunter.domain.models import (
     CompanyAts,
     Job,
@@ -88,7 +92,10 @@ class JobRepository:
                 """
                 SELECT
                     external_id,
-                    is_active
+                    is_active,
+                    content_hash,
+                    content_hash_version,
+                    last_changed_at
                 FROM jobs
                 WHERE company_ats_id = ?
                 """,
@@ -97,20 +104,23 @@ class JobRepository:
                 ),
             ).fetchall()
 
-            existing_external_ids = {
-                row["external_id"]
+            existing_by_external_id = {
+                str(row["external_id"]): row
                 for row in existing_rows
             }
 
+            existing_external_ids = set(
+                existing_by_external_id
+            )
+
             active_external_ids = {
-                row["external_id"]
+                str(row["external_id"])
                 for row in existing_rows
                 if bool(row["is_active"])
             }
 
             for external_id, job in (
-                incoming_by_external_id
-                .items()
+                incoming_by_external_id.items()
             ):
                 published_at_db = (
                     datetime_to_db(
@@ -125,10 +135,61 @@ class JobRepository:
                     job.raw_payload
                 )
 
+                content_hash = build_job_content_hash(
+                    title=job.title,
+                    description=job.description,
+                    location_text=job.location_text,
+                    workplace_type=job.workplace_type.value,
+                    employment_type=job.employment_type,
+                    job_url=job.job_url,
+                    apply_url=job.apply_url,
+                    published_at=published_at_db,
+                )
+
                 if (
                     external_id
                     in existing_external_ids
                 ):
+                    existing = (
+                        existing_by_external_id[
+                            external_id
+                        ]
+                    )
+
+                    previous_hash = (
+                        existing["content_hash"]
+                    )
+                    previous_version = (
+                        existing[
+                            "content_hash_version"
+                        ]
+                    )
+                    previous_changed_at = (
+                        existing[
+                            "last_changed_at"
+                        ]
+                    )
+
+                    if (
+                        previous_hash is None
+                        or previous_version
+                        != JOB_CONTENT_HASH_VERSION
+                    ):
+                        last_changed_at = (
+                            previous_changed_at
+                        )
+                    elif (
+                        str(previous_hash)
+                        != content_hash
+                    ):
+                        last_changed_at = (
+                            seen_at_db
+                        )
+                    else:
+                        last_changed_at = (
+                            previous_changed_at
+                        )
+
                     connection.execute(
                         """
                         UPDATE jobs
@@ -143,7 +204,10 @@ class JobRepository:
                             published_at = ?,
                             last_seen_at = ?,
                             is_active = ?,
-                            raw_payload_json = ?
+                            raw_payload_json = ?,
+                            content_hash = ?,
+                            content_hash_version = ?,
+                            last_changed_at = ?
                         WHERE company_ats_id = ?
                           AND external_id = ?
                         """,
@@ -159,6 +223,9 @@ class JobRepository:
                             seen_at_db,
                             bool_to_db(True),
                             raw_payload_db,
+                            content_hash,
+                            JOB_CONTENT_HASH_VERSION,
+                            last_changed_at,
                             company_ats.id,
                             external_id,
                         ),
@@ -184,11 +251,14 @@ class JobRepository:
                         first_seen_at,
                         last_seen_at,
                         is_active,
-                        raw_payload_json
+                        raw_payload_json,
+                        content_hash,
+                        content_hash_version,
+                        last_changed_at
                     )
                     VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     """,
                     (
@@ -207,6 +277,9 @@ class JobRepository:
                         seen_at_db,
                         bool_to_db(True),
                         raw_payload_db,
+                        content_hash,
+                        JOB_CONTENT_HASH_VERSION,
+                        None,
                     ),
                 )
 

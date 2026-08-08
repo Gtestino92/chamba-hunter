@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from datetime import datetime
-import sqlite3
 
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.converters import (
@@ -9,6 +8,10 @@ from chamba_hunter.db.converters import (
     json_to_db,
 )
 from chamba_hunter.domain.enums import SourceType
+from chamba_hunter.domain.job_content import (
+    JOB_CONTENT_HASH_VERSION,
+    build_job_content_hash,
+)
 from chamba_hunter.domain.job_leads import JobLead
 
 
@@ -73,7 +76,9 @@ class JobLeadRepository:
                 updated=0,
             )
 
-        seen_at_db = datetime_to_db(seen_at)
+        seen_at_db = datetime_to_db(
+            seen_at
+        )
 
         with self.database.transaction() as connection:
             existing_rows = connection.execute(
@@ -82,25 +87,45 @@ class JobLeadRepository:
                 FROM job_leads
                 WHERE source_type = ?
                 """,
-                (source_type.value,),
+                (
+                    source_type.value,
+                ),
             ).fetchall()
 
             existing_ids = {
-                row["external_id"]
+                str(row["external_id"])
                 for row in existing_rows
             }
 
             for external_id, job in incoming.items():
                 published_at_db = (
-                    datetime_to_db(job.published_at)
-                    if job.published_at is not None
+                    datetime_to_db(
+                        job.published_at
+                    )
+                    if job.published_at
+                    is not None
                     else None
                 )
 
                 expires_at_db = (
-                    datetime_to_db(job.expires_at)
-                    if job.expires_at is not None
+                    datetime_to_db(
+                        job.expires_at
+                    )
+                    if job.expires_at
+                    is not None
                     else None
+                )
+
+                content_hash = build_job_content_hash(
+                    title=job.title,
+                    description=job.description,
+                    location_text=job.location_text,
+                    workplace_type=job.workplace_type.value,
+                    employment_type=job.employment_type,
+                    job_url=job.job_url,
+                    apply_url=job.apply_url,
+                    published_at=published_at_db,
+                    expires_at=expires_at_db,
                 )
 
                 connection.execute(
@@ -122,11 +147,14 @@ class JobLeadRepository:
                         first_seen_at,
                         last_seen_at,
                         is_active,
-                        raw_payload_json
+                        raw_payload_json,
+                        content_hash,
+                        content_hash_version,
+                        last_changed_at
                     )
                     VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     ON CONFLICT (
                         source_type,
@@ -145,7 +173,21 @@ class JobLeadRepository:
                         expires_at = excluded.expires_at,
                         last_seen_at = excluded.last_seen_at,
                         is_active = excluded.is_active,
-                        raw_payload_json = excluded.raw_payload_json
+                        raw_payload_json = excluded.raw_payload_json,
+                        last_changed_at = CASE
+                            WHEN job_leads.content_hash IS NULL
+                              OR job_leads.content_hash_version IS NULL
+                              OR job_leads.content_hash_version
+                                 <> excluded.content_hash_version
+                                THEN job_leads.last_changed_at
+                            WHEN job_leads.content_hash
+                                 <> excluded.content_hash
+                                THEN excluded.last_seen_at
+                            ELSE job_leads.last_changed_at
+                        END,
+                        content_hash = excluded.content_hash,
+                        content_hash_version =
+                            excluded.content_hash_version
                     """,
                     (
                         job.company_id,
@@ -165,6 +207,9 @@ class JobLeadRepository:
                         seen_at_db,
                         bool_to_db(job.is_active),
                         json_to_db(job.raw_payload),
+                        content_hash,
+                        JOB_CONTENT_HASH_VERSION,
+                        None,
                     ),
                 )
 
