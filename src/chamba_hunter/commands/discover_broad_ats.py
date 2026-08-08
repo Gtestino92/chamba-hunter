@@ -1,6 +1,6 @@
 import argparse
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from chamba_hunter.db.connection import (
     Database,
@@ -33,10 +33,7 @@ from chamba_hunter.services.careers_ats_detection_service import (
 @dataclass(frozen=True, slots=True)
 class BroadAtsTarget:
     company: Company
-    scan_company: Company
-
     strategy: str
-    reference_url: str | None
 
     source_types: tuple[str, ...]
     lead_count: int
@@ -54,10 +51,10 @@ def main() -> None:
     parser.add_argument(
         "--limit",
         type=int,
-        default=50,
+        default=25,
         help=(
             "Maximum number of companies to "
-            "scan. Defaults to 50."
+            "scan. Defaults to 25."
         ),
     )
 
@@ -82,6 +79,17 @@ def main() -> None:
         help=(
             "Show target counts and strategies "
             "without making HTTP requests."
+        ),
+    )
+
+    parser.add_argument(
+        "--include-scanned",
+        action="store_true",
+        help=(
+            "Also include companies already scanned "
+            "from their current website. Historical "
+            "scans against obsolete entry points do "
+            "not count."
         ),
     )
 
@@ -113,14 +121,20 @@ def main() -> None:
         else SourceType(args.source)
     )
 
-    targets, skipped_no_entrypoint = (
-        _build_targets(
-            database=database,
-            company_repository=(
-                company_repository
-            ),
-            source_type=source_type,
-        )
+    (
+        targets,
+        companies_without_ats,
+        skipped_no_entrypoint,
+        previously_scanned,
+    ) = _build_targets(
+        database=database,
+        company_repository=(
+            company_repository
+        ),
+        source_type=source_type,
+        include_scanned=(
+            args.include_scanned
+        ),
     )
 
     strategy_counts = Counter(
@@ -137,7 +151,7 @@ def main() -> None:
     )
     print(
         f"Companies without ATS:  "
-        f"{len(targets) + skipped_no_entrypoint}"
+        f"{companies_without_ats}"
     )
     print(
         f"Usable scan targets:    "
@@ -147,25 +161,27 @@ def main() -> None:
         f"No usable entry point:  "
         f"{skipped_no_entrypoint}"
     )
+    print(
+        f"Scanned current site:    "
+        f"{previously_scanned}"
+    )
     print()
 
     print("Target strategies")
     print("-----------------")
-
-    for strategy in (
-        "KNOWN_CAREERS",
-        "LEAD_APPLY_URL",
-        "HOMEPAGE",
-        "LEAD_JOB_URL",
-    ):
-        print(
-            f"{strategy:<18} "
-            f"{strategy_counts.get(strategy, 0)}"
-        )
-
+    print(
+        f"{'KNOWN_CAREERS':<18} "
+        f"{strategy_counts.get('KNOWN_CAREERS', 0)}"
+    )
+    print(
+        f"{'HOMEPAGE':<18} "
+        f"{strategy_counts.get('HOMEPAGE', 0)}"
+    )
     print()
 
-    selected = targets[:args.limit]
+    selected = targets[
+        :args.limit
+    ]
 
     print(
         f"Selected for this run:  "
@@ -174,7 +190,9 @@ def main() -> None:
 
     if args.dry_run:
         print()
-        print("Dry run; no scans executed.")
+        print(
+            "Dry run; no scans executed."
+        )
         return
 
     if not selected:
@@ -191,14 +209,6 @@ def main() -> None:
         )
     )
 
-    strategy_by_company_id = {
-        target.company.id: (
-            target.strategy
-        )
-        for target in selected
-        if target.company.id is not None
-    }
-
     service = CareersAtsDetectionService(
         company_repository=(
             company_repository
@@ -213,7 +223,7 @@ def main() -> None:
 
     summary = service.run(
         [
-            target.scan_company
+            target.company
             for target in selected
         ]
     )
@@ -226,80 +236,65 @@ def main() -> None:
     print("Detections")
     print("----------")
 
-    detection_lines = 0
+    detected_lines = 0
 
     for result in summary.results:
         if (
             result.ats_status
-            == AtsScanStatus.DETECTED
+            != AtsScanStatus.DETECTED
         ):
-            provider = (
-                result.provider.value
-                if result.provider
-                is not None
-                else "UNKNOWN"
-            )
+            continue
 
-            provider_counts[provider] += 1
+        provider = (
+            result.provider.value
+            if result.provider
+            is not None
+            else "UNKNOWN"
+        )
 
-            original_company = (
-                _find_company(
-                    selected,
-                    result.company_name,
-                )
-            )
+        provider_counts[provider] += 1
+        detected_lines += 1
 
-            strategy = (
-                strategy_by_company_id.get(
-                    (
-                        original_company.id
-                        if original_company
-                        is not None
-                        else None
-                    ),
-                    "UNKNOWN",
-                )
-            )
+        identifier = (
+            result.external_identifier
+            or "identifier unknown"
+        )
 
-            identifier = (
-                result.external_identifier
-                or "identifier unknown"
-            )
+        print(
+            f"{result.company_name}: "
+            f"{provider} "
+            f"[{identifier}]"
+        )
 
-            print(
-                f"{result.company_name}: "
-                f"{provider} "
-                f"[{identifier}]"
-            )
-            print(
-                f"  strategy:   "
-                f"{strategy}"
-            )
+        if result.method is not None:
             print(
                 f"  method:     "
                 f"{result.method.value}"
-                if result.method
-                is not None
-                else "  method:     unknown"
             )
+
+        if (
+            result.confidence
+            is not None
+        ):
             print(
                 f"  confidence: "
                 f"{result.confidence:.2f}"
-                if result.confidence
-                is not None
-                else "  confidence: unknown"
             )
 
-            if result.warning:
-                print(
-                    f"  warning:    "
-                    f"{result.warning}"
-                )
+        print(
+            f"  careers:    "
+            f"{result.careers_url}"
+        )
 
-            print()
-            detection_lines += 1
+        if result.warning:
+            print(
+                f"  warning:    "
+                f"{result.warning}"
+            )
 
-    if detection_lines == 0:
+        print()
+
+    if detected_lines == 0:
         print("No ATS detected.")
         print()
 
@@ -403,24 +398,16 @@ def main() -> None:
                 f"{count}"
             )
 
-    print()
-    print(
-        "Next: sync newly discovered "
-        "GREENHOUSE / ASHBY / LEVER "
-        "boards with the existing "
-        "provider commands. Other "
-        "providers remain discovery "
-        "evidence until their ingestion "
-        "adapter exists."
-    )
-
 
 def _build_targets(
     database: Database,
     company_repository: CompanyRepository,
     source_type: SourceType | None,
+    include_scanned: bool,
 ) -> tuple[
     list[BroadAtsTarget],
+    int,
+    int,
     int,
 ]:
     source_filter_sql = ""
@@ -437,6 +424,7 @@ def _build_targets(
             " AND filter_lead.source_type = ?"
             ")"
         )
+
         params.append(
             source_type.value
         )
@@ -446,64 +434,18 @@ def _build_targets(
             f"""
             SELECT
                 c.id AS company_id,
-
                 COUNT(jl.id) AS lead_count,
-
                 GROUP_CONCAT(
                     DISTINCT jl.source_type
                 ) AS source_types,
-
-                (
-                    SELECT jl_apply.apply_url
-                    FROM job_leads jl_apply
+                EXISTS (
+                    SELECT 1
+                    FROM company_scans existing_scan
                     WHERE
-                        jl_apply.company_id = c.id
-                        AND jl_apply.is_active = 1
-                        AND jl_apply.canonical_job_id
-                            IS NULL
-                        AND jl_apply.apply_url
-                            IS NOT NULL
-                        AND TRIM(
-                            jl_apply.apply_url
-                        ) != ''
-                    ORDER BY
-                        CASE
-                            WHEN jl_apply.published_at
-                                 IS NULL
-                            THEN 1
-                            ELSE 0
-                        END,
-                        jl_apply.published_at DESC,
-                        jl_apply.last_seen_at DESC,
-                        jl_apply.id DESC
-                    LIMIT 1
-                ) AS best_apply_url,
-
-                (
-                    SELECT jl_job.job_url
-                    FROM job_leads jl_job
-                    WHERE
-                        jl_job.company_id = c.id
-                        AND jl_job.is_active = 1
-                        AND jl_job.canonical_job_id
-                            IS NULL
-                        AND jl_job.job_url
-                            IS NOT NULL
-                        AND TRIM(
-                            jl_job.job_url
-                        ) != ''
-                    ORDER BY
-                        CASE
-                            WHEN jl_job.published_at
-                                 IS NULL
-                            THEN 1
-                            ELSE 0
-                        END,
-                        jl_job.published_at DESC,
-                        jl_job.last_seen_at DESC,
-                        jl_job.id DESC
-                    LIMIT 1
-                ) AS best_job_url
+                        existing_scan.company_id = c.id
+                        AND c.website_url IS NOT NULL
+                        AND existing_scan.homepage_url = c.website_url
+                ) AS previously_scanned
 
             FROM companies c
 
@@ -529,23 +471,10 @@ def _build_targets(
                     WHEN c.careers_url
                          IS NOT NULL
                     THEN 0
-                    WHEN (
-                        SELECT COUNT(*)
-                        FROM job_leads p
-                        WHERE
-                            p.company_id = c.id
-                            AND p.is_active = 1
-                            AND p.apply_url
-                                IS NOT NULL
-                            AND TRIM(
-                                p.apply_url
-                            ) != ''
-                    ) > 0
-                    THEN 1
                     WHEN c.website_url
                          IS NOT NULL
-                    THEN 2
-                    ELSE 3
+                    THEN 1
+                    ELSE 2
                 END,
                 lead_count DESC,
                 c.id
@@ -563,10 +492,22 @@ def _build_targets(
         if company.id is not None
     }
 
-    targets: list[BroadAtsTarget] = []
+    targets: list[
+        BroadAtsTarget
+    ] = []
+
     skipped_no_entrypoint = 0
+    previously_scanned = 0
 
     for row in rows:
+        if bool(
+            row["previously_scanned"]
+        ):
+            previously_scanned += 1
+
+            if not include_scanned:
+                continue
+
         company_id = int(
             row["company_id"]
         )
@@ -582,55 +523,11 @@ def _build_targets(
                 f"{company_id}"
             )
 
-        best_apply_url = (
-            _clean_optional(
-                row["best_apply_url"]
-            )
-        )
-
-        best_job_url = (
-            _clean_optional(
-                row["best_job_url"]
-            )
-        )
-
-        if company.careers_url:
+        if company.careers_url is not None:
             strategy = "KNOWN_CAREERS"
-            reference_url = (
-                company.careers_url
-            )
-            scan_company = company
 
-        elif best_apply_url is not None:
-            strategy = "LEAD_APPLY_URL"
-            reference_url = (
-                best_apply_url
-            )
-            scan_company = replace(
-                company,
-                careers_url=(
-                    best_apply_url
-                ),
-            )
-
-        elif company.website_url:
+        elif company.website_url is not None:
             strategy = "HOMEPAGE"
-            reference_url = (
-                company.website_url
-            )
-            scan_company = company
-
-        elif best_job_url is not None:
-            strategy = "LEAD_JOB_URL"
-            reference_url = (
-                best_job_url
-            )
-            scan_company = replace(
-                company,
-                careers_url=(
-                    best_job_url
-                ),
-            )
 
         else:
             skipped_no_entrypoint += 1
@@ -657,13 +554,7 @@ def _build_targets(
         targets.append(
             BroadAtsTarget(
                 company=company,
-                scan_company=(
-                    scan_company
-                ),
                 strategy=strategy,
-                reference_url=(
-                    reference_url
-                ),
                 source_types=source_types,
                 lead_count=int(
                     row["lead_count"]
@@ -673,7 +564,9 @@ def _build_targets(
 
     return (
         targets,
+        len(rows),
         skipped_no_entrypoint,
+        previously_scanned,
     )
 
 
@@ -695,36 +588,6 @@ def _count_active_ats_companies(
         return 0
 
     return int(row["count"])
-
-
-def _find_company(
-    targets: list[BroadAtsTarget],
-    company_name: str,
-) -> Company | None:
-    matches = [
-        target.company
-        for target in targets
-        if (
-            target.company.name
-            == company_name
-        )
-    ]
-
-    if len(matches) != 1:
-        return None
-
-    return matches[0]
-
-
-def _clean_optional(
-    value: str | None,
-) -> str | None:
-    if value is None:
-        return None
-
-    cleaned = value.strip()
-
-    return cleaned or None
 
 
 if __name__ == "__main__":

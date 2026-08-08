@@ -1196,7 +1196,11 @@ def _detect_from_url(
     method: AtsDetectionMethod,
     confidence: float,
 ) -> AtsCandidate | None:
-    parsed = urlsplit(url)
+    try:
+        parsed = urlsplit(url)
+
+    except ValueError:
+        return None
 
     if parsed.scheme not in {
         "http",
@@ -2447,14 +2451,18 @@ def _resolve_http_url(
     if not cleaned:
         return None
 
-    resolved = urljoin(
-        base_url,
-        cleaned,
-    )
+    try:
+        resolved = urljoin(
+            base_url,
+            cleaned,
+        )
 
-    parsed = urlsplit(
-        resolved
-    )
+        parsed = urlsplit(
+            resolved
+        )
+
+    except ValueError:
+        return None
 
     if parsed.scheme not in {
         "http",

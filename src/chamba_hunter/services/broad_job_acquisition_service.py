@@ -292,8 +292,9 @@ class BroadJobAcquisitionService:
                         .import_seed(
                             CompanySeedInput(
                                 name=(
-                                    source_job
-                                    .company_name
+                                    _himalayas_company_seed_name(
+                                        source_job
+                                    )
                                 ),
                                 source_type=(
                                     source_type
@@ -674,6 +675,50 @@ class BroadJobAcquisitionService:
         )
 
 
+
+def _himalayas_company_seed_name(
+    source_job: HimalayasJobPosting,
+) -> str:
+    """
+    Himalayas has occasionally returned the literal placeholder
+    "name" in companyName for otherwise unrelated companies.
+
+    companySlug is the stable source identity, so never collapse
+    unrelated slugs merely because the display name is that
+    placeholder. Use a readable slug-derived fallback instead.
+    """
+    raw_name = _clean_text(
+        source_job.company_name
+    )
+
+    if (
+        raw_name is not None
+        and raw_name.casefold() != "name"
+    ):
+        return raw_name
+
+    slug = _required_text(
+        source_job.company_slug,
+        "companySlug",
+    )
+
+    readable = " ".join(
+        part
+        for part in slug.replace(
+            "_",
+            "-",
+        ).split("-")
+        if part
+    ).strip()
+
+    if not readable:
+        raise ValueError(
+            "Himalayas companySlug cannot "
+            "produce a fallback company name."
+        )
+
+    return readable
+
 def _himalayas_to_lead(
     company_id: int,
     source_job: HimalayasJobPosting,
@@ -748,10 +793,13 @@ def _himalayas_to_lead(
         employment_type=_clean_text(
             source_job.employment_type
         ),
-        job_url=None,
-        apply_url=_clean_text(
+        # Himalayas documents applicationLink as the
+        # job's application page on Himalayas itself,
+        # not as the employer's external ATS URL.
+        job_url=_clean_text(
             source_job.application_link
         ),
+        apply_url=None,
         published_at=published_at,
         expires_at=expires_at,
         first_seen_at=seen_at,
