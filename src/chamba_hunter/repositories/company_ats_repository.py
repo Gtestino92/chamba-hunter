@@ -267,6 +267,30 @@ class CompanyAtsRepository:
                 ),
             )
 
+    def deactivate_all_for_company(
+        self,
+        company_id: int,
+    ) -> int:
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE company_ats
+                SET
+                    is_primary = 0,
+                    is_active = 0
+                WHERE company_id = ?
+                  AND (
+                      is_primary = 1
+                      OR is_active = 1
+                  )
+                """,
+                (
+                    company_id,
+                ),
+            )
+
+        return cursor.rowcount
+
     def _find_existing(
         self,
         company_ats: CompanyAts,

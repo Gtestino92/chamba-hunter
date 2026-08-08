@@ -73,15 +73,6 @@ CAREERS_TERMS = (
     "unete",
 )
 
-PROBE_ORDER = (
-    AtsProvider.GREENHOUSE,
-    AtsProvider.ASHBY,
-    AtsProvider.LEVER,
-    AtsProvider.SMARTRECRUITERS,
-    AtsProvider.WORKABLE,
-    AtsProvider.BAMBOOHR,
-)
-
 
 @dataclass(frozen=True, slots=True)
 class AtsCandidate:
@@ -771,19 +762,6 @@ class CareersAtsDetectionService:
                 )
             )
 
-        else:
-            candidates.extend(
-                _probe_ats_providers(
-                    client=client,
-                    company=company,
-                    providers=(
-                        PROBE_ORDER
-                    ),
-                    existing_candidates=[],
-                    stop_after_first=True,
-                )
-            )
-
         return _ScanOutcome(
             careers_url=careers_url,
             careers_discovery_method=(
@@ -1181,53 +1159,6 @@ def _detect_from_page(
         raw_html.casefold()
     )
 
-    if "ashby_jid" in lower_html:
-        candidates.append(
-            AtsCandidate(
-                provider=(
-                    AtsProvider.ASHBY
-                ),
-                method=(
-                    AtsDetectionMethod
-                    .URL_PARAMETER
-                ),
-                confidence=0.88,
-                source_url=(
-                    page.final_url
-                ),
-                evidence=(
-                    "HTML contains "
-                    "ashby_jid"
-                ),
-                board_url=(
-                    page.final_url
-                ),
-            )
-        )
-
-    if "gh_jid" in lower_html:
-        candidates.append(
-            AtsCandidate(
-                provider=(
-                    AtsProvider
-                    .GREENHOUSE
-                ),
-                method=(
-                    AtsDetectionMethod
-                    .URL_PARAMETER
-                ),
-                confidence=0.88,
-                source_url=(
-                    page.final_url
-                ),
-                evidence=(
-                    "HTML contains gh_jid"
-                ),
-                board_url=(
-                    page.final_url
-                ),
-            )
-        )
 
     if (
         "greenhouse job board"
@@ -1817,14 +1748,27 @@ def _probe_ashby(
     except ValueError:
         return None
 
+    jobs = payload.get(
+        "jobs"
+    )
+
     if (
         payload.get("apiVersion")
         is None
         or not isinstance(
-            payload.get("jobs"),
+            jobs,
             list,
         )
     ):
+        return None
+
+    # Ashby may retain historical board
+    # identifiers that still respond with
+    # HTTP 200 and an empty jobs list.
+    #
+    # An empty response therefore does not
+    # validate a derived board identifier.
+    if not jobs:
         return None
 
     return AtsCandidate(
@@ -1839,8 +1783,10 @@ def _probe_ashby(
         source_url=api_url,
         evidence=(
             "Ashby public Job "
-            "Postings API validated "
-            "job-board identifier "
+            "Postings API returned "
+            f"{len(jobs)} posting(s) "
+            "for derived job-board "
+            "identifier "
             f"'{identifier}'"
         ),
         external_identifier=(
@@ -1856,7 +1802,6 @@ def _probe_ashby(
             )
         ),
     )
-
 
 def _probe_lever(
     client: httpx.Client,
@@ -2075,6 +2020,21 @@ def _probe_workable(
     ):
         return None
 
+    # Workable may keep historical company
+    # boards reachable after the company has
+    # stopped publishing jobs there.
+    #
+    # A derived board identifier is positive
+    # ATS evidence only when the board still
+    # contains at least one job posting.
+    lower_html = response.text.casefold()
+
+    if (
+        "/j/" not in lower_html
+        and "/job/" not in lower_html
+    ):
+        return None
+
     return AtsCandidate(
         provider=(
             AtsProvider.WORKABLE
@@ -2087,8 +2047,10 @@ def _probe_workable(
         source_url=board_url,
         evidence=(
             "Workable board probe "
-            "validated derived "
-            f"identifier '{identifier}'"
+            "returned active job "
+            "posting evidence for "
+            "derived identifier "
+            f"'{identifier}'"
         ),
         external_identifier=(
             identifier

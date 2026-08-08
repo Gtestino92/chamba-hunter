@@ -340,6 +340,57 @@ class CompanyRepository:
 
         return updated
 
+    def update_careers_url(
+        self,
+        company_id: int,
+        careers_url: str,
+    ) -> Company:
+        company = self.get_by_id(
+            company_id
+        )
+
+        if company is None:
+            raise ValueError(
+                f"Company does not exist: "
+                f"{company_id}"
+            )
+
+        cleaned_url = careers_url.strip()
+
+        if not cleaned_url:
+            raise ValueError(
+                "Careers URL cannot be empty."
+            )
+
+        if company.careers_url == cleaned_url:
+            return company
+
+        updated = replace(
+            company,
+            careers_url=cleaned_url,
+            updated_at=utc_now(),
+        )
+
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE companies
+                SET
+                    careers_url = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    updated.careers_url,
+                    datetime_to_db(
+                        updated.updated_at
+                    ),
+                    company_id,
+                ),
+            )
+
+        return updated
+
     def update_enrichment(
         self,
         company_id: int,
