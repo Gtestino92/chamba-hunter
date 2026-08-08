@@ -176,6 +176,170 @@ manual outreach candidate
 
 Nunca inferir ni adivinar emails personales de recruiters.
 
+### Future architecture consideration — reusable search profiles
+
+La prioridad actual sigue siendo terminar y calibrar correctamente la búsqueda de **Backend Software Engineer**.
+
+No generalizar anticipadamente todo el proyecto ni construir ahora un framework abstracto para múltiples profesiones. Tampoco refactorizar código estable sólo por esta posibilidad futura.
+
+Sin embargo, cuando sea razonablemente natural, evitar decisiones que vuelvan innecesariamente inseparables:
+
+```text
+job acquisition / normalization / understanding
+```
+
+de:
+
+```text
+preferences of one specific professional search
+```
+
+Objetivo conceptual a largo plazo:
+
+```text
+SHARED JOB SEARCH ENGINE
+
+acquisition
+ATS discovery
+ATS ingestion
+normalization
+canonicalization
+freshness
+application channels
+tracing
+        ↓
+SEARCH-SPECIFIC EVALUATION
+
+geographic eligibility
+occupation
+skills / domains
+credentials when applicable
+seniority
+matching
+ranking
+```
+
+La primera parte debería ser ampliamente reutilizable sobre un mismo corpus.
+
+La segunda puede depender eventualmente de un:
+
+```text
+search_profile
+```
+
+Ejemplos conceptuales:
+
+```text
+BACKEND_SOFTWARE_PROFILE
+```
+
+podría evaluar:
+
+```text
+occupation:
+  software engineering
+  backend relevance
+
+skills / domains:
+  Java
+  Kotlin
+  Spring Boot
+  distributed systems
+  PostgreSQL
+  AWS
+
+seniority:
+  junior / mid / senior / staff / etc.
+```
+
+Mientras que un futuro:
+
+```text
+LEGAL_PROFILE
+```
+
+podría necesitar conceptos distintos:
+
+```text
+occupation:
+  Legal Counsel
+  Lawyer
+  Compliance
+  Contract Manager
+
+skills / domains:
+  corporate law
+  contracts
+  compliance
+  privacy
+
+credentials:
+  jurisdiction
+  bar admission
+```
+
+No implementar ahora `LEGAL_PROFILE`, credentials jurídicas ni abstracciones generales sólo para soportar este ejemplo.
+
+El principio a preservar es:
+
+```text
+job understanding
+!=
+search-profile matching
+```
+
+Por ejemplo:
+
+```text
+job skills:
+- Java
+- Spring Boot
+- PostgreSQL
+```
+
+debe significar que esas skills fueron observadas en el job.
+
+No debe significar directamente:
+
+```text
+this is a good match for the current user
+```
+
+La comparación contra preferencias, experiencia y transferibilidad pertenece posteriormente al matcher/search profile.
+
+De la misma manera, una futura representación de otro dominio podría expresar:
+
+```text
+job skills/domains:
+- Contract Drafting
+- Corporate Law
+- GDPR
+```
+
+sin requerir otra infraestructura de adquisición, ATS ingestion, canonicalization, freshness o application channels.
+
+`SKILLS_V1` ya respeta esta separación porque:
+
+- extrae evidencia del posting;
+- no usa el perfil profesional para decidir si una skill existe;
+- no calcula match;
+- no convierte skills ausentes en rechazo;
+- no incorpora freshness ni application priority.
+
+Mantener esta separación cuando sea natural en futuros verticals, pero sin sobrearquitectura preventiva.
+
+End game deseado:
+
+```text
+one shared job corpus
+        ↓
+multiple search_profiles
+        ↓
+different occupation / skills / credentials / seniority / matching evaluation
+```
+
+reutilizando acquisition, ATS, canonicalization, freshness y application channels.
+
 ---
 
 ## 4. Perfil profesional objetivo futuro
