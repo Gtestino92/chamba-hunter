@@ -4,13 +4,13 @@
 **Repositorio:** `Gtestino92/chamba-hunter`  
 **Rama operativa:** `main`
 
-## Estado de GitHub y worktree al generar este documento
+## Estado actual de GitHub y worktree
 
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-37ce669e9f929bedf1575d05ff105bfbe90f66e3
-eligibility
+f51289fbe01032a0a4425eb2763eb86b922ff4f5
+occupation
 ```
 
 Ese commit ya contiene:
@@ -18,72 +18,52 @@ Ese commit ya contiene:
 - Hiring Room;
 - cross-source canonicalization v1;
 - Argentina eligibility v1;
-- migraciones `004` y `005`.
+- occupation / IT / backend classification v1;
+- migraciones `004`, `005` y `006`;
+- limpieza de artefactos locales históricos `.zip` / `.txt`.
 
-El trabajo de **occupation / IT / backend classification v1** descrito en este documento fue implementado y validado en el worktree local después de ese commit y todavía no estaba publicado en GitHub al momento de generar este handoff.
+El trabajo de **skills classification v1** fue implementado, validado y aplicado sobre la DB local después de ese commit y todavía está pendiente de publicación en GitHub.
 
-El estado local confirmado antes de actualizar este documento era:
+Estado local esperado antes de publicar skills:
 
 ```text
-?? migrations/006_job_occupation_classifications.sql
-?? src/chamba_hunter/commands/classify_job_occupations.py
-?? src/chamba_hunter/repositories/job_occupation_repository.py
-?? src/chamba_hunter/services/job_occupation_classification_service.py
+M  docs/PROJECT_CONTEXT.md
+?? migrations/007_job_skill_classifications.sql
+?? src/chamba_hunter/commands/classify_job_skills.py
+?? src/chamba_hunter/repositories/job_skill_repository.py
+?? src/chamba_hunter/services/job_skill_classification_service.py
 ```
 
-Los ZIP y diagnósticos temporales usados durante discovery fueron eliminados.
+La DB SQLite local contiene el resultado persistido de:
 
-Por lo tanto:
+```text
+Run 81
+SKILLS_V1
+```
 
-1. antes de iniciar una sesión nueva, verificar siempre el HEAD real de `main`;
-2. si `main` ya contiene la migración `006` y los archivos de occupation descritos abajo, tratar ese código como fuente de verdad;
-3. si todavía no están en `main`, revisar el worktree local antes de asumir que el trabajo se perdió;
-4. GitHub/código actual gana siempre frente a este documento;
-5. la base SQLite local contiene estado operativo y resultados de corridas manuales que no están versionados.
-
-Los conteos de este documento son evidencia observada de esa DB local, no datos reproducibles sólo desde GitHub.
+GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
 
 ---
 
-## 1. Reglas obligatorias al iniciar una nueva sesión
+## 1. Reglas operativas
 
 Antes de recomendar, diseñar o escribir código:
 
-1. Conectarse a `Gtestino92/chamba-hunter`.
-2. Verificar:
-   - default branch;
-   - HEAD actual de `main`;
-   - últimos commits;
-   - working tree si el usuario provee salida local.
-3. Leer este `docs/PROJECT_CONTEXT.md`.
-4. Inspeccionar directamente los archivos reales relacionados con el próximo vertical.
-5. Como mínimo, cuando sean relevantes:
-   - `pyproject.toml`
-   - `migrations/`
-   - `src/chamba_hunter/domain/`
-   - `src/chamba_hunter/db/`
-   - `src/chamba_hunter/repositories/`
-   - `src/chamba_hunter/services/`
-   - `src/chamba_hunter/sources/`
-   - `src/chamba_hunter/commands/`
-6. Distinguir siempre:
+1. Verificar HEAD real de `main`, últimos commits y worktree.
+2. Leer este `docs/PROJECT_CONTEXT.md`.
+3. Inspeccionar directamente los archivos reales del vertical a tocar.
+4. Distinguir siempre:
    - confirmado por código;
    - confirmado por corrida manual;
    - inferido;
    - pendiente.
-7. No asumir que un conteo histórico sigue vigente sin consultar la DB local.
-8. No crear branches, commits, pushes, PRs ni writes a GitHub salvo pedido explícito.
-9. El usuario hace el commit/push manualmente.
-10. Trabajar en vertical slices pequeños.
-
----
-
-## 2. Preferencias operativas
-
-- Conversación y explicación: español.
-- Código, nombres técnicos y comentarios: inglés.
-- Windows + PowerShell es el shell preferido actualmente.
-- Para scripts inline en PowerShell, preferir:
+5. No asumir que conteos históricos siguen vigentes sin consultar la DB local.
+6. No crear branches, commits, pushes, PRs ni writes a GitHub salvo pedido explícito.
+7. El usuario hace commit/push manualmente.
+8. Trabajar en vertical slices pequeños.
+9. Código/comentarios en inglés; explicación en español.
+10. Windows + PowerShell es el entorno operativo habitual.
+11. Para scripts inline en PowerShell, preferir:
 
 ```powershell
 @'
@@ -91,19 +71,9 @@ Antes de recomendar, diseñar o escribir código:
 '@ | python -
 ```
 
-- Cuando se entregue un script para ejecutar o un archivo para reemplazar, entregarlo completo; no pasar sólo fragmentos/parches.
-- Python 3.12.x.
-- venv `.venv`.
-- package `chamba_hunter`.
-- SQLite local.
-- Repositories explícitos con `sqlite3`; no SQLAlchemy.
-- Pydantic v2 en boundaries externos.
-- dataclasses en domain/tracing.
-- `httpx` como HTTP client.
-- Sin UI/web API por ahora.
-- Sin automated applications.
-- No agregar tests por ahora salvo pedido.
-- Validaciones baratas estándar cuando se modifica código:
+12. Cuando se entregue un script o archivo para reemplazar, entregarlo completo; no fragmentos/parches.
+13. No agregar tests salvo pedido explícito.
+14. Validaciones baratas estándar:
 
 ```powershell
 python -m compileall -q src
@@ -111,11 +81,30 @@ git diff --check
 ```
 
 más una corrida funcional/manual focalizada.
+15. Para cambios multiarchivo, preferir ZIP con rutas repo-relative.
+16. No hacer bypass anti-bot, fake browser ni scraping agresivo.
+17. 401/403/429 son señales operativas, no una invitación a evadir protección.
+18. Evitar dependencias nuevas salvo necesidad clara.
 
-- Para cambios multiarchivo, preferir ZIP con rutas repo-relative.
-- No hacer bypass anti-bot, fake browser ni scraping agresivo.
-- 401/403/429 son señales operativas, no una invitación a evadir protección.
-- Evitar dependencias nuevas salvo necesidad clara.
+---
+
+## 2. Stack y arquitectura
+
+- Python 3.12.x.
+- venv `.venv`.
+- package `chamba_hunter`.
+- SQLite local.
+- repositories explícitos con `sqlite3`.
+- sin SQLAlchemy.
+- Pydantic v2 en boundaries externos.
+- dataclasses en domain/tracing.
+- `httpx` como HTTP client.
+- migraciones SQL inmutables.
+- services para reglas de negocio.
+- commands para workflows manuales.
+- tracing con `runs`, `run_steps`, `ats_syncs`.
+- sin UI/web API por ahora.
+- sin automated applications.
 
 ---
 
@@ -123,7 +112,7 @@ más una corrida funcional/manual focalizada.
 
 Chamba Hunter es una herramienta local de inteligencia para búsqueda laboral.
 
-No aplica automáticamente. Construye y mantiene un corpus amplio para luego reducirlo de manera auditable hasta obtener oportunidades accionables.
+No aplica automáticamente. Construye y mantiene un corpus amplio para reducirlo de manera auditable hasta obtener oportunidades accionables.
 
 Pipeline conceptual vigente:
 
@@ -148,13 +137,28 @@ Argentina eligibility
     ↓
 occupation / IT / backend classification
     ↓
-skills                                      ← PRÓXIMO VERTICAL
+skills
     ↓
-seniority
+seniority                                  ← PRÓXIMO VERTICAL
     ↓
-matching / ranking
+professional matching
     ↓
-Excel report / manual action
+operational / application priority
+    ↓
+shortlist / Excel report / manual action
+```
+
+El end game debe soportar además un refresh manual orientado a **early application**:
+
+```text
+refresh acquisition / ATS
+→ canonicalization
+→ geography
+→ occupation
+→ skills
+→ seniority
+→ matching
+→ shortlist de oportunidades nuevas/relevantes
 ```
 
 Outreach futuro y separado:
@@ -176,35 +180,33 @@ Nunca inferir ni adivinar emails personales de recruiters.
 
 ## 4. Perfil profesional objetivo futuro
 
-Perfil resumido para matching posterior:
+Este perfil se usa más adelante para matching, no para adquisición ni para decidir si una skill existe en una vacante:
 
-- Backend Software Engineer
-- Java
-- Kotlin
-- Spring Boot
-- REST APIs
-- Distributed Systems
-- batch / schedulers
-- retries
-- idempotency
-- distributed locks
-- resilience
-- PostgreSQL
-- Oracle
-- MongoDB
-- Flyway / JPA
-- AWS EC2 / RDS / S3 / SSM
-- Docker
-- Kubernetes
-- OpenShift
-- GitHub Actions
-- GitLab CI/CD
-- TypeScript / Node.js / NestJS como stack secundario
-- Android / Compose secundario
-- English C1
-- seniority objetivo aproximado: semisenior / mid-level
-
-No usar este perfil para filtrar adquisición.
+- Backend Software Engineer.
+- Java.
+- Kotlin.
+- Spring Boot.
+- REST APIs.
+- Distributed Systems.
+- batch / schedulers.
+- retries.
+- idempotency.
+- distributed locks.
+- resilience.
+- PostgreSQL.
+- Oracle.
+- MongoDB.
+- Flyway / JPA.
+- AWS EC2 / RDS / S3 / SSM.
+- Docker.
+- Kubernetes.
+- OpenShift.
+- GitHub Actions.
+- GitLab CI/CD.
+- TypeScript / Node.js / NestJS como stack secundario.
+- Android / Compose secundario.
+- English C1.
+- seniority objetivo aproximado: semisenior / mid-level.
 
 Orden correcto:
 
@@ -213,26 +215,17 @@ geography
 → occupation/backend
 → skills
 → seniority
-→ matching/ranking
+→ professional matching
+→ operational priority
 ```
 
-No mezclar estas capas. Una tecnología puede servir como evidencia ocupacional en casos acotados sin convertirse todavía en una regla de matching.
+No mezclar estas capas.
 
 ---
 
-## 5. Foundation y schema
+## 5. Schema y migraciones
 
-Arquitectura:
-
-- package bajo `src/chamba_hunter`;
-- SQLite;
-- migraciones SQL inmutables;
-- repositories explícitos;
-- services para reglas de negocio;
-- commands para workflows manuales;
-- tracing con `runs`, `run_steps`, `ats_syncs`.
-
-Migraciones confirmadas en GitHub `main` al inicio de este slice:
+Migraciones confirmadas en GitHub `main`:
 
 ```text
 001_initial_schema.sql
@@ -240,12 +233,13 @@ Migraciones confirmadas en GitHub `main` al inicio de este slice:
 003_broad_job_acquisition.sql
 004_job_lead_canonicalization.sql
 005_job_eligibility_classifications.sql
+006_job_occupation_classifications.sql
 ```
 
-Migración local implementada y aplicada, pendiente de publicación al momento de este handoff:
+Migración local implementada y aplicada, pendiente de publicación:
 
 ```text
-006_job_occupation_classifications.sql
+007_job_skill_classifications.sql
 ```
 
 Tablas/vistas relevantes:
@@ -269,6 +263,7 @@ job_leads
 job_ats_hints
 job_eligibility_classifications
 job_occupation_classifications
+job_skill_classifications
 view job_candidates
 ```
 
@@ -285,7 +280,7 @@ GETONBOARD
 
 La adquisición es deliberadamente amplia.
 
-No filtrar por Argentina ni por IT/backend en los adapters.
+No filtrar por Argentina ni por IT/backend en adapters.
 
 Principios:
 
@@ -331,7 +326,7 @@ HIRINGROOM
 CUSTOM
 ```
 
-Principios de detección:
+Principios:
 
 - no blind probing;
 - provider probes sólo con evidencia pública previa;
@@ -342,7 +337,7 @@ Principios de detección:
 
 ---
 
-## 8. ATS ingestion implementado
+## 8. ATS ingestion
 
 Adapters/sync activos:
 
@@ -370,11 +365,47 @@ BAMBOOHR           24
 ATS TOTAL        3662
 ```
 
-Estos números son DB local observada y pueden cambiar en futuras sincronizaciones.
+Estos números son DB local observada y pueden cambiar.
+
+### Semántica importante de freshness
+
+`JobRepository.sync_board_jobs()` actualmente:
+
+- crea nuevos jobs con `first_seen_at = last_seen_at = seen_at`;
+- para un `external_id` existente actualiza contenido y `last_seen_at`;
+- vuelve a marcar `is_active = 1`;
+- cuenta ese registro como `updated` aunque el contenido no haya cambiado;
+- desactiva IDs activos ausentes de un snapshot ATS completo.
+
+Por lo tanto:
+
+```text
+updated
+```
+
+no significa necesariamente “contenido modificado”, y:
+
+```text
+last_seen_at
+```
+
+significa “observado nuevamente”, no “cambió”.
+
+Broad `JobLeadRepository.upsert_source_jobs()` también actualiza `last_seen_at` para existentes, pero ausencia broad no implica cierre.
+
+Actualmente no existe:
+
+```text
+last_changed_at
+content_hash
+per-job change history
+```
+
+No resolver esto dentro de skills ni seniority.
 
 ---
 
-## 9. Hiring Room — vertical terminado
+## 9. Hiring Room — terminado
 
 Hiring Room se modela como:
 
@@ -384,7 +415,7 @@ AtsProvider.HIRINGROOM
 
 No como broad `SourceType`.
 
-Archivos relevantes publicados en GitHub:
+Archivos publicados:
 
 ```text
 src/chamba_hunter/sources/hiringroom.py
@@ -400,15 +431,7 @@ POST https://{tenant}.hiringroom.com/jobs/getVacanciesForPortal/{page}
 GET  https://{tenant}.hiringroom.com/jobs/get_vacancy/{id}
 ```
 
-No se fabrican timestamps exactos desde edades relativas del sitio.
-
-La ingestión:
-
-- obtiene todas las páginas antes del sync;
-- valida total/uniqueness;
-- obtiene todos los detalles antes de mutar DB;
-- una falla de detail aborta antes del board sync;
-- preserva snapshot semantics del ATS.
+No se fabrican timestamps exactos desde edades relativas.
 
 Última corrida confirmada:
 
@@ -423,28 +446,17 @@ Updated:       272
 Deactivated:     0
 ```
 
-Hiring Room discovery manual/indexado queda cerrado por ahora por diminishing returns.
+Hiring Room discovery manual/indexado queda cerrado por diminishing returns.
 
 ---
 
 ## 10. Bumeran / ZonaJobs
 
-Se intentó usar HTML público directo de:
+HTML público directo de `bumeran.com.ar` y `zonajobs.com.ar` devolvió sólo shell SPA bajo las restricciones actuales.
 
-```text
-bumeran.com.ar
-zonajobs.com.ar
-```
+No implementar bypass de Cloudflare/browser/proxies.
 
-Con `httpx` sólo se obtuvo el shell SPA y no los listings útiles.
-
-No implementar bypass de Cloudflare/browser/proxies para sortearlo.
-
-Conclusión:
-
-- no son fuentes directas viables bajo las restricciones actuales;
-- `Bumeran Selecta` sí se incorporó a través de su board Hiring Room público;
-- `Jobint` también fue incorporado vía Hiring Room.
+`Bumeran Selecta` y `Jobint` sí fueron incorporados vía Hiring Room.
 
 ---
 
@@ -456,9 +468,9 @@ Objetivo:
 job_leads.canonical_job_id -> jobs.id
 ```
 
-sin destruir provenance del lead.
+sin destruir provenance.
 
-Archivos publicados en GitHub:
+Archivos publicados:
 
 ```text
 migrations/004_job_lead_canonicalization.sql
@@ -467,7 +479,7 @@ src/chamba_hunter/services/job_lead_canonicalization_service.py
 src/chamba_hunter/commands/canonicalize_job_leads.py
 ```
 
-Reglas v1 conservadoras:
+Reglas v1:
 
 1. misma `company_id`;
 2. título normalizado;
@@ -478,7 +490,7 @@ Reglas v1 conservadoras:
 7. nada de cross-company matching;
 8. nada de borrado del lead.
 
-Métodos persistidos:
+Métodos:
 
 ```text
 TITLE
@@ -486,19 +498,9 @@ TITLE_LOCATION
 TITLE_LOCATION_WORKPLACE
 ```
 
-La migración `004` agrega:
+Run 77:
 
 ```text
-canonicalization_method
-canonicalized_at
-```
-
-y ajusta `job_candidates` para que un broad lead canonicalizado vuelva a aparecer si su ATS canonical deja de estar activo.
-
-Última corrida confirmada:
-
-```text
-Run 77
 Total leads:   400
 Linked:         23
 Unresolved:    377
@@ -513,7 +515,7 @@ TITLE_LOCATION             3
 TITLE_LOCATION_WORKPLACE   1
 ```
 
-Casos ambiguos deliberadamente NO resueltos incluyeron:
+Casos ambiguos deliberadamente no resueltos incluyeron:
 
 - Bluelight Consulting;
 - Mood Health;
@@ -536,9 +538,9 @@ Principio central:
 
 **`REMOTE` no significa automáticamente “trabajable desde Argentina”.**
 
-Clasificación separada y recomputable. No se modifican `jobs` ni `job_leads`.
+Clasificación separada y recomputable. No modifica `jobs` ni `job_leads`.
 
-Archivos publicados en GitHub:
+Archivos publicados:
 
 ```text
 migrations/005_job_eligibility_classifications.sql
@@ -577,7 +579,7 @@ evidence_json
 classified_at
 ```
 
-Rule version actual:
+Rule version:
 
 ```text
 ARGENTINA_V1
@@ -586,14 +588,11 @@ ARGENTINA_V1
 Fuentes de evidencia:
 
 - `location_text` tiene precedencia;
-- `workplace_type` sirve como señal complementaria;
-- `title` sólo se usa como fallback para señales geográficas fuertes de Argentina/LATAM/remote-global;
-- `description` NO se usa para clasificar geography;
-- un `Remote` sin scope queda `UNKNOWN`.
-
-No intentar forzar `UNKNOWN = 0`.
-
-### Último resultado confirmado
+- `workplace_type` es señal complementaria;
+- `title` sólo es fallback para señales geográficas fuertes;
+- `description` no se usa para geography;
+- `Remote` sin scope queda `UNKNOWN`;
+- no intentar forzar `UNKNOWN = 0`.
 
 Run 79:
 
@@ -628,7 +627,7 @@ UNKNOWN
   REMOTE_SCOPE_UNKNOWN     160
 ```
 
-DB invariants confirmados:
+DB invariants:
 
 ```text
 classifications total: 4039
@@ -637,30 +636,13 @@ missing:                  0
 rule versions:            1
 ```
 
-Toda la tabla está en:
-
-```text
-ARGENTINA_V1
-```
-
-Run 79 y su step:
-
-```text
-SUCCESS
-items_total   4039
-items_success 4039
-items_skipped    0
-```
-
-La versión final del repository elimina clasificaciones stale en futuros `--apply` y hace upsert de la clasificación actual.
+Toda la tabla está en `ARGENTINA_V1`.
 
 ---
 
 ## 13. Corpus efectivo después de geography
 
-No trabajar sobre los 4039 indiscriminadamente.
-
-El universo procesado por occupation fue:
+Universo procesado por occupation y skills:
 
 ```text
 ELIGIBLE   831
@@ -669,17 +651,13 @@ UNKNOWN    162
 TOTAL      993
 ```
 
-Los 3046 `INELIGIBLE` geográficos se conservan en DB pero no consumieron occupation.
+Los 3046 `INELIGIBLE` se conservan en DB.
 
 ---
 
 ## 14. Occupation / IT / backend classification v1 — TERMINADO
 
-### Objetivo
-
-Clasificar de manera provider-independent, auditable y recomputable los candidatos geográficamente `ELIGIBLE` o `UNKNOWN`, sin modificar `jobs`, `job_leads` ni `job_candidates`.
-
-Archivos locales implementados y validados, pendientes de publicación al momento de este handoff:
+Archivos publicados en GitHub:
 
 ```text
 migrations/006_job_occupation_classifications.sql
@@ -700,7 +678,7 @@ Identidad:
 UNIQUE(record_kind, record_id)
 ```
 
-Campos principales:
+Campos:
 
 ```text
 occupation_class
@@ -712,13 +690,13 @@ evidence_json
 classified_at
 ```
 
-Rule version aplicada:
+Rule version:
 
 ```text
 OCCUPATION_V1
 ```
 
-### Taxonomía ocupacional
+Taxonomía:
 
 ```text
 SOFTWARE_ENGINEERING
@@ -728,15 +706,7 @@ NON_TECHNICAL
 UNKNOWN
 ```
 
-Semántica:
-
-- `SOFTWARE_ENGINEERING`: construcción/mantenimiento de software y liderazgo técnico directo de software;
-- `IT_TECHNICAL`: data/AI, SRE/platform/infra, security, cloud, DBA, NOC, systems, support, etc.;
-- `TECH_ADJACENT`: product/project técnico, functional analysis, solution/technical consulting, technical account/program roles y funciones cercanas a engineering sin ser software engineering;
-- `NON_TECHNICAL`: sales, HR, finance, accounting, legal, marketing, general operations, etc.;
-- `UNKNOWN`: evidencia insuficiente o título deliberadamente ambiguo.
-
-### Backend relevance
+Backend relevance:
 
 ```text
 BACKEND
@@ -746,124 +716,23 @@ UNKNOWN
 NOT_APPLICABLE
 ```
 
-Regla de consistencia:
+Sólo `SOFTWARE_ENGINEERING` puede tener backend relevance distinta de `NOT_APPLICABLE`.
 
-- sólo `SOFTWARE_ENGINEERING` puede tener `BACKEND`, `FULL_STACK`, `NON_BACKEND` o `UNKNOWN`;
-- cualquier otra `occupation_class` debe tener `NOT_APPLICABLE`;
-- la migración lo protege con `CHECK`.
+Principios:
 
-### Principios de clasificación
-
-Orden conceptual:
-
-```text
-specific title
-    ↓
-classification
-
-generic / ambiguous title
-    ↓
-description fallback
-    ↓
-classification or UNKNOWN
-```
-
-Decisiones importantes:
-
-- `provider/source` NO es evidencia ocupacional;
+- provider/source no es evidencia ocupacional;
 - title específico tiene precedencia;
-- `description` sólo decide occupation para familias de títulos realmente ambiguas;
-- no usar una bolsa global de keywords de description;
-- las descriptions largas pueden contener boilerplate con `software`, `AI`, `cloud`, etc. aunque la vacante sea sales/finance/HR;
-- usar patterns de roles/frases, no tokens genéricos aislados;
+- description sólo decide occupation para familias realmente ambiguas;
+- evitar bolsa global de keywords de description;
 - preservar `UNKNOWN`;
-- no mezclar todavía skills, seniority ni matching;
-- `Engineering Manager`, `Staff`, `Principal`, etc. no se descartan por seniority en este vertical;
-- `backend_relevance=UNKNOWN` NO debe convertirse en filtro excluyente del siguiente pipeline;
-- lenguajes como Java/Python/C# pueden confirmar que un título es de software en casos acotados, pero no determinan automáticamente backend ni matching por skills.
+- no mezclar skills, seniority ni matching;
+- `backend_relevance=UNKNOWN` no es un rechazo;
+- `Engineering Manager`, `Staff`, `Principal`, etc. no se descartan por seniority aquí.
 
-Ejemplos conceptuales:
-
-```text
-Desarrollador/a Backend Ssr.
-→ SOFTWARE_ENGINEERING / BACKEND
-
-Senior Software Developer Java/Spring Boot
-→ SOFTWARE_ENGINEERING / BACKEND si la evidencia del rol lo determina
-
-React Engineer
-→ SOFTWARE_ENGINEERING / NON_BACKEND
-
-Senior Software Engineer
-→ SOFTWARE_ENGINEERING / UNKNOWN si no hay evidencia suficiente
-
-Desarrollador Full-Stack
-→ SOFTWARE_ENGINEERING / FULL_STACK
-
-Senior Data Engineer
-→ IT_TECHNICAL / NOT_APPLICABLE
-
-Site Reliability Engineer
-→ IT_TECHNICAL / NOT_APPLICABLE
-
-Technical Product Manager
-→ TECH_ADJACENT / NOT_APPLICABLE
-
-Business Development Representative
-→ NON_TECHNICAL / NOT_APPLICABLE
-```
-
-### Discovery y refinamiento
-
-El corpus real mostró:
+Run 80:
 
 ```text
-993 candidates
-901 exact titles
-894 normalized titles
-```
-
-Por lo tanto el problema es long-tail y no se resolvió con una tabla de “top titles”.
-
-Durante discovery se hicieron varias corridas dry-run y se corrigieron falsos positivos causados por descriptions genéricas. Se pasó por revisiones r1-r5 antes de aplicar.
-
-La versión final evita casos observados como:
-
-```text
-Chief Revenue Officer
-Community Engineer
-Cloud Professional Services Manager
-Project Manager
-Technical Author
-```
-
-siendo promovidos incorrectamente a software por boilerplate de description.
-
-También se mejoró recall técnico para casos como:
-
-```text
-Staff Engineer (Java)
-Payments Engineer
-Ingeniero de Plataforma
-AI Engineering Lead
-Data Quality Engineer
-Pasante IT
-Auditor/a IT
-Arquitecto Especialista AI GCP
-```
-
-sin intentar forzar `UNKNOWN = 0`.
-
-### Última corrida confirmada — Run 80
-
-Apply:
-
-```text
-Rule version: OCCUPATION_V1
-Scope:        Argentina ELIGIBLE + UNKNOWN
-Mode:         APPLY
 Total:        993
-
 Software:       246
 IT technical:   137
 Tech adjacent:   55
@@ -876,7 +745,7 @@ Deleted:          0
 Run id:           80
 ```
 
-Backend relevance dentro de software:
+Backend dentro de software:
 
 ```text
 BACKEND          75
@@ -894,36 +763,9 @@ DESCRIPTION          21
 TITLE               551
 TITLE_DESCRIPTION    46
 UNRESOLVED          375
------------------------
-TOTAL               993
 ```
 
-Reasons:
-
-```text
-IT_TECHNICAL
-  DESCRIPTION_IT_TECHNICAL             5
-  TITLE_IT_TECHNICAL                 132
-
-NON_TECHNICAL
-  DESCRIPTION_NON_TECHNICAL            5
-  TITLE_NON_TECHNICAL                175
-
-SOFTWARE_ENGINEERING
-  DESCRIPTION_SOFTWARE_ENGINEERING     11
-  TITLE_BACKEND                        56
-  TITLE_FULL_STACK                     36
-  TITLE_NON_BACKEND_SOFTWARE           40
-  TITLE_SOFTWARE                      103
-
-TECH_ADJACENT
-  TITLE_TECH_ADJACENT                  55
-
-UNKNOWN
-  UNRESOLVED_OCCUPATION               375
-```
-
-DB invariants confirmados después de apply:
+DB invariants:
 
 ```text
 classifications total: 993
@@ -934,155 +776,620 @@ invalid backend:          0
 rule versions:            1
 ```
 
-Toda la tabla está en:
-
-```text
-OCCUPATION_V1
-```
-
-### Regla de versionado desde Run 80
-
-`OCCUPATION_V1` ya fue persistida.
-
-No seguir cambiando materialmente sus reglas manteniendo el mismo `rule_version`.
-
-Un refinamiento futuro de reglas ocupacionales debe:
-
-```text
-OCCUPATION_V2
-```
-
-o una versión posterior, con decisión explícita de recalcular.
+`OCCUPATION_V1` ya fue persistida. Cambios materiales futuros deben usar `OCCUPATION_V2` o posterior.
 
 ---
 
-## 15. Próximo vertical: skills
+## 15. Skills classification v1 — TERMINADO
+
+### Objetivo
+
+Extraer de forma provider-independent, determinista, auditable y recomputable las tecnologías explícitamente mencionadas en cada job geográficamente viable.
+
+Scope:
+
+```text
+Argentina eligibility:
+ELIGIBLE + UNKNOWN
+```
+
+Actualmente:
+
+```text
+993 candidates
+```
+
+Skills no depende de `occupation_class` como condición de entrada.
+
+Esto es deliberado porque occupation `UNKNOWN` puede contener evidencia técnica útil y porque el extractor debe describir el posting sin decidir todavía si es buen match.
+
+### Archivos locales implementados y aplicados
+
+Pendientes de publicación:
+
+```text
+migrations/007_job_skill_classifications.sql
+src/chamba_hunter/repositories/job_skill_repository.py
+src/chamba_hunter/services/job_skill_classification_service.py
+src/chamba_hunter/commands/classify_job_skills.py
+```
+
+Tabla:
+
+```text
+job_skill_classifications
+```
+
+Identidad:
+
+```text
+UNIQUE(
+    record_kind,
+    record_id,
+    skill_key
+)
+```
+
+Campos:
+
+```text
+record_kind
+record_id
+skill_key
+skill_category
+title_match
+description_match
+evidence_json
+rule_version
+classified_at
+```
+
+Rule version:
+
+```text
+SKILLS_V1
+```
+
+### Semántica
+
+Una fila significa solamente:
+
+```text
+esta skill reconocida aparece explícitamente
+en title y/o description
+```
+
+No significa:
+
+```text
+REQUIRED
+PREFERRED
+candidate must know it
+exact user match
+reject if missing
+```
+
+No se persisten aquí:
+
+```text
+requirement strength
+preference strength
+skill equivalence
+skill substitutability
+seniority
+matching score
+freshness
+application priority
+```
+
+### Catálogo
+
+`SKILLS_V1` contiene 187 canonical skills con aliases deterministas.
+
+Ejemplos:
+
+```text
+postgres / postgresql
+→ POSTGRESQL
+
+k8s / kubernetes
+→ KUBERNETES
+
+node.js / nodejs
+→ NODEJS
+```
+
+No inferir:
+
+```text
+JAVA         → SPRING
+AWS          → EC2
+AWS          → S3
+JAVASCRIPT   → NODEJS
+KUBERNETES   → OPENSHIFT
+```
+
+Guardas explícitas:
+
+```text
+React Native
+→ REACT_NATIVE
+→ no implica REACT
+
+Azure DevOps
+→ AZURE_DEVOPS
+→ no implica AZURE
+
+SAP BTP
+→ SAP_BTP
+→ no implica SAP genérico
+```
+
+### Categorías observadas
+
+```text
+LANGUAGE
+INFRASTRUCTURE
+CLOUD
+ARCHITECTURE
+DATABASE
+FRAMEWORK
+FRONTEND
+OBSERVABILITY
+DATA_PLATFORM
+BUSINESS_PLATFORM
+CI_CD
+MOBILE
+MESSAGING
+ANALYTICS
+CLOUD_SERVICE
+SECURITY
+TESTING
+ENGINEERING_PRACTICE
+REALTIME
+BUILD_TOOL
+```
+
+Son descriptivas, no weights ni familias de equivalencia.
+
+### Evidence
+
+Cada skill conserva:
+
+```text
+title_match
+description_match
+evidence_json
+```
+
+`evidence_json` conserva aliases/matches y snippets acotados.
+
+Esto permite reinterpretar en el futuro señales como:
+
+```text
+required-like
+preferred-like
+alternative
+```
+
+sin convertir esas heurísticas en semántica rígida de V1.
+
+### Requirement / preferred
+
+Los discoveries mostraron que heurísticas simples por proximidad generan muchas colisiones entre `required-like` y `preferred-like`.
+
+Por eso `SKILLS_V1` no persiste esas etiquetas.
+
+En matching futuro pueden ser señales, nunca hard cuts automáticos.
+
+Principio de producto:
+
+```text
+job: Azure required
+profile: strong AWS experience
+
+NO:
+→ reject
+
+SÍ:
+→ exact Azure evidence absent
+→ transferable cloud evidence present
+→ considerar el resto del match
+```
+
+### Tecnologías transferibles
+
+El corpus mostró relaciones explícitas como:
+
+```text
+AWS / Azure / GCP
+Java / Kotlin
+Spring Boot / Quarkus / Micronaut
+Flask / FastAPI / Django
+PostgreSQL / MySQL
+Kafka / RabbitMQ / SQS
+GitHub Actions / GitLab CI / Jenkins
+```
+
+No modelar estas relaciones dentro de `SKILLS_V1`.
+
+Matching deberá distinguir después:
+
+```text
+EXACT MATCH
+PEER / PARTIALLY SUBSTITUTABLE
+RELATED ECOSYSTEM
+```
+
+mediante taxonomía curada, no inferida automáticamente desde co-mentions.
+
+### Discovery y QA
+
+Se realizaron tres rondas read-only sobre los 993 candidatos.
+
+Hallazgos:
+
+- software tuvo 95.9% de cobertura con catálogo inicial;
+- catálogo expandido llegó a 97.6%;
+- occupation `UNKNOWN` contiene señales técnicas importantes;
+- non-tech puede mencionar tecnologías legítimamente;
+- skill mention no equivale a requirement;
+- alternativas tecnológicas aparecen explícitamente;
+- no intentar 100% de coverage fabricando skills genéricas.
+
+QA focalizada:
+
+```text
+SOFTWARE_ENGINEERING
+240 / 246
+97.6%
+```
+
+Los 6 software jobs sin skill reconocida eran postings con stacks no explícitos o información demasiado genérica.
+
+No se detectaron regex peligrosamente amplios en el muestreo de tokens ambiguos.
+
+### Run 81 — apply confirmado
+
+```text
+Rule version: SKILLS_V1
+Scope:        Argentina ELIGIBLE + UNKNOWN
+Mode:         APPLY
+
+Candidates:   993
+With skills:  512
+No skills:    481
+Skill rows:   2664
+
+Created:      2664
+Updated:         0
+Deleted:         0
+
+Run id:          81
+```
+
+Coverage:
+
+```text
+IT_TECHNICAL            114 / 137   83.2%
+NON_TECHNICAL            51 / 180   28.3%
+SOFTWARE_ENGINEERING    240 / 246   97.6%
+TECH_ADJACENT            30 / 55    54.5%
+UNKNOWN                  77 / 375   20.5%
+```
+
+Sources:
+
+```text
+DESCRIPTION          2430
+TITLE                  68
+TITLE_DESCRIPTION     166
+-------------------------
+TOTAL                 2664
+```
+
+Top skills:
+
+```text
+PYTHON               178
+LINUX                147
+AWS                  129
+KUBERNETES           128
+REACT                  94
+SQL                    94
+DOCKER                 70
+POSTGRESQL             64
+REST                   59
+GO                     59
+AZURE                  58
+TYPESCRIPT             58
+GCP                    54
+JAVA                   45
+DISTRIBUTED_SYSTEMS    45
+CPP                    43
+MYSQL                  41
+OPENSTACK              40
+JAVASCRIPT             39
+SAP                    37
+```
+
+Target-stack observation:
+
+```text
+JAVA                     45
+KOTLIN                    3
+SPRING_BOOT               8
+SPRING                    7
+REST                     59
+MICROSERVICES            33
+DISTRIBUTED_SYSTEMS      45
+POSTGRESQL               64
+ORACLE_DB                 1
+MONGODB                  11
+AWS                     129
+EC2                       3
+RDS                      16
+S3                       13
+DOCKER                   70
+KUBERNETES              128
+OPENSHIFT                 2
+GITHUB_ACTIONS           14
+GITLAB_CI                14
+NODEJS                   33
+NESTJS                   12
+TYPESCRIPT               58
+```
+
+DB invariants:
+
+```text
+Duplicate candidate/skill keys:          0
+Rows without title/description evidence: 0
+Rows outside current scope:              0
+Non-SKILLS_V1 rows:                      0
+```
+
+Toda la tabla está en `SKILLS_V1`.
+
+### Refresh semantics
+
+En cada `--apply`:
+
+```text
+current geographic scope
+    ↓
+extract complete current skill set
+    ↓
+upsert current rows
+    ↓
+delete stale skill rows
+```
+
+Skills no modifica ni duplica:
+
+```text
+first_seen_at
+last_seen_at
+published_at
+is_active
+job_url
+apply_url
+```
+
+`SKILLS_V1` ya fue persistida. Cambios materiales futuros deben usar `SKILLS_V2` o posterior.
+
+---
+
+## 16. Requisito de producto: freshness / early application
+
+El sistema final debe permitir un refresh manual y devolver rápidamente oportunidades nuevas y relevantes.
+
+Debe distinguir conceptualmente:
+
+```text
+NEW
+KNOWN
+UPDATED
+CLOSED / INACTIVE
+```
+
+y especialmente:
+
+```text
+NEW + HIGH MATCH
+```
+
+### Datos ya disponibles
+
+En los 993 candidatos observados:
+
+```text
+first_seen_at   993 / 993  100.0%
+last_seen_at    993 / 993  100.0%
+job_url         993 / 993  100.0%
+apply_url       606 / 993   61.0%
+published_at     46 / 993    4.6%
+```
+
+Por lo tanto `first_seen_at` será la base más fuerte para NEW.
+
+`published_at` es señal adicional sólo cuando exista y sea confiable.
+
+### Limitación de UPDATED
+
+El `updated` actual de sync no prueba cambio de contenido.
+
+`last_seen_at` tampoco representa cambio.
+
+Más adelante diseñar explícitamente:
+
+```text
+content_hash
+last_changed_at
+change event / history
+```
+
+sin mezclarlo con skills ni seniority.
+
+### Professional match vs operational priority
+
+Separar:
+
+```text
+professional_match
+```
+
+de:
+
+```text
+operational_application_priority
+```
+
+Professional match podrá considerar:
+
+```text
+occupation/backend
+skills
+skill transferability
+seniority
+otras señales profesionales
+```
+
+Operational priority podrá considerar:
+
+```text
+professional_match
+NEW / first_seen_at
+published_at cuando sea confiable
+application channel quality
+future company priority
+change/freshness signals
+```
+
+Ejemplo:
+
+```text
+match 90 + discovered minutes ago
+```
+
+puede ser operacionalmente más prioritario que:
+
+```text
+match 94 + known for 10 days
+```
+
+sin alterar el professional match.
+
+### Application end game
+
+Orden conceptual:
+
+```text
+1. apply_url directo
+2. job_url / careers page
+3. general_application_url
+4. public recruiting/careers email
+```
+
+No habrá auto-apply.
+
+El sistema descubre, clasifica, prioriza y prepara. El usuario revisa y aplica/envía manualmente.
+
+---
+
+## 17. Próximo vertical: seniority
 
 ### Estado
 
-NO implementado todavía.
+NO implementado.
 
-No empezar directamente con seniority ni matching/ranking.
+No empezar todavía matching/ranking.
 
-Objetivo conceptual:
+Pipeline inmediato:
 
 ```text
-occupation-classified candidates
+geography
     ↓
-skills extraction / classification
+occupation/backend
     ↓
-seniority
+skills
     ↓
-matching / ranking
+seniority          ← NEXT
+    ↓
+professional matching
 ```
 
-### Scope recomendado
+### Principios
 
-Para skills no asumir que sólo `BACKEND` y `FULL_STACK` importan.
+Seniority debe ser:
 
-Como mínimo, conservar para análisis:
+- provider-independent;
+- recomputable;
+- auditable;
+- separado de occupation;
+- separado de skills;
+- separado de matching;
+- conservador frente a títulos ambiguos.
+
+No asumir que:
 
 ```text
-SOFTWARE_ENGINEERING / BACKEND
-SOFTWARE_ENGINEERING / FULL_STACK
-SOFTWARE_ENGINEERING / UNKNOWN
+Senior
+Staff
+Principal
+Lead
+Manager
+Junior
+Associate
 ```
 
-El grupo:
+se mapean mecánicamente a una única escala comparable entre empresas.
+
+Antes de schema/implementación:
+
+1. inspeccionar corpus real;
+2. medir señales en title y description;
+3. estudiar rangos de años pedidos;
+4. distinguir IC level de management cuando sea necesario;
+5. identificar títulos contradictorios;
+6. preservar UNKNOWN;
+7. no usar seniority como filtro duro antes de diseñar matching.
+
+Target profesional futuro aproximado:
 
 ```text
-SOFTWARE_ENGINEERING / NON_BACKEND
+semisenior / mid-level
 ```
 
-puede seguir almacenándose/clasificándose, pero su prioridad futura para matching backend será menor.
-
-No descartar automáticamente `IT_TECHNICAL`: algunos roles de platform/SRE/cloud/distributed systems pueden ser profesionalmente relevantes, pero esa decisión pertenece al matching posterior, no a occupation.
-
-### Objetivos de skills v1
-
-Diseñar una representación provider-independent y recomputable de skills explícitas observables en:
-
-```text
-title
-description
-```
-
-Separar, como mínimo, conceptos de:
-
-```text
-programming languages
-frameworks / libraries
-databases
-cloud / infrastructure
-containers / orchestration
-CI/CD
-architecture / distributed systems concepts
-APIs / integration
-```
-
-Antes de fijar schema definitivo, medir sobre el corpus real:
-
-- frecuencia de skills explícitas;
-- qué parte aparece en title vs description;
-- aliases/sinónimos reales;
-- co-ocurrencias;
-- cobertura para Java/Kotlin/Spring;
-- cobertura de stacks backend alternativos;
-- ruido causado por boilerplate;
-- casos donde una tecnología sólo aparece como “nice to have” vs requisito principal.
-
-### Principios recomendados
-
-- preservar evidencia exacta;
-- skills no deben reemplazar occupation;
-- no convertir todavía skills en score;
-- no introducir seniority aquí;
-- no usar el CV/perfil completo para decidir si una skill “existe” en una vacante;
-- extracción determinista/auditable primero;
-- aliases explícitos y versionados;
-- evitar inferencias agresivas:
-  - `Spring` puede necesitar distinguir Spring Framework/Spring Boot;
-  - `AWS` no implica EC2/RDS/S3 específicos;
-  - `Kubernetes` no implica OpenShift;
-  - `JavaScript` no implica Node.js;
-  - `Java` no implica Spring;
-- conservar skills desconocidas/interesantes para diagnóstico futuro si el diseño lo permite.
-
-### Primera tarea sugerida
-
-Sólo discovery/diseño antes de escribir código:
-
-1. verificar si `006` ya fue publicado;
-2. leer este documento;
-3. inspeccionar directamente el código de occupation;
-4. consultar DB local usando occupation actual;
-5. obtener una muestra/distribución de tecnologías mencionadas en los roles relevantes;
-6. separar aliases seguros de inferencias;
-7. diseñar taxonomy/schema de skills v1;
-8. recién después implementar.
+pero no usar ese target para alterar la clasificación objetiva del job.
 
 ---
 
-## 16. Qué NO hacer en el próximo vertical
+## 18. Restricciones para el próximo vertical
 
-- No volver a ampliar acquisition antes de necesidad concreta.
+- No ampliar acquisition sin necesidad concreta.
 - No hacer más Hiring Room discovery manual por ahora.
 - No implementar Bumeran/ZonaJobs con evasión anti-bot.
-- No eliminar los 3046 geographic `INELIGIBLE`.
-- No asumir `UNKNOWN geography` como eligible.
-- No eliminar los 375 occupation `UNKNOWN`.
+- No eliminar geographic `INELIGIBLE`.
+- No asumir geography `UNKNOWN` como `ELIGIBLE`.
+- No eliminar occupation `UNKNOWN`.
 - No tratar `backend_relevance=UNKNOWN` como rechazo.
-- No volver a mutar materialmente `OCCUPATION_V1`; usar nueva versión si se revisa.
-- No arrancar matching/scoring por Java/Kotlin todavía.
-- No mezclar skills y seniority.
-- No hacer fuzzy canonicalization adicional salvo evidencia de que aporta valor.
-- No cambiar semantics de ATS snapshot.
-- No tocar outreach todavía.
+- No modificar materialmente `OCCUPATION_V1`; usar `OCCUPATION_V2`.
+- No modificar materialmente `SKILLS_V1`; usar `SKILLS_V2`.
+- No convertir una skill ausente en hard rejection.
+- No convertir `REQUIRED` tecnológico en hard rejection automático.
+- No asumir equivalencia exacta entre tecnologías reemplazables.
+- No mezclar seniority con matching.
+- No agregar freshness a seniority.
+- No diseñar todavía una fórmula final de match score.
+- No mezclar professional match con operational priority.
+- No cambiar ATS snapshot semantics.
+- No tocar auto-apply.
 - No agregar UI.
 
 ---
 
-## 17. Validaciones operativas acumuladas
+## 19. Runs y estados actuales
 
 Últimos runs relevantes:
 
@@ -1098,9 +1405,10 @@ Sólo discovery/diseño antes de escribir código:
 78 Argentina eligibility initial apply
 79 Argentina eligibility resync/current-state validation
 80 occupation / IT / backend classification apply
+81 skills classification apply
 ```
 
-Estados actuales de clasificación confirmados:
+Estados actuales:
 
 ```text
 ARGENTINA_V1
@@ -1120,59 +1428,68 @@ OCCUPATION_V1
   unknown        375
   missing          0
   stale            0
+
+SKILLS_V1
+  scope                  993
+  candidates with skills 512
+  candidates no skills   481
+  skill rows            2664
+  duplicate keys           0
+  invalid evidence         0
+  stale                    0
+  wrong rule version       0
 ```
 
-Run 80 es el último estado de occupation confirmado.
+Run 81 es el último estado persistido de clasificación confirmado.
 
 ---
 
-## 18. Checklist antes de publicar occupation
+## 20. Checklist antes de publicar skills
 
-El worktree debería contener, además del código ya publicado:
+El worktree debería contener:
 
 ```text
-migrations/006_job_occupation_classifications.sql
+migrations/007_job_skill_classifications.sql
 
-src/chamba_hunter/repositories/job_occupation_repository.py
-src/chamba_hunter/services/job_occupation_classification_service.py
-src/chamba_hunter/commands/classify_job_occupations.py
+src/chamba_hunter/repositories/job_skill_repository.py
+src/chamba_hunter/services/job_skill_classification_service.py
+src/chamba_hunter/commands/classify_job_skills.py
 
 docs/PROJECT_CONTEXT.md
 ```
 
-No versionar artefactos temporales como:
+No versionar artefactos temporales de discovery/QA.
 
-```text
-chamba-hunter-occupation-v1*.zip
-occupation-ambiguous-diagnostic.txt
-```
+Root `.zip` / `.txt` ya están ignorados por `.gitignore`.
 
-Antes de commit/push:
+Validación:
 
 ```powershell
 python -m compileall -q src
+
+git add -N -- `
+    "migrations/007_job_skill_classifications.sql" `
+    "src/chamba_hunter/commands/classify_job_skills.py" `
+    "src/chamba_hunter/repositories/job_skill_repository.py" `
+    "src/chamba_hunter/services/job_skill_classification_service.py"
+
 git diff --check
-git status --short
+
+git reset -- `
+    "migrations/007_job_skill_classifications.sql" `
+    "src/chamba_hunter/commands/classify_job_skills.py" `
+    "src/chamba_hunter/repositories/job_skill_repository.py" `
+    "src/chamba_hunter/services/job_skill_classification_service.py"
+
 git diff --stat
-```
-
-Opcionalmente revisar el diff completo:
-
-```powershell
-git diff -- migrations/006_job_occupation_classifications.sql
-git diff -- src/chamba_hunter/repositories/job_occupation_repository.py
-git diff -- src/chamba_hunter/services/job_occupation_classification_service.py
-git diff -- src/chamba_hunter/commands/classify_job_occupations.py
-git diff -- docs/PROJECT_CONTEXT.md
+git status --short
 ```
 
 El usuario decide y ejecuta commit/push manualmente.
 
 ---
 
-## 19. Prompt operativo recomendado para una nueva conversación
-
-Usar este documento como handoff, pero la sesión nueva debe igualmente:
+## 21. Prompt operativo para nueva conversación
 
 ```text
 Repositorio: Gtestino92/chamba-hunter
@@ -1181,14 +1498,17 @@ Base: main
 Primero:
 - verificar HEAD y últimos commits reales en GitHub;
 - leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si migration 006 y occupation repository/service/command ya están publicados;
+- confirmar si migration 007 y skills repository/service/command ya están publicados;
 - distinguir GitHub code vs DB local observed state;
-- no asumir que los conteos históricos siguen vigentes;
-- inspeccionar el código real de occupation antes de diseñar el próximo slice;
+- no asumir que conteos históricos siguen vigentes;
+- inspeccionar código real de geography, occupation y skills;
 - no modificar código todavía;
-- preparar discovery del siguiente vertical: skills;
-- trabajar inicialmente sobre el corpus geográficamente ELIGIBLE/UNKNOWN
-  ya clasificado por OCCUPATION_V1;
-- no usar backend_relevance UNKNOWN como filtro excluyente;
-- no mezclar todavía seniority ni matching/ranking.
+- preparar discovery del siguiente vertical: seniority;
+- trabajar inicialmente sobre el corpus geográficamente ELIGIBLE/UNKNOWN;
+- preservar occupation UNKNOWN y backend_relevance UNKNOWN;
+- no usar skills faltantes ni tecnologías required como hard cuts;
+- considerar skill transferability sólo más adelante en matching;
+- no mezclar freshness con seniority;
+- preservar first_seen_at / last_seen_at / published_at / active state / URLs;
+- mantener separados professional match y operational/application priority.
 ```
