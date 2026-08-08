@@ -1502,6 +1502,54 @@ def _detect_from_url(
             ),
         )
 
+    if (
+        host.endswith(
+            ".hiringroom.com"
+        )
+        and host
+        != "www.hiringroom.com"
+    ):
+        identifier = (
+            host[
+                :-len(
+                    ".hiringroom.com"
+                )
+            ]
+        )
+
+        if (
+            not identifier
+            or "." in identifier
+        ):
+            return None
+
+        return AtsCandidate(
+            provider=(
+                AtsProvider.HIRINGROOM
+            ),
+            method=method,
+            confidence=confidence,
+            source_url=url,
+            evidence=(
+                "Hiring Room careers host"
+            ),
+            external_identifier=(
+                identifier
+            ),
+            board_url=(
+                _canonical_board_url(
+                    provider=(
+                        AtsProvider
+                        .HIRINGROOM
+                    ),
+                    identifier=(
+                        identifier
+                    ),
+                    fallback=url,
+                )
+            ),
+        )
+
     return None
 
 
@@ -1653,6 +1701,16 @@ def _probe_provider_identifier(
         == AtsProvider.BAMBOOHR
     ):
         return _probe_bamboohr(
+            client=client,
+            company=company,
+            identifier=identifier,
+        )
+
+    if (
+        provider
+        == AtsProvider.HIRINGROOM
+    ):
+        return _probe_hiringroom(
             client=client,
             company=company,
             identifier=identifier,
@@ -2142,6 +2200,179 @@ def _probe_bamboohr(
     )
 
 
+def _probe_hiringroom(
+    client: httpx.Client,
+    company: Company,
+    identifier: str,
+) -> AtsCandidate | None:
+    board_url = (
+        f"https://{identifier}"
+        ".hiringroom.com/jobs"
+    )
+
+    response = _safe_get(
+        client,
+        board_url,
+    )
+
+    if (
+        response is None
+        or response.status_code
+        != 200
+    ):
+        return None
+
+    final_host = (
+        urlsplit(
+            str(response.url)
+        )
+        .hostname
+        or ""
+    ).casefold()
+
+    expected_host = (
+        f"{identifier.casefold()}"
+        ".hiringroom.com"
+    )
+
+    if final_host != expected_host:
+        return None
+
+    if not _names_compatible(
+        company.name,
+        response.text,
+    ):
+        return None
+
+    type_match = re.search(
+        r'const\s+typePortal\s*=\s*["\']([^"\']+)["\']',
+        response.text,
+    )
+
+    if type_match is None:
+        return None
+
+    type_portal = (
+        type_match.group(1)
+        .strip()
+        .casefold()
+    )
+
+    if type_portal not in {
+        "external",
+        "microsite",
+    }:
+        return None
+
+    data = {
+        "selectedPage": "1",
+        "typePortal": type_portal,
+    }
+
+    if type_portal == "microsite":
+        microsite_ids = re.findall(
+            r'microSiteId\s*=\s*["\']([^"\']*)["\']',
+            response.text,
+        )
+
+        microsite_id = next(
+            (
+                value.strip()
+                for value
+                in reversed(
+                    microsite_ids
+                )
+                if value.strip()
+            ),
+            None,
+        )
+
+        if microsite_id is None:
+            return None
+
+        data["microSiteId"] = (
+            microsite_id
+        )
+
+    try:
+        vacancies_response = (
+            client.post(
+                (
+                    f"https://{identifier}"
+                    ".hiringroom.com/jobs/"
+                    "getVacanciesForPortal/1"
+                ),
+                data=data,
+                headers={
+                    "X-Requested-With": (
+                        "XMLHttpRequest"
+                    ),
+                    "Referer": board_url,
+                },
+            )
+        )
+    except httpx.HTTPError:
+        return None
+
+    if (
+        vacancies_response.status_code
+        != 200
+    ):
+        return None
+
+    try:
+        payload = (
+            vacancies_response.json()
+        )
+    except ValueError:
+        return None
+
+    data_payload = payload.get("data")
+
+    if (
+        payload.get("result")
+        != "success"
+        or not isinstance(
+            data_payload,
+            dict,
+        )
+    ):
+        return None
+
+    total = data_payload.get(
+        "total_vacancies"
+    )
+
+    if (
+        not isinstance(total, int)
+        or total < 1
+    ):
+        return None
+
+    return AtsCandidate(
+        provider=(
+            AtsProvider.HIRINGROOM
+        ),
+        method=(
+            AtsDetectionMethod
+            .BOARD_PROBE
+        ),
+        confidence=0.97,
+        source_url=board_url,
+        evidence=(
+            "Hiring Room public board "
+            "probe returned "
+            f"{total} active posting(s) "
+            "for derived identifier "
+            f"'{identifier}'"
+        ),
+        external_identifier=(
+            identifier
+        ),
+        board_url=board_url,
+    )
+
+
 def _safe_get(
     client: httpx.Client,
     url: str,
@@ -2394,6 +2625,15 @@ def _canonical_board_url(
         return (
             f"https://{identifier}"
             ".bamboohr.com/careers"
+        )
+
+    if (
+        provider
+        == AtsProvider.HIRINGROOM
+    ):
+        return (
+            f"https://{identifier}"
+            ".hiringroom.com/jobs"
         )
 
     return fallback
