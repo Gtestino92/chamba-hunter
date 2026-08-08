@@ -9,8 +9,8 @@
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-5f723427201e283c928afb1f23037df30091187c
-freshness and priority
+2e431c0413dd8825e0497001ecc4981b099b6edb
+shortlist
 ```
 
 Ese `main` ya contiene:
@@ -24,22 +24,26 @@ Ese `main` ya contiene:
 - professional matching v1;
 - content freshness v1;
 - operational/application priority v1;
+- shortlist/report v1;
 - migraciones `004` a `011`;
 - `BACKEND_SOFTWARE_V1`;
 - `MATCHING_V1`;
 - `JOB_CONTENT_V1`;
-- `OPERATIONAL_PRIORITY_V1`.
+- `OPERATIONAL_PRIORITY_V1`;
+- `SHORTLIST_REPORT_V1`.
 
-El trabajo de **shortlist/report v1** fue implementado y validado localmente después de ese commit y todavía está pendiente de publicación en GitHub.
+El trabajo de **manual application tracking + end-to-end refresh v1** fue implementado y validado localmente después de ese commit y todavía está pendiente de publicación en GitHub.
 
 Estado local esperado antes de publicar este slice, después de limpiar scripts temporales:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-M  pyproject.toml
-?? src/chamba_hunter/commands/export_shortlist.py
-?? src/chamba_hunter/repositories/job_shortlist_report_repository.py
-?? src/chamba_hunter/services/job_shortlist_report_service.py
+M  src/chamba_hunter/repositories/job_shortlist_report_repository.py
+?? migrations/012_application_opportunity_identity.sql
+?? src/chamba_hunter/commands/refresh_search.py
+?? src/chamba_hunter/commands/track_application.py
+?? src/chamba_hunter/repositories/application_repository.py
+?? src/chamba_hunter/services/application_tracking_service.py
 ```
 
 Output local generado y deliberadamente ignorado por Git:
@@ -48,15 +52,18 @@ Output local generado y deliberadamente ignorado por Git:
 output/chamba-shortlist.xlsx
 ```
 
-La DB SQLite local sigue teniendo como último run persistido:
+Estado SQLite local confirmado después del primer refresh end-to-end real:
 
 ```text
-Run 84
+Run 99
 OPERATIONAL_PRIORITY_V1
-baseline
+SUCCESS
+
+applications rows = 0
+migration 012 applied = yes
 ```
 
-La generación del reporte es read-only y no crea runs.
+La generación del reporte no crea runs. `track_application` sólo modifica `applications` cuando el usuario registra manualmente una acción real.
 
 GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
 
@@ -165,7 +172,7 @@ operational / application priority
     ↓
 shortlist / Excel report
     ↓
-manual application tracking / refresh workflow    ← PRÓXIMO VERTICAL
+manual application tracking / refresh workflow
 ```
 
 El end game debe soportar además un refresh manual orientado a **early application**:
@@ -371,8 +378,13 @@ Migraciones confirmadas en GitHub `main`:
 011_job_operational_priorities.sql
 ```
 
-No hay migrations locales pendientes en el slice de reporting.
+Migration local implementada, aplicada y validada, pendiente de publicación:
 
+```text
+012_application_opportunity_identity.sql
+```
+
+Agrega identidad genérica de oportunidad a `applications` para soportar tanto `ATS` como `LEAD` sin inventar un `jobs.id`.
 
 Tablas/vistas relevantes:
 
@@ -427,20 +439,35 @@ Principios:
 - `first_seen_at` se preserva;
 - `last_seen_at` se actualiza.
 
-Último corpus broad confirmado localmente:
+Última adquisición broad confirmada localmente:
 
 ```text
-GETONBOARD   active 200
-HIMALAYAS    active 200
-TOTAL        active 400
+Run 85
+
+HIMALAYAS
+  received   500
+  created    500
+  updated      0
+
+GETONBOARD
+  received   339
+  created    139
+  updated    200
+
+TOTAL received   839
+TOTAL created    639
+TOTAL updated    200
 ```
 
-Antes de canonicalization:
+Estado inmediatamente después de adquisición y antes de la nueva canonicalization:
 
 ```text
-400 unresolved
-0 ATS hints
+active unresolved leads   1016
+raw active candidates     4678
+stored ATS hints              0
 ```
+
+La corrida amplió deliberadamente la ventana broad respecto del baseline anterior de 200 + 200.
 
 `job_ats_hints` sigue en cero para el corpus observado.
 
@@ -486,10 +513,10 @@ BAMBOOHR
 HIRINGROOM
 ```
 
-Último snapshot local confirmado:
+Último snapshot activo confirmado después de Runs 86–92:
 
 ```text
-GREENHOUSE       1662
+GREENHOUSE       1659
 LEVER            1139
 HIRINGROOM        485
 SMARTRECRUITERS   197
@@ -497,10 +524,12 @@ ASHBY              90
 WORKABLE           65
 BAMBOOHR           24
 ----------------------
-ATS TOTAL        3662
+ATS ACTIVE       3659
 ```
 
-Estos números son DB local observada y pueden cambiar.
+En ese refresh Greenhouse creó 2 jobs y desactivó 5; los demás providers no crearon ni desactivaron jobs.
+
+Estos números son estado local observado y pueden cambiar.
 
 ### Semántica importante de freshness
 
@@ -629,13 +658,13 @@ No se fabrican timestamps exactos desde edades relativas.
 Última corrida confirmada:
 
 ```text
-Run 76
+Run 92
 Tenants:       28
 Succeeded:     28
 Failed:         0
 Jobs received: 485
-Created:       213
-Updated:       272
+Created:         0
+Updated:       485
 Deactivated:     0
 ```
 
@@ -3244,21 +3273,25 @@ No usa simplemente “latest global prioritize run” como sustituto del snapsho
 
 ### Application tracking en reporte
 
-Para ATS:
+El reporte originalmente soportaba tracking sólo por `applications.job_id`.
+
+El slice posterior de application tracking generalizó la identidad a:
 
 ```text
-record_kind = ATS
+record_kind
+record_id
 ```
 
-el reporte puede mostrar el último row existente de:
+por lo que `SHORTLIST_REPORT_V1` ahora puede mostrar el tracking de:
 
 ```text
-applications
+ATS
+LEAD
 ```
 
-por `job_id`.
+sin cambiar la semántica del reporte.
 
-Campos:
+Campos mostrados:
 
 ```text
 application_type
@@ -3267,21 +3300,27 @@ applied_at
 updated_at
 ```
 
+Compatibilidad:
+
+```text
+ATS
+→ record_kind = ATS
+→ record_id = jobs.id
+→ job_id = jobs.id
+
+LEAD
+→ record_kind = LEAD
+→ record_id = job_leads.id
+→ job_id = NULL
+```
+
 Actualmente:
 
 ```text
 applications rows = 0
 ```
 
-Para LEAD no se inventa tracking.
-
-La tabla `applications` existente sigue keyed a:
-
-```text
-job_id
-```
-
-y por lo tanto no se amplió preventivamente durante reporting.
+El workbook sigue siendo read-only y no crea ni modifica application tracking.
 
 ### Workbook
 
@@ -3560,206 +3599,864 @@ frente a `python -c` con SQL/quotes complejos.
 
 ---
 
-## 21. Próximo vertical: manual application tracking + refresh workflow
+## 21. Manual application tracking + refresh workflow v1 — TERMINADO
 
-### Estado
+### Discovery
 
-NO implementado todavía.
-
-El pipeline ya puede producir:
+El discovery confirmó que el gap de tracking era material:
 
 ```text
-corpus
-→ evaluations
-→ professional match
-→ freshness
-→ operational priority
-→ XLSX shortlist
+ALL ACTIONABLE
+  ATS    892
+  LEAD   101
+
+VERY_HIGH/HIGH
+  ATS     28
+  LEAD    20
 ```
 
-Falta cerrar el workflow diario/manual posterior.
-
-### Objetivos
-
-Resolver de forma mínima y explícita:
-
-1. cómo registrar que una oportunidad fue aplicada;
-2. cómo mostrar esa aplicación en reportes futuros;
-3. qué hacer con LEAD frente al schema actual `applications.job_id`;
-4. cómo ejecutar un refresh completo repetible;
-5. cómo regenerar `Focus` después de refresh;
-6. cómo evitar reaplicar manualmente a una oportunidad ya trackeada;
-7. cómo revisar `INACTIVE/SUPERSEDED/OUT_OF_SCOPE`;
-8. cómo mantener todo local-first y sin auto-apply.
-
-### Preguntas de discovery
-
-Antes de cambiar schema:
-
-- ¿qué estados de aplicación reales necesita el usuario?
-- ¿basta `SAVED/APPLIED/INTERVIEW/REJECTED/WITHDRAWN/...` o el enum actual ya alcanza?
-- ¿conviene extender `applications` a `(record_kind, record_id)`?
-- ¿o sólo trackear ATS inicialmente y resolver LEAD al canonicalizar/aplicar?
-- ¿debe el workbook ocultar applied por default o sólo marcarlos?
-- ¿debe `Focus` excluir ya aplicadas?
-- ¿qué comando mínimo conviene para registrar aplicación manual?
-- ¿qué command sequence actual representa un refresh completo?
-- ¿conviene un wrapper `refresh_search` que componga commands existentes sin duplicar reglas?
-- ¿cómo reportar fallos parciales por provider sin perder un refresh útil?
-
-No modificar schema hasta responder estas preguntas con código/DB real.
-
----
-
-## 22. Restricciones para application tracking / refresh
-
-- No auto-apply.
-- No auto-email.
-- No inferir emails personales.
-- No UI web.
-- No modificar `ARGENTINA_V1`.
-- No modificar `OCCUPATION_V1`.
-- No modificar `SKILLS_V1`.
-- No modificar `SENIORITY_V1`.
-- No modificar `MATCHING_V1`.
-- No modificar `JOB_CONTENT_V1`.
-- No modificar `OPERATIONAL_PRIORITY_V1`.
-- No modificar `SHORTLIST_REPORT_V1` sólo para acomodar application tracking salvo defecto real.
-- No borrar historial de operational priority.
-- No usar `last_seen_at` como change signal.
-- No crear otra capa de scoring.
-- No convertir el reporte en una fuente de verdad editable.
-- La DB sigue siendo source of truth.
-- Mantener application action manual.
-- Mantener URLs y channels explícitos.
-
----
-
-## 23. Runs y estados actuales
-
-Últimos runs relevantes:
+Los 101 LEAD accionables tenían:
 
 ```text
-70 broad ATS rediscovery
-71 Hiring Room detection batch
-72 Hiring Room sync initial batch
-73 Hiring Room detection second batch
-74 Hiring Room sync 17 tenants
-75 Hiring Room detection third batch
-76 Hiring Room sync 28 tenants
-77 cross-source canonicalization apply
-78 Argentina eligibility initial apply
-79 Argentina eligibility resync/current-state validation
-80 occupation / IT / backend classification apply
-81 skills classification apply
-82 seniority classification apply
-83 professional matching apply
-84 operational priority initial baseline apply
+canonical_job_id = NULL
 ```
 
-El reporting no crea runs.
+incluidos los 20 LEAD `VERY_HIGH/HIGH`.
 
-Estados actuales:
+Por lo tanto, `applications.job_id` no podía identificar correctamente todas las oportunidades que ya aparecían en el shortlist.
+
+La tabla estaba vacía:
 
 ```text
-ARGENTINA_V1
-  total        4039
-  eligible      831
-  ineligible   3046
-  unknown       162
+applications rows = 0
+```
 
-OCCUPATION_V1
-  scope          993
-  software       246
-  it technical   137
-  tech adjacent   55
-  non technical  180
-  unknown        375
+y no existía repository/command de application tracking.
 
-SKILLS_V1
-  scope                  993
-  candidates with skills 512
-  candidates no skills   481
-  skill rows            2664
+### Migration 012
 
-SENIORITY_V1
-  scope             993
-  unknown           724
-  senior            158
-  mid                33
-  lead               30
-  junior             19
-  staff               9
-  entry               8
-  principal           8
-  intern              4
+Archivo:
 
-MATCHING_V1 / BACKEND_SOFTWARE_V1
-  scope               993
-  ATS                 892
-  LEAD                101
-  very high            12
-  high                 36
-  medium              120
-  low                 825
+```text
+migrations/012_application_opportunity_identity.sql
+```
 
-JOB_CONTENT_V1
-  jobs total                    3662
-  job_leads total                400
-  jobs missing current hash        0
-  leads missing current hash       0
-  baseline changed jobs            0
-  baseline changed leads           0
+Agrega:
 
-OPERATIONAL_PRIORITY_V1
-  scope               993
-  new                   0
-  updated               0
-  known               993
-  inactive              0
-  superseded            0
-  out of scope          0
-  direct apply        606
-  job URL             387
+```text
+record_kind
+record_id
+```
 
+a:
+
+```text
+applications
+```
+
+Valores permitidos para job opportunities:
+
+```text
+ATS
+LEAD
+```
+
+Compatibilidad:
+
+```text
+ATS
+→ record_kind = ATS
+→ record_id = jobs.id
+→ job_id = jobs.id
+
+LEAD
+→ record_kind = LEAD
+→ record_id = job_leads.id
+→ job_id = NULL
+```
+
+Los campos legacy:
+
+```text
+job_id
+public_contact_id
+```
+
+se conservan.
+
+No se hizo una migración destructiva.
+
+### Invariantes DB
+
+Migration 012 agrega:
+
+```text
+idx_applications_record
+uq_applications_job_opportunity
+```
+
+La unique parcial garantiza un único row actual de tracking por:
+
+```text
+application_type = JOB
++
+record_kind
++
+record_id
+```
+
+También agrega triggers que:
+
+- exigen `record_kind + record_id` para `application_type = JOB`;
+- verifican que el source ATS/LEAD exista;
+- exigen `ATS job_id == record_id`;
+- impiden `job_id` en LEAD.
+
+Rows JOB existentes con `job_id` pueden backfillearse a:
+
+```text
+record_kind = ATS
+record_id = job_id
+```
+
+### Enums
+
+No fue necesario crear nuevos estados.
+
+Se reutilizan:
+
+```text
+PENDING
+APPLIED
+SENT
+INTERVIEW
+REJECTED
+WITHDRAWN
+NO_RESPONSE
+```
+
+Application types existentes:
+
+```text
+JOB
+SPONTANEOUS_EMAIL
+GENERAL_APPLICATION
+```
+
+Este slice sólo agrega el workflow manual de `JOB`.
+
+### Repository/service
+
+Archivos:
+
+```text
+src/chamba_hunter/repositories/application_repository.py
+src/chamba_hunter/services/application_tracking_service.py
+```
+
+Responsabilidad:
+
+```text
+resolve opportunity
+→ read current tracking
+→ create/update one JOB application row
+```
+
+No crea tracing runs.
+
+No toca matching ni operational priority.
+
+### CLI manual
+
+Archivo:
+
+```text
+src/chamba_hunter/commands/track_application.py
+```
+
+Uso conceptual:
+
+```powershell
+python -m chamba_hunter.commands.track_application `
+    --record-kind LEAD `
+    --record-id 168 `
+    --status APPLIED
+```
+
+o:
+
+```powershell
+python -m chamba_hunter.commands.track_application `
+    --record-kind ATS `
+    --record-id 8 `
+    --status INTERVIEW
+```
+
+`--notes` es opcional.
+
+Si se omite:
+
+```text
+existing notes are preserved
+```
+
+Si se pasa vacío:
+
+```text
+notes are cleared
+```
+
+Semántica de `applied_at`:
+
+```text
+first transition to APPLIED
+→ set applied_at
+
+later status changes
+→ preserve applied_at
+```
+
+Semántica de `last_status_at`:
+
+```text
+status changes
+→ now
+
+same status re-written
+→ preserve existing last_status_at
+```
+
+### Shortlist integration
+
+Archivo modificado:
+
+```text
+src/chamba_hunter/repositories/job_shortlist_report_repository.py
+```
+
+El reporte ahora hace join de tracking por:
+
+```text
+(record_kind, record_id)
+```
+
+cuando migration 012 está disponible.
+
+También conserva fallback legacy ATS-only si se abre una DB pre-012.
+
+No se cambió:
+
+```text
 SHORTLIST_REPORT_V1
-  focus                 0
-  high value           48
-  all current         993
-  history               0
-  XLSX generated        yes
 ```
 
-Run 84 sigue siendo el último estado persistido confirmado.
+ni su ranking.
+
+`Focus` tampoco excluye automáticamente oportunidades aplicadas.
+
+Razón:
+
+```text
+freshness / professional priority
+!=
+manual application state
+```
+
+El estado manual queda visible y filtrable en:
+
+```text
+Tracked Status
+Application Type
+Applied At
+```
+
+### Dry-run aislado
+
+Se validó sobre una copia SQLite real.
+
+Caso ATS:
+
+```text
+ATS 8
+PENDING
+→ APPLIED
+
+job_id = 8
+record_kind = ATS
+record_id = 8
+```
+
+Caso LEAD:
+
+```text
+LEAD 168
+APPLIED
+
+job_id = NULL
+record_kind = LEAD
+record_id = 168
+```
+
+Resultado:
+
+```text
+Migration 012             PASS
+JOB application rows      2
+duplicate opportunity     0
+ATS tracking in XLSX      PASS
+LEAD tracking in XLSX     PASS
+All Current rows          993
+```
+
+La DB real quedó intacta durante ese dry-run.
+
+### Apply real de migration 012
+
+Migration aplicada sobre la DB real.
+
+Validación:
+
+```text
+Migration 012                         1
+record_kind/record_id columns         yes
+unique opportunity index             yes
+identity triggers                     4 / 4
+runs before/after                     84 / 84
+applications before/after              0 / 0
+```
+
+El XLSX baseline continuó:
+
+```text
+Focus          0
+High Value    48
+All Current  993
+History        0
+```
 
 ---
 
-## 24. Checklist antes de publicar shortlist/report
+## 22. End-to-end refresh v1 — TERMINADO
 
-Después de limpiar scripts temporales, el worktree debería contener exactamente:
+### Objetivo
+
+Componer los commands ya existentes sin duplicar reglas de negocio.
+
+Archivo:
+
+```text
+src/chamba_hunter/commands/refresh_search.py
+```
+
+Sin `--apply`:
+
+```text
+PLAN ONLY
+```
+
+No ejecuta nada.
+
+Con:
+
+```text
+--apply
+```
+
+ejecuta secuencialmente:
+
+```text
+1  acquire_broad_jobs
+2  sync_greenhouse_jobs
+3  sync_lever_jobs
+4  sync_ashby_jobs
+5  sync_workable_jobs
+6  sync_smartrecruiters_jobs
+7  sync_bamboohr_jobs
+8  sync_hiringroom_jobs
+9  canonicalize_job_leads --apply
+10 classify_argentina_eligibility --apply
+11 classify_job_occupations --apply
+12 classify_job_skills --apply
+13 classify_job_seniority --apply
+14 match_jobs --apply
+15 prioritize_jobs --apply
+16 export_shortlist
+```
+
+El wrapper usa subprocesses de los commands existentes.
+
+No duplica repositories/services ni reglas de clasificación.
+
+Si un step retorna non-zero:
+
+```text
+refresh stops
+```
+
+Los runs ya persistidos por steps anteriores quedan como evidencia real del intento.
+
+### Opciones
+
+```text
+--skip-broad
+--skip-ats
+--skip-export
+--discover-broad-ats-limit N
+--himalayas-max-jobs N
+--getonboard-max-pages N
+--output PATH
+```
+
+`discover_broad_ats` está deshabilitado por default en el refresh rutinario:
+
+```text
+--discover-broad-ats-limit 0
+```
+
+Esto separa:
+
+```text
+routine refresh
+```
+
+de:
+
+```text
+careers/ATS discovery for new broad companies
+```
+
+que tiene otra semántica y costo.
+
+### Primer refresh real post-baseline
+
+Baseline anterior:
+
+```text
+Run 84
+finished_at 2026-08-08T22:41:13.367176Z
+```
+
+Primer refresh end-to-end real:
+
+```text
+Runs 85–99
+```
+
+Todos terminaron:
+
+```text
+SUCCESS
+```
+
+Secuencia:
+
+```text
+85 acquire_broad_jobs
+86 sync_greenhouse_jobs
+87 sync_lever_jobs
+88 sync_ashby_jobs
+89 sync_workable_jobs
+90 sync_smartrecruiters_jobs
+91 sync_bamboohr_jobs
+92 sync_hiringroom_jobs
+93 canonicalize_job_leads
+94 classify_argentina_eligibility
+95 classify_job_occupations
+96 classify_job_skills
+97 classify_job_seniority
+98 match_jobs
+99 prioritize_jobs
+```
+
+El export XLSX no crea run.
+
+### Broad acquisition Run 85
+
+```text
+HIMALAYAS received 500
+GETONBOARD received 339
+
+received total   839
+created          639
+updated          200
+```
+
+Después de adquisición:
+
+```text
+active unresolved leads   1016
+raw active candidates     4678
+```
+
+### ATS sync Runs 86–92
+
+Todos los boards/sites/tenants procesados terminaron correctamente.
+
+Snapshot activo:
+
+```text
+GREENHOUSE       1659
+LEVER            1139
+HIRINGROOM        485
+SMARTRECRUITERS   197
+ASHBY              90
+WORKABLE           65
+BAMBOOHR           24
+----------------------
+ATS ACTIVE       3659
+```
+
+Greenhouse:
+
+```text
+created       2
+deactivated   5
+```
+
+Los demás providers:
+
+```text
+created       0
+deactivated   0
+```
+
+### Canonicalization Run 93
+
+```text
+Total       1016
+Resolved      11
+Ambiguous      3
+Unmatched   1002
+Applied       11
+```
+
+### Argentina Run 94
+
+```text
+Total        4664
+Eligible      849
+Ineligible   3544
+Unknown       271
+```
+
+Nuevo downstream scope:
+
+```text
+ELIGIBLE + UNKNOWN = 1120
+```
+
+### Occupation Run 95
+
+```text
+Total          1120
+Software        311
+IT technical    142
+Tech adjacent    59
+Non technical   189
+Unknown         419
+```
+
+Software backend relevance:
+
+```text
+BACKEND       94
+FULL_STACK    95
+NON_BACKEND   54
+UNKNOWN       68
+```
+
+### Skills Run 96
+
+```text
+Candidates      1120
+With skills      604
+No skills        516
+Skill rows       3298
+```
+
+### Seniority Run 97
+
+```text
+Candidates      1120
+
+UNKNOWN          804
+SENIOR           191
+MID               39
+LEAD              32
+JUNIOR            22
+STAFF             10
+ENTRY              9
+PRINCIPAL          9
+INTERN             4
+```
+
+### Matching Run 98
+
+```text
+Candidates     1120
+ATS             892
+LEAD            228
+
+VERY_HIGH        14
+HIGH             68
+MEDIUM          145
+LOW             893
+```
+
+### Operational priority Run 99
+
+Watermark:
+
+```text
+2026-08-08T22:41:13.367176Z
+```
+
+Persisted rows:
+
+```text
+1120
+```
+
+Estados:
+
+```text
+NEW            127
+UPDATED          0
+KNOWN          993
+INACTIVE         0
+SUPERSEDED       0
+OUT_OF_SCOPE     0
+```
+
+Por match:
+
+```text
+VERY_HIGH
+  NEW      2
+  KNOWN   12
+
+HIGH
+  NEW     32
+  KNOWN   36
+
+MEDIUM
+  NEW     25
+  KNOWN  120
+
+LOW
+  NEW     68
+  KNOWN  825
+```
+
+Channels:
+
+```text
+DIRECT_APPLY_URL   606
+JOB_URL            514
+```
+
+El hecho de que:
+
+```text
+UPDATED = 0
+```
+
+es válido: los sync counters `updated` significan re-observación/escritura de rows existentes; `UPDATED` operacional sólo se activa por `JOB_CONTENT_V1 last_changed_at` posterior al watermark.
+
+### Shortlist post-refresh
+
+Workbook:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Source priority run:
+
+```text
+99
+```
+
+Views:
+
+```text
+Focus          34
+High Value     82
+All Current  1120
+History         0
+```
+
+`Focus = 34` corresponde exactamente a:
+
+```text
+NEW/UPDATED
++
+VERY_HIGH/HIGH
+```
+
+En esta corrida:
+
+```text
+2 NEW VERY_HIGH
+32 NEW HIGH
+0 UPDATED high-value
+```
+
+Applications:
+
+```text
+0
+```
+
+El refresh no modificó tracking manual.
+
+### Acceptance
+
+```text
+refresh exit code      0
+runs before/after      84 → 99
+applications           0 → 0
+latest priority        Run 99 SUCCESS
+workbook source run    99
+result                 PASS
+```
+
+---
+
+## 23. Workflow operativo actual
+
+### Refresh rutinario
+
+Para ver plan:
+
+```powershell
+python -m chamba_hunter.commands.refresh_search
+```
+
+Para ejecutar:
+
+```powershell
+python -m chamba_hunter.commands.refresh_search --apply
+```
+
+El command finaliza regenerando:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+### Review
+
+Abrir:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Orden recomendado:
+
+```text
+Focus
+→ High Value
+→ All Current
+```
+
+`Focus` es la cola de oportunidades nuevas/actualizadas de alto valor.
+
+### Registrar una aplicación real
+
+Tomar desde XLSX:
+
+```text
+Record Kind
+Record ID
+```
+
+y ejecutar:
+
+```powershell
+python -m chamba_hunter.commands.track_application `
+    --record-kind <ATS|LEAD> `
+    --record-id <ID> `
+    --status APPLIED
+```
+
+Luego regenerar el XLSX:
+
+```powershell
+python -m chamba_hunter.commands.export_shortlist
+```
+
+El nuevo status aparece en:
+
+```text
+Tracked Status
+Application Type
+Applied At
+```
+
+### Cambiar estado
+
+Ejemplo conceptual:
+
+```text
+APPLIED
+→ INTERVIEW
+→ REJECTED
+```
+
+Se actualiza el mismo row de oportunidad.
+
+No se crea una fila histórica por cada transición en V1.
+
+### Principios preservados
+
+- no auto-apply;
+- no auto-email;
+- no inferir recruiter emails;
+- no web UI;
+- DB es source of truth;
+- XLSX es read-only;
+- application tracking no altera professional matching;
+- application tracking no altera operational priority;
+- refresh no modifica applications;
+- rediscovery ATS no corre automáticamente salvo flag explícito.
+
+---
+
+## 24. Checklist antes de publicar application tracking + refresh
+
+Después de limpiar scripts temporales, el worktree esperado es:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-M  pyproject.toml
-?? src/chamba_hunter/commands/export_shortlist.py
-?? src/chamba_hunter/repositories/job_shortlist_report_repository.py
-?? src/chamba_hunter/services/job_shortlist_report_service.py
+M  src/chamba_hunter/repositories/job_shortlist_report_repository.py
+?? migrations/012_application_opportunity_identity.sql
+?? src/chamba_hunter/commands/refresh_search.py
+?? src/chamba_hunter/commands/track_application.py
+?? src/chamba_hunter/repositories/application_repository.py
+?? src/chamba_hunter/services/application_tracking_service.py
 ```
 
 No versionar:
 
 ```text
-shortlist-report-discovery.ps1
-shortlist-report-v1-validate.ps1
-shortlist-report-v1-validate-fixed.ps1
-shortlist-report-v1-validate-fixed-v2.ps1
-shortlist-report-discovery.txt
-shortlist-report-v1-validation.txt
+application-refresh-discovery.ps1
+application-refresh-v1-dry-run.ps1
+application-refresh-v1-dry-run-fixed.ps1
+application-refresh-v1-apply-and-validate.ps1
+application-refresh-v1-real-refresh.ps1
+application-refresh-discovery.txt
+application-refresh-v1-dry-run.txt
+application-refresh-v1-apply-validation.txt
+application-refresh-v1-real-refresh.txt
 ```
+
+Los `.txt` root ya están ignorados.
 
 `output/` ya está ignorado.
 
-Conservar localmente si resulta útil:
+Conservar localmente:
 
 ```text
 output/chamba-shortlist.xlsx
@@ -3774,9 +4471,7 @@ git diff --stat
 git status --short
 ```
 
-Los warnings LF→CRLF son informativos si `git diff --check` retorna exit code `0`.
-
-No hace falta volver a generar ni revalidar el workbook actual.
+No volver a ejecutar `refresh_search --apply` sólo para validar: hacerlo movería nuevamente el watermark y dejaría de ser una validación neutra.
 
 El usuario decide y ejecuta commit/push manualmente.
 
@@ -3791,23 +4486,24 @@ Base: main
 Primero:
 - verificar HEAD real y últimos commits;
 - leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si SHORTLIST_REPORT_V1 ya fue publicado;
+- confirmar si application tracking + refresh v1 ya fue publicado;
 - código/GitHub es source of truth;
-- DB local observada más reciente: Run 84 operational baseline, salvo refresh posterior;
-- preservar ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1 y OPERATIONAL_PRIORITY_V1;
-- preservar SHORTLIST_REPORT_V1 salvo defecto real;
+- DB local observada más reciente después del primer refresh end-to-end: Run 99 OPERATIONAL_PRIORITY_V1 SUCCESS;
+- migration 012 está aplicada localmente;
+- applications rows observadas: 0;
+- current shortlist: Focus 34, High Value 82, All Current 1120, History 0;
+- preservar ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1, OPERATIONAL_PRIORITY_V1 y SHORTLIST_REPORT_V1;
+- application tracking usa (record_kind, record_id) y soporta ATS + LEAD;
+- ATS conserva job_id; LEAD usa job_id NULL;
+- refresh_search compone los existing commands y es PLAN ONLY sin --apply;
+- no ejecutar refresh real sólo para comprobar código porque movería el watermark;
 - no auto-apply;
 - no auto-email;
 - no inferir emails personales;
 - no web UI;
-- next: discovery read-only de manual application tracking + end-to-end refresh workflow;
-- inspeccionar schema real de applications y cualquier repository/command existente;
-- medir qué record_kind tienen las oportunidades que probablemente se aplicarían;
-- decidir si LEAD necesita identidad generalizada para application tracking;
-- revisar command sequence real de refresh y tracing;
-- evaluar un wrapper de refresh sólo si compone commands existentes sin duplicar reglas;
-- decidir cómo Focus debe tratar oportunidades ya aplicadas;
-- no cambiar schema antes de discovery;
+- próximo trabajo debe surgir del uso operativo real, no de una generalización preventiva;
+- revisar Focus primero y registrar aplicaciones reales con track_application;
+- si aparece una necesidad nueva, hacer discovery contra código/DB actual antes de cambiar schema;
 - cuando se entregue un único .ps1, empaquetarlo en ZIP;
 - no evasión anti-bot.
 ```

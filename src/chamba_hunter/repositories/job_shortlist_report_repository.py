@@ -91,6 +91,26 @@ class JobShortlistReportRepository:
     ) -> None:
         self.database = database
 
+    def _generalized_application_identity_available(
+        self,
+        connection,
+    ) -> bool:
+        columns = {
+            str(
+                row["name"]
+            )
+            for row in connection.execute(
+                """
+                PRAGMA table_info(applications)
+                """
+            ).fetchall()
+        }
+
+        return {
+            "record_kind",
+            "record_id",
+        } <= columns
+
     def load(
         self,
         profile_name: str,
@@ -170,8 +190,59 @@ class JobShortlistReportRepository:
                     f"{priority_run_id}"
                 )
 
-            rows = connection.execute(
+            generalized_identity = (
+                self
+                ._generalized_application_identity_available(
+                    connection
+                )
+            )
+
+            if generalized_identity:
+                application_cte = """
+                    WITH ranked_applications AS (
+                        SELECT
+                            applications.*,
+                            applications.record_kind
+                                AS tracking_record_kind,
+                            applications.record_id
+                                AS tracking_record_id,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY
+                                    applications.record_kind,
+                                    applications.record_id
+                                ORDER BY
+                                    applications.updated_at DESC,
+                                    applications.id DESC
+                            ) AS tracking_rank
+                        FROM applications
+                        WHERE applications.application_type = 'JOB'
+                          AND applications.record_kind IS NOT NULL
+                          AND applications.record_id IS NOT NULL
+                    )
                 """
+            else:
+                application_cte = """
+                    WITH ranked_applications AS (
+                        SELECT
+                            applications.*,
+                            'ATS' AS tracking_record_kind,
+                            applications.job_id
+                                AS tracking_record_id,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY applications.job_id
+                                ORDER BY
+                                    applications.updated_at DESC,
+                                    applications.id DESC
+                            ) AS tracking_rank
+                        FROM applications
+                        WHERE applications.application_type = 'JOB'
+                          AND applications.job_id IS NOT NULL
+                    )
+                """
+
+            rows = connection.execute(
+                application_cte
+                + """
                 SELECT
                     priority.record_kind,
                     priority.record_id,
@@ -218,65 +289,13 @@ class JobShortlistReportRepository:
                     priority.reasons_json
                         AS operational_reasons_json,
 
-                    CASE
-                        WHEN priority.record_kind = 'ATS'
-                        THEN (
-                            SELECT applications.application_type
-                            FROM applications
-                            WHERE applications.job_id =
-                                  priority.record_id
-                            ORDER BY
-                                applications.updated_at DESC,
-                                applications.id DESC
-                            LIMIT 1
-                        )
-                        ELSE NULL
-                    END AS application_type,
-
-                    CASE
-                        WHEN priority.record_kind = 'ATS'
-                        THEN (
-                            SELECT applications.status
-                            FROM applications
-                            WHERE applications.job_id =
-                                  priority.record_id
-                            ORDER BY
-                                applications.updated_at DESC,
-                                applications.id DESC
-                            LIMIT 1
-                        )
-                        ELSE NULL
-                    END AS application_status,
-
-                    CASE
-                        WHEN priority.record_kind = 'ATS'
-                        THEN (
-                            SELECT applications.applied_at
-                            FROM applications
-                            WHERE applications.job_id =
-                                  priority.record_id
-                            ORDER BY
-                                applications.updated_at DESC,
-                                applications.id DESC
-                            LIMIT 1
-                        )
-                        ELSE NULL
-                    END AS application_applied_at,
-
-                    CASE
-                        WHEN priority.record_kind = 'ATS'
-                        THEN (
-                            SELECT applications.updated_at
-                            FROM applications
-                            WHERE applications.job_id =
-                                  priority.record_id
-                            ORDER BY
-                                applications.updated_at DESC,
-                                applications.id DESC
-                            LIMIT 1
-                        )
-                        ELSE NULL
-                    END AS application_updated_at
+                    application.application_type,
+                    application.status
+                        AS application_status,
+                    application.applied_at
+                        AS application_applied_at,
+                    application.updated_at
+                        AS application_updated_at
 
                 FROM job_operational_priorities priority
 
@@ -287,6 +306,13 @@ class JobShortlistReportRepository:
                      priority.record_id
                  AND matches.search_profile_id =
                      priority.search_profile_id
+
+                LEFT JOIN ranked_applications application
+                  ON application.tracking_rank = 1
+                 AND application.tracking_record_kind =
+                     priority.record_kind
+                 AND application.tracking_record_id =
+                     priority.record_id
 
                 WHERE priority.search_profile_id = ?
 
@@ -354,13 +380,17 @@ class JobShortlistReportRepository:
                     else None
                 ),
                 job_url=(
-                    str(row["job_url"])
+                    str(
+                        row["job_url"]
+                    )
                     if row["job_url"]
                     is not None
                     else None
                 ),
                 apply_url=(
-                    str(row["apply_url"])
+                    str(
+                        row["apply_url"]
+                    )
                     if row["apply_url"]
                     is not None
                     else None
@@ -496,7 +526,9 @@ class JobShortlistReportRepository:
                 ),
                 application_status=(
                     str(
-                        row["application_status"]
+                        row[
+                            "application_status"
+                        ]
                     )
                     if row[
                         "application_status"
