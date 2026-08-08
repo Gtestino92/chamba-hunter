@@ -9,8 +9,8 @@
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-d7b6552f9a4ad0b431eec3246889af29f040a4fe
-update context
+ad9f92222630893cd97e7a75abb48ec197670f79
+seniority
 ```
 
 Ese `main` ya contiene:
@@ -20,23 +20,23 @@ Ese `main` ya contiene:
 - Argentina eligibility v1;
 - occupation / IT / backend classification v1;
 - skills classification v1;
-- migraciones `004`, `005`, `006` y `007`;
-- la consideración futura de reusable `search_profiles`;
+- seniority classification v1;
+- migraciones `004`, `005`, `006`, `007` y `008`;
 - limpieza de artefactos locales históricos `.zip` / `.txt`.
 
-El trabajo de **seniority classification v1** fue implementado, validado y aplicado sobre la DB local después de ese commit y todavía está pendiente de publicación en GitHub.
+El trabajo de **professional matching v1** fue implementado, calibrado, aplicado y validado sobre la DB local después de ese commit y todavía está pendiente de publicación en GitHub.
 
-Estado local esperado antes de publicar seniority:
+Estado local esperado antes de publicar matching:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-?? migrations/008_job_seniority_classifications.sql
-?? src/chamba_hunter/commands/classify_job_seniority.py
-?? src/chamba_hunter/repositories/job_seniority_repository.py
-?? src/chamba_hunter/services/job_seniority_classification_service.py
+?? migrations/009_job_professional_matches.sql
+?? src/chamba_hunter/commands/match_jobs.py
+?? src/chamba_hunter/repositories/job_matching_repository.py
+?? src/chamba_hunter/services/job_matching_service.py
 ```
 
-La DB SQLite local contiene los resultados persistidos de:
+La DB SQLite local contiene los últimos resultados persistidos de evaluación:
 
 ```text
 Run 81
@@ -44,6 +44,10 @@ SKILLS_V1
 
 Run 82
 SENIORITY_V1
+
+Run 83
+MATCHING_V1
+BACKEND_SOFTWARE_V1
 ```
 
 GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
@@ -146,9 +150,9 @@ skills
     ↓
 seniority
     ↓
-professional matching                      ← PRÓXIMO VERTICAL
+professional matching
     ↓
-operational / application priority
+operational / application priority          ← PRÓXIMO VERTICAL
     ↓
 shortlist / Excel report / manual action
 ```
@@ -179,13 +183,122 @@ or explicit general application URL
 manual outreach candidate
 ```
 
+
 Nunca inferir ni adivinar emails personales de recruiters.
+
+### Future architecture consideration — reusable search profiles
+
+La prioridad sigue siendo la búsqueda de **Backend Software Engineer**.
+
+No generalizar anticipadamente todo el proyecto ni construir un framework abstracto para múltiples profesiones. Tampoco refactorizar código estable sólo por una posibilidad futura.
+
+Sin embargo, preservar esta separación:
+
+```text
+job acquisition / normalization / understanding
+```
+
+de:
+
+```text
+preferences of one specific professional search
+```
+
+Arquitectura conceptual:
+
+```text
+SHARED JOB SEARCH ENGINE
+
+acquisition
+ATS discovery
+ATS ingestion
+normalization
+canonicalization
+freshness
+application channels
+tracing
+        ↓
+SEARCH-SPECIFIC EVALUATION
+
+geographic eligibility
+occupation
+skills / domains
+credentials when applicable
+seniority
+matching
+ranking
+```
+
+La primera parte debe ser ampliamente reutilizable sobre un mismo corpus.
+
+La segunda puede depender de un:
+
+```text
+search_profile
+```
+
+El perfil implementado actualmente es:
+
+```text
+BACKEND_SOFTWARE_V1
+```
+
+y expresa preferencias de búsqueda sobre:
+
+```text
+occupation/backend relevance
+skills y transferibilidad
+seniority
+leadership
+```
+
+El principio fundamental es:
+
+```text
+job understanding
+!=
+search-profile matching
+```
+
+Por ejemplo:
+
+```text
+job skills:
+- Java
+- Spring Boot
+- PostgreSQL
+```
+
+significa que esas skills fueron observadas en el posting.
+
+No significa por sí mismo:
+
+```text
+this is a good match for the current search profile
+```
+
+La comparación contra preferencias, experiencia y transferibilidad pertenece a `MATCHING_V1`.
+
+La implementación actual ya prueba el modelo:
+
+```text
+one shared job corpus
+        ↓
+search_profiles
+        ↓
+job_professional_matches
+```
+
+sin modificar geography, occupation, skills ni seniority para adaptarlos al usuario.
+
+Un futuro segundo search profile puede reutilizar acquisition, ATS ingestion, normalization, canonicalization, freshness y application channels, pero no debe motivar una abstracción preventiva ahora.
 
 ---
 
-## 4. Perfil profesional objetivo futuro
+## 4. Search profile backend actual
 
-Este perfil se usa más adelante para matching, no para adquisición ni para decidir si una skill existe en una vacante:
+
+Este perfil se usa en `MATCHING_V1`, no para adquisición ni para decidir si una skill existe en una vacante:
 
 - Backend Software Engineer.
 - Java.
@@ -240,12 +353,13 @@ Migraciones confirmadas en GitHub `main`:
 005_job_eligibility_classifications.sql
 006_job_occupation_classifications.sql
 007_job_skill_classifications.sql
+008_job_seniority_classifications.sql
 ```
 
 Migración local implementada y aplicada, pendiente de publicación:
 
 ```text
-008_job_seniority_classifications.sql
+009_job_professional_matches.sql
 ```
 
 Tablas/vistas relevantes:
@@ -270,6 +384,8 @@ job_ats_hints
 job_eligibility_classifications
 job_occupation_classifications
 job_skill_classifications
+job_seniority_classifications
+job_professional_matches
 view job_candidates
 ```
 
@@ -1249,15 +1365,18 @@ de:
 operational_application_priority
 ```
 
-Professional match podrá considerar:
+`MATCHING_V1` ya considera:
 
 ```text
 occupation/backend
 skills
 skill transferability
 seniority
-otras señales profesionales
+leadership
+role/title mismatch signals
 ```
+
+y lo persiste separado de freshness y application priority.
 
 Operational priority podrá considerar:
 
@@ -1322,9 +1441,7 @@ Total aplicado:
 
 Seniority no usa el target profesional del usuario para decidir la clase del job.
 
-### Archivos locales implementados y aplicados
-
-Pendientes de publicación al momento de este handoff:
+### Archivos publicados en GitHub
 
 ```text
 migrations/008_job_seniority_classifications.sql
@@ -1629,33 +1746,13 @@ o posterior, con decisión explícita de recalcular.
 
 ---
 
-## 18. Próximo vertical: professional matching
-
-### Estado
-
-NO implementado todavía.
-
-Pipeline inmediato:
-
-```text
-geography
-    ↓
-occupation/backend
-    ↓
-skills
-    ↓
-seniority
-    ↓
-professional matching      ← NEXT
-    ↓
-operational/application priority
-```
+## 18. Professional matching v1 — TERMINADO
 
 ### Objetivo
 
-Evaluar qué tan bien cada job representa una oportunidad profesional para el search profile backend actual, sin destruir ni reinterpretar las clasificaciones objetivas anteriores.
+Evaluar qué tan bien cada job representa una oportunidad profesional para el search profile backend actual sin destruir ni reinterpretar las clasificaciones objetivas anteriores.
 
-Matching es la primera capa que debe comparar explícitamente:
+Matching es la primera capa que compara explícitamente:
 
 ```text
 job understanding
@@ -1667,116 +1764,869 @@ contra:
 search profile
 ```
 
-Para el perfil backend actual podrá considerar, entre otras señales:
+Scope:
 
 ```text
-occupation/backend relevance
-skills
-skill transferability
-seniority
-experience-year evidence
-possibly role/domain evidence
+active job_candidates
+Argentina eligibility = ELIGIBLE + UNKNOWN
 ```
 
-### Principios de diseño
-
-Antes de fijar score/schema:
-
-1. inspeccionar la distribución real combinada de occupation + backend + skills + seniority;
-2. medir cuántos candidatos sobreviven bajo distintas políticas, sin hard cuts prematuros;
-3. diseñar explícitamente la representación del `BACKEND_SOFTWARE_PROFILE`;
-4. distinguir señales positivas, negativas e inciertas;
-5. preservar `UNKNOWN`;
-6. diseñar skill relations curadas;
-7. separar score profesional de prioridad operacional.
-
-No usar una skill requerida ausente como rechazo automático.
-
-Ejemplo:
+Total aplicado:
 
 ```text
-job requires Azure
-profile has strong AWS
-
-NO:
-→ automatic rejection
-
-SÍ:
-→ exact match absent
-→ cloud peer/transfer signal present
-→ combine with other evidence
+993 candidates
+892 ATS
+101 LEAD
 ```
 
-Skill relations futuras deberán distinguir al menos:
+### Search profile
+
+Se reutiliza la tabla ya existente:
+
+```text
+search_profiles
+```
+
+Profile:
+
+```text
+BACKEND_SOFTWARE_V1
+```
+
+Profile id observado:
+
+```text
+1
+```
+
+Rule version:
+
+```text
+MATCHING_V1
+```
+
+El profile se persiste con `rules_json` auditable.
+
+### Persistencia de matches
+
+No se reutiliza la tabla legacy:
+
+```text
+job_matches
+```
+
+porque está keyed sólo por:
+
+```text
+jobs.id
+```
+
+y no puede representar los `LEAD` no canonicalizados que siguen formando parte de `job_candidates`.
+
+La tabla nueva es:
+
+```text
+job_professional_matches
+```
+
+Identidad:
+
+```text
+UNIQUE(
+    record_kind,
+    record_id,
+    search_profile_id
+)
+```
+
+Soporta:
+
+```text
+ATS
+LEAD
+```
+
+La tabla legacy `job_matches` quedó intacta y observada con:
+
+```text
+0 rows
+```
+
+### Archivos locales implementados y aplicados
+
+Pendientes de publicación al momento de este handoff:
+
+```text
+migrations/009_job_professional_matches.sql
+src/chamba_hunter/repositories/job_matching_repository.py
+src/chamba_hunter/services/job_matching_service.py
+src/chamba_hunter/commands/match_jobs.py
+```
+
+### Score
+
+Score profesional máximo:
+
+```text
+100
+```
+
+Componentes:
+
+```text
+role / backend fit      max 45
+skills / transfer      max 30
+seniority fit           max 15
+leadership fit          max 10
+technology penalty      min -5
+```
+
+Freshness, `first_seen_at`, `published_at`, URLs y application channel **no participan** del professional match score.
+
+### Match levels
+
+```text
+VERY_HIGH   >= 80
+HIGH        >= 65
+MEDIUM      >= 45
+LOW          < 45
+```
+
+No son hard eligibility states.
+
+Un `MEDIUM` o incluso `LOW` permanece en DB y puede revisarse.
+
+### Role / backend fit
+
+Base principal:
+
+```text
+SOFTWARE_ENGINEERING + BACKEND      45
+SOFTWARE_ENGINEERING + FULL_STACK   38
+SOFTWARE_ENGINEERING + UNKNOWN      25
+SOFTWARE_ENGINEERING + NON_BACKEND   8
+
+IT_TECHNICAL                         6
+TECH_ADJACENT                        4
+occupation UNKNOWN                   3
+NON_TECHNICAL                        0
+```
+
+Para:
+
+```text
+SOFTWARE_ENGINEERING
+backend_relevance = UNKNOWN
+```
+
+existe un boost acotado:
+
+```text
+25 → 35
+```
+
+sólo cuando el posting tiene evidencia backend fuerte y específica del profile.
+
+Strong JVM:
+
+```text
+Java/Kotlin
++
+Spring Boot/Spring/JPA/Hibernate/Quarkus/Micronaut/Ktor
+```
+
+Strong Node:
+
+```text
+Node.js/TypeScript
++
+NestJS
+```
+
+En la corrida final este boost se activó para **1 solo candidato**.
+
+Ejemplo observado:
+
+```text
+Desarrollador Java Ssr /Sr
+Java + Spring
+backend_relevance UNKNOWN
+→ role score 35
+→ final score 65 HIGH
+```
+
+Esto pertenece al matcher profile-specific y no modifica `OCCUPATION_V1`.
+
+### Skills y transferibilidad
+
+Missing skill evidence no es rechazo ni penalización automática.
+
+Las señales están agrupadas para evitar que muchas menciones del mismo ecosistema inflen el score.
+
+Relaciones:
 
 ```text
 EXACT
-PEER / PARTIALLY SUBSTITUTABLE
-RELATED ECOSYSTEM
+PEER
+RELATED
+SECONDARY
 ```
 
-Ejemplos conceptuales:
+Ejemplos:
 
 ```text
-AWS ↔ Azure ↔ GCP
-Java ↔ Kotlin
-PostgreSQL ↔ MySQL / SQL Server
-Kafka ↔ RabbitMQ
-Spring Boot ↔ Quarkus / Micronaut
-Docker → Kubernetes
-Java → Spring ecosystem
+AWS
+→ EXACT
+
+Azure / GCP
+→ PEER de cloud
+
+Spring Boot
+→ EXACT
+
+Quarkus / Micronaut
+→ PEER de JVM backend framework
+
+PostgreSQL
+→ EXACT
+
+MySQL / SQL Server / MariaDB / Percona
+→ PEER de RDBMS
+
+Terraform / Helm / CloudFormation / Pulumi
+→ RELATED de platform/container ecosystem
+
+Node.js / NestJS / TypeScript
+→ SECONDARY para el profile actual
 ```
 
-No asumir que pertenecer a una familia implica sustituibilidad completa.
+No asumir equivalencia exacta por pertenecer a la misma familia.
 
-### Seniority en matching
+### Stacks backend alternativos
 
-El target profesional actual es aproximadamente:
+Familias detectadas:
+
+```text
+PYTHON
+GO
+DOTNET
+ELIXIR
+RUBY
+PHP
+RUST
+SCALA
+```
+
+Una tecnología alternativa no causa hard rejection.
+
+Cuando un stack alternativo está explícito en el título y no hay core compatible explícito en ese mismo título:
+
+```text
+technology penalty = -5
+score ceiling = 64
+```
+
+Por lo tanto permanece visible, pero no llega a `HIGH`.
+
+Ejemplos calibrados:
+
+```text
+Backend Developer .NET SSR
+→ MEDIUM
+
+Senior Go Developer
+→ MEDIUM
+
+Senior Backend Engineer (Python)
+→ MEDIUM
+
+Developer PHP SSR
+→ MEDIUM
+```
+
+Un título mixto compatible conserva posibilidad de match fuerte:
+
+```text
+Desarrollador Back-end Golang+Java
+→ VERY_HIGH
+```
+
+### Seniority fit
+
+Target:
 
 ```text
 semisenior / mid-level
 ```
 
-pero:
+Base:
 
-- `MID` puede ser señal positiva fuerte;
-- `UNKNOWN` no debe ser rechazo;
-- `SENIOR` puede seguir siendo oportunidad viable según el resto de evidencia;
-- `JUNIOR`, `STAFF`, `PRINCIPAL`, `LEAD` requieren tratamiento ponderado, no necesariamente hard cuts;
-- leadership/management debe mantenerse separado de IC seniority;
-- años explícitos pueden complementar, no reemplazar, la clase.
+```text
+MID        15
+UNKNOWN    12
+SENIOR     10
+JUNIOR      8
+ENTRY       5
+LEAD        5
+STAFF       4
+PRINCIPAL   2
+INTERN      1
+```
 
-No decidir todavía pesos finales sin discovery real.
+`UNKNOWN` sigue siendo viable.
+
+Score ceilings:
+
+```text
+JUNIOR      64
+STAFF       64
+LEAD        64
+PRINCIPAL   60
+ENTRY       55
+INTERN      45
+```
+
+De esa manera siguen visibles, pero no compiten como `HIGH` con el target mid-level.
+
+### Architect guard
+
+`SENIORITY_V1` no inventa una clase universal para `Architect`.
+
+En matching, los títulos:
+
+```text
+Architect
+Arquitecto / Arquitecta
+```
+
+tienen:
+
+```text
+score ceiling = 64
+```
+
+porque suelen implicar una distancia material respecto del target actual aunque no exista una clase IC universal segura.
+
+Ejemplos observados después de calibración:
+
+```text
+BackEnd Architect
+→ MEDIUM 64
+
+Software Architect
+→ MEDIUM <= 64
+```
+
+### Leadership fit
+
+Base:
+
+```text
+NONE       10
+UNKNOWN     8
+MANAGER     2
+DIRECTOR    1
+HEAD        0
+VP          0
+C_LEVEL     0
+```
+
+Ceilings:
+
+```text
+MANAGER    60
+DIRECTOR   55
+HEAD       50
+VP         45
+C_LEVEL    45
+```
+
+Leadership no es lo mismo que IC seniority.
+
+### Title-role mismatch guard
+
+Un posting puede haber sido clasificado upstream como software/backend pero tener un título claramente incompatible con la búsqueda de ingeniería.
+
+`MATCHING_V1` agrega un guard conservador para títulos educativos explícitos:
+
+```text
+Tutor
+Instructor
+Teacher
+Professor
+Docente
+Trainer
+```
+
+Ceiling:
+
+```text
+40
+```
+
+Esto corrigió el caso observado:
+
+```text
+Tutor de trayecto educativo:
+Desarrollo Backend Empresarial con Java y Spring Boot
+```
+
+que antes de calibración podía obtener un score artificialmente alto por stack.
+
+No se modifica `OCCUPATION_V1`; el matcher contiene el falso positivo para este search profile.
+
+### Calibración R1-R3
+
+R1 detectó:
+
+- stacks alternativos demasiado altos;
+- Junior capaz de llegar a HIGH;
+- rol educativo con Java/Spring capaz de llegar a VERY_HIGH.
+
+R2 corrigió:
+
+- stack alternativo explícito en title;
+- Junior ceiling;
+- title-role mismatch educativo.
+
+R3 agregó:
+
+- Architect ceiling;
+- boost muy acotado para backend `UNKNOWN` con strong backend-core evidence.
+
+No hubo R4.
+
+R3 se congeló como:
+
+```text
+MATCHING_V1
+```
+
+### Run 83 — apply confirmado
+
+```text
+Rule version:  MATCHING_V1
+Search profile: BACKEND_SOFTWARE_V1
+Mode:          APPLY
+
+Candidates:    993
+Created:       993
+Updated:         0
+Deleted:         0
+
+Run id:         83
+Profile id:      1
+```
+
+Record kinds:
+
+```text
+ATS    892
+LEAD   101
+```
+
+Match levels:
+
+```text
+VERY_HIGH    12    1.2%
+HIGH         36    3.6%
+MEDIUM      120   12.1%
+LOW         825   83.1%
+```
+
+Por occupation/backend:
+
+```text
+IT_TECHNICAL/NOT_APPLICABLE
+  LOW 137
+
+NON_TECHNICAL/NOT_APPLICABLE
+  LOW 180
+
+SOFTWARE_ENGINEERING/BACKEND
+  VERY_HIGH 12
+  HIGH      16
+  MEDIUM    46
+  LOW        1
+
+SOFTWARE_ENGINEERING/FULL_STACK
+  HIGH      19
+  MEDIUM    38
+  LOW        1
+
+SOFTWARE_ENGINEERING/NON_BACKEND
+  LOW 49
+
+SOFTWARE_ENGINEERING/UNKNOWN
+  HIGH    1
+  MEDIUM 36
+  LOW    27
+
+TECH_ADJACENT/NOT_APPLICABLE
+  LOW 55
+
+UNKNOWN/NOT_APPLICABLE
+  LOW 375
+```
+
+Diagnostics finales:
+
+```text
+Technology penalties      94
+Score ceilings           878
+HIGH with 0 skill points   3
+Title role mismatches       6
+Title alt-stack caps       48
+Title seniority risks       4
+Strong backend boosts       1
+```
+
+Los 3 `HIGH` con cero skill points son deliberadamente válidos:
+
+```text
+Software Engineer Backend - (Semi Senior)   70
+DESARROLLADOR BackEnd                       67
+Software Engineer Backend - (Senior)        65
+```
+
+Son roles backend explícitos. La ausencia de una lista tecnológica detallada no se interpreta como falta de capacidad del candidato.
+
+### Ejemplos del top final
+
+```text
+88.9  VERY_HIGH
+Improving
+Semi Senior Back-end Engineer: Java
+
+85.0  VERY_HIGH
+Bitso
+Software Engineer - Latam or Europe
+
+83.8  VERY_HIGH
+Credencial Payments
+Senior Backend Developer
+
+83.5  VERY_HIGH
+ITSM Consulting
+Desarrollador Backend - SSR
+
+83.5  VERY_HIGH
+PlainTech Solutions
+Back-end Developer Kotlin/Java
+```
+
+El top final está dominado por backend/JVM y evidencia tecnológica relevante, no por conteos indiscriminados.
+
+### DB invariants después de apply
+
+```text
+Profile active:      1
+Rows:              993
+Current scope:     993
+Missing:             0
+Stale:               0
+Duplicate keys:      0
+Wrong version:       0
+Invalid scores:      0
+Legacy job_matches:  0
+```
+
+Rule versions:
+
+```text
+MATCHING_V1   993
+```
+
+Tracing:
+
+```text
+Run id:       83
+Command:      match_jobs
+Status:       SUCCESS
+Step:         professional_matching
+Step status:  SUCCESS
+Items:        993 / 993 / 0 failed / 0 skipped
+```
+
+Validación final:
+
+```text
+PASS
+```
+
+### Refresh semantics
+
+Futuros `--apply` deben mantener current state por profile:
+
+```text
+current geographic scope
+    ↓
+occupation + skills + seniority
+    ↓
+search profile evaluation
+    ↓
+upsert current matches
+    ↓
+delete stale matches for that profile
+```
+
+No copiar freshness ni application priority a `job_professional_matches`.
+
+### Regla de versionado
+
+`MATCHING_V1` ya fue persistida.
+
+No modificar materialmente score semantics, transfer rules, ceilings o match-level thresholds manteniendo el mismo `rule_version`.
+
+Cambios materiales futuros deben usar:
+
+```text
+MATCHING_V2
+```
+
+o posterior, con decisión explícita de recalcular.
 
 ---
 
-## 19. Restricciones para professional matching
+## 19. Próximo vertical: operational / application priority
 
-- No ampliar acquisition sin necesidad concreta.
-- No hacer más Hiring Room discovery manual por ahora.
-- No implementar Bumeran/ZonaJobs con evasión anti-bot.
-- No eliminar geographic `INELIGIBLE`.
-- No asumir geography `UNKNOWN` como `ELIGIBLE`.
-- No eliminar occupation `UNKNOWN`.
-- No tratar `backend_relevance=UNKNOWN` como rechazo.
-- No modificar materialmente `OCCUPATION_V1`; usar `OCCUPATION_V2`.
-- No modificar materialmente `SKILLS_V1`; usar `SKILLS_V2`.
-- No modificar materialmente `SENIORITY_V1`; usar `SENIORITY_V2`.
-- No convertir una skill ausente en hard rejection.
-- No convertir `REQUIRED` tecnológico en hard rejection automático.
-- No asumir equivalencia exacta entre tecnologías reemplazables.
-- No convertir seniority `UNKNOWN` en rechazo.
-- No convertir años de experiencia en una escala rígida automática.
-- No mezclar professional match con operational priority.
-- No incorporar freshness en el professional match score salvo decisión explícita y justificada.
-- No cambiar ATS snapshot semantics.
-- No tocar auto-apply.
-- No agregar UI.
-- No sobrearquitecturar reusable search profiles antes de necesidad real.
+### Estado
+
+NO implementado todavía.
+
+Este es el **último vertical lógico** antes de generar el shortlist/reporte accionable.
+
+Pipeline inmediato:
+
+```text
+professional matching
+    ↓
+operational / application priority      ← NEXT
+    ↓
+shortlist / Excel report
+    ↓
+manual application / outreach
+```
+
+### Objetivo
+
+Ordenar las oportunidades ya evaluadas profesionalmente según **qué conviene revisar/aplicar primero**, sin modificar el professional match.
+
+Debe responder preguntas como:
+
+```text
+¿es nueva?
+¿cuándo la vimos por primera vez?
+¿sigue activa?
+¿tiene apply URL directo?
+¿qué tan confiable es published_at?
+¿es HIGH/VERY_HIGH profesionalmente?
+¿ya era conocida?
+¿cambió realmente?
+```
+
+### Señales ya disponibles
+
+Por candidate:
+
+```text
+first_seen_at
+last_seen_at
+published_at
+is_active
+job_url
+apply_url
+```
+
+En el scope observado:
+
+```text
+first_seen_at   993 / 993  100.0%
+last_seen_at    993 / 993  100.0%
+job_url         993 / 993  100.0%
+apply_url       606 / 993   61.0%
+published_at     46 / 993    4.6%
+```
+
+Por lo tanto:
+
+```text
+first_seen_at
+```
+
+es la señal más sólida para NEW.
+
+`published_at` es complementaria y sólo debe pesar cuando exista y sea confiable.
+
+### Estados operativos mínimos
+
+Diseñar al menos:
+
+```text
+NEW
+KNOWN
+UPDATED
+CLOSED / INACTIVE
+```
+
+pero no inventar `UPDATED` desde `last_seen_at`.
+
+El sync actual cuenta muchos records como `updated` aunque sólo hayan sido vistos nuevamente.
+
+Por eso:
+
+```text
+last_seen_at
+!=
+last_changed_at
+```
+
+### NEW
+
+La definición de NEW debe basarse en estado del sistema, no sólo en antigüedad publicada.
+
+Punto de partida:
+
+```text
+first_seen_at
+```
+
+El diseño debe resolver explícitamente la ventana/semántica de:
+
+```text
+NEW
+```
+
+para refreshes manuales sucesivos.
+
+No fijar una ventana arbitraria sin inspeccionar el flujo real de refresh.
+
+### UPDATED
+
+Actualmente no existe evidencia suficiente para afirmar cambios reales de contenido.
+
+Antes de etiquetar `UPDATED` de forma fuerte, evaluar si hace falta introducir:
+
+```text
+content_hash
+last_changed_at
+change history / event
+```
+
+Esto es un problema de freshness, no de matching.
+
+### Application channel quality
+
+Orden conceptual actual:
+
+```text
+1. apply_url directo
+2. job_url / careers page
+3. general_application_url
+4. public recruiting/careers email
+```
+
+Para los 993 candidatos actuales:
+
+```text
+job_url    993
+apply_url  606
+```
+
+La prioridad puede usar calidad del canal, pero no debe convertir ausencia de `apply_url` en descarte.
+
+### Professional score como input
+
+Operational priority puede usar:
+
+```text
+professional score
+match_level
+```
+
+como una señal importante, pero no debe recalcular el professional fit.
+
+Ejemplo:
+
+```text
+match 88 + NEW + direct apply
+```
+
+puede ordenarse antes que:
+
+```text
+match 92 + KNOWN + older discovery
+```
+
+sin cambiar ninguno de los dos match scores.
+
+### Salida deseada
+
+El end game debe poder mostrar rápidamente:
+
+```text
+NEW + VERY_HIGH
+NEW + HIGH
+KNOWN + VERY_HIGH
+KNOWN + HIGH
+```
+
+con:
+
+```text
+company
+title
+match score
+match reasons
+first_seen_at
+published_at when available
+application channel
+job/apply URL
+```
+
+y después producir el shortlist/reporte.
+
+### Discovery antes de implementar
+
+Antes de fijar score/schema de operational priority:
+
+1. inspeccionar distribución real de `first_seen_at` en los 993;
+2. distinguir qué timestamps vienen de ATS vs broad leads;
+3. inspeccionar `published_at` por provider;
+4. medir direct `apply_url` por match level;
+5. revisar cómo se ejecutaría un refresh manual completo hoy;
+6. decidir si `NEW` necesita estado persistido entre refreshes o puede derivarse de una referencia de run;
+7. estudiar si `UPDATED` requiere `content_hash` / `last_changed_at`;
+8. decidir si operational priority necesita tabla persistida o puede ser una proyección/reporting layer;
+9. preservar CLOSED/INACTIVE sin mezclarlos con match score.
+
+No implementar todavía antes de ese discovery.
 
 ---
 
-## 20. Runs y estados actuales
+## 20. Restricciones para operational priority
+
+- No modificar materialmente `ARGENTINA_V1`; usar versión nueva si hiciera falta.
+- No modificar materialmente `OCCUPATION_V1`.
+- No modificar materialmente `SKILLS_V1`.
+- No modificar materialmente `SENIORITY_V1`.
+- No modificar materialmente `MATCHING_V1`; usar `MATCHING_V2`.
+- No introducir freshness dentro de `job_professional_matches`.
+- No usar `last_seen_at` como prueba de cambio.
+- No llamar `UPDATED` a todo registro que el ATS sync reporte como updated.
+- No depender de `published_at` porque su cobertura actual es baja.
+- No convertir ausencia de direct `apply_url` en rechazo.
+- No borrar CLOSED/INACTIVE del corpus histórico.
+- No mezclar operational priority con professional score semantics.
+- No agregar auto-apply.
+- No agregar UI/web API todavía.
+- No hacer scraping evasivo para obtener mejores timestamps o apply URLs.
+- No ampliar acquisition como parte de este vertical salvo defecto concreto que bloquee el objetivo.
+- No sobrearquitecturar múltiples search profiles durante este vertical.
+
+---
+
+## 21. Runs y estados actuales
 
 Últimos runs relevantes:
 
@@ -1794,6 +2644,7 @@ No decidir todavía pesos finales sin discovery real.
 80 occupation / IT / backend classification apply
 81 skills classification apply
 82 seniority classification apply
+83 professional matching apply
 ```
 
 Estados actuales:
@@ -1842,37 +2693,48 @@ SENIORITY_V1
   stale               0
   duplicate keys      0
   wrong rule version  0
+
+MATCHING_V1 / BACKEND_SOFTWARE_V1
+  scope               993
+  ATS                 892
+  LEAD                101
+  very high            12
+  high                 36
+  medium              120
+  low                 825
+  missing               0
+  stale                 0
+  duplicate keys        0
+  wrong rule version    0
+  invalid scores        0
 ```
 
-Run 82 es el último estado persistido de clasificación confirmado.
+Run 83 es el último estado persistido confirmado.
 
 ---
 
-## 21. Checklist antes de publicar seniority
+## 22. Checklist antes de publicar matching
 
-El worktree debería contener:
+El worktree debería contener exactamente:
 
 ```text
-migrations/008_job_seniority_classifications.sql
-
-src/chamba_hunter/repositories/job_seniority_repository.py
-src/chamba_hunter/services/job_seniority_classification_service.py
-src/chamba_hunter/commands/classify_job_seniority.py
-
-docs/PROJECT_CONTEXT.md
+M  docs/PROJECT_CONTEXT.md
+?? migrations/009_job_professional_matches.sql
+?? src/chamba_hunter/commands/match_jobs.py
+?? src/chamba_hunter/repositories/job_matching_repository.py
+?? src/chamba_hunter/services/job_matching_service.py
 ```
 
 No versionar diagnósticos temporales:
 
 ```text
-seniority-v1-dry-run.txt
-seniority-v1-r2-dry-run.txt
-seniority-v1-r3-dry-run.txt
-seniority-v1-description-audit.txt
-seniority-v1-apply.txt
+matching-v1-discovery.*
+matching-v1-dry-run.*
+matching-v1-r2-dry-run.*
+matching-v1-r3-dry-run.*
+matching-v1-apply-validation.*
+matching-v1-post-apply-validation.*
 ```
-
-Root `.txt` ya está ignorado por `.gitignore`.
 
 Antes de commit/push:
 
@@ -1880,28 +2742,30 @@ Antes de commit/push:
 python -m compileall -q src
 
 git add -N -- `
-    "migrations/008_job_seniority_classifications.sql" `
-    "src/chamba_hunter/commands/classify_job_seniority.py" `
-    "src/chamba_hunter/repositories/job_seniority_repository.py" `
-    "src/chamba_hunter/services/job_seniority_classification_service.py"
+    "migrations/009_job_professional_matches.sql" `
+    "src/chamba_hunter/commands/match_jobs.py" `
+    "src/chamba_hunter/repositories/job_matching_repository.py" `
+    "src/chamba_hunter/services/job_matching_service.py"
 
 git diff --check
 
 git reset -- `
-    "migrations/008_job_seniority_classifications.sql" `
-    "src/chamba_hunter/commands/classify_job_seniority.py" `
-    "src/chamba_hunter/repositories/job_seniority_repository.py" `
-    "src/chamba_hunter/services/job_seniority_classification_service.py"
+    "migrations/009_job_professional_matches.sql" `
+    "src/chamba_hunter/commands/match_jobs.py" `
+    "src/chamba_hunter/repositories/job_matching_repository.py" `
+    "src/chamba_hunter/services/job_matching_service.py"
 
 git diff --stat
 git status --short
 ```
 
+Los warnings LF→CRLF de Git en Windows son informativos. Evaluar el exit code de Git, no el hecho de que PowerShell represente stderr como `NativeCommandError`.
+
 El usuario decide y ejecuta commit/push manualmente.
 
 ---
 
-## 22. Prompt operativo para nueva conversación
+## 23. Prompt operativo para nueva conversación
 
 ```text
 Repositorio: Gtestino92/chamba-hunter
@@ -1910,18 +2774,24 @@ Base: main
 Primero:
 - verificar HEAD y últimos commits reales en GitHub;
 - leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si migration 008 y seniority repository/service/command ya están publicados;
+- confirmar si migration 009 y matching repository/service/command ya están publicados;
 - distinguir GitHub code vs DB local observed state;
 - no asumir que conteos históricos siguen vigentes;
-- inspeccionar código real de geography, occupation, skills y seniority;
+- inspeccionar código real de ingestion/freshness, canonicalization, geography, occupation, skills, seniority y matching;
 - no modificar código todavía;
-- preparar discovery del siguiente vertical: professional matching;
-- preservar geography UNKNOWN, occupation UNKNOWN, backend_relevance UNKNOWN y seniority UNKNOWN;
-- no usar skills faltantes ni tecnologías required como hard cuts;
-- diseñar skill transferability de forma curada;
-- tratar años de experiencia como evidencia, no escala universal;
-- usar el perfil backend actual sólo en matching;
-- no mezclar professional match con freshness/operational priority;
-- preservar first_seen_at / last_seen_at / published_at / active state / URLs;
-- mantener la consideración futura de reusable search_profiles sin sobrearquitectura preventiva.
+- preparar discovery del último vertical: operational/application priority;
+- preservar MATCHING_V1 como professional fit independiente;
+- no incorporar first_seen_at, published_at, application channel ni freshness dentro de MATCHING_V1;
+- inspeccionar distribución real de first_seen_at;
+- inspeccionar published_at por provider;
+- inspeccionar apply_url por match level;
+- diseñar NEW/KNOWN/CLOSED de forma explícita;
+- no usar last_seen_at como prueba de UPDATED;
+- evaluar si UPDATED necesita content_hash / last_changed_at;
+- decidir si priority se persiste o se deriva por run/report;
+- mantener application order: direct apply_url, job_url/careers, general_application_url, public recruiting/careers email;
+- no auto-apply;
+- no UI;
+- no evasión anti-bot;
+- mantener reusable search_profiles como principio, sin sobrearquitectura preventiva.
 ```
