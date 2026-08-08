@@ -9,8 +9,8 @@
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-fab7c1cac64068562209c415eb26a86723f66806
-matching
+5f723427201e283c928afb1f23037df30091187c
+freshness and priority
 ```
 
 Ese `main` ya contiene:
@@ -22,44 +22,41 @@ Ese `main` ya contiene:
 - skills classification v1;
 - seniority classification v1;
 - professional matching v1;
-- migraciones `004` a `009`;
+- content freshness v1;
+- operational/application priority v1;
+- migraciones `004` a `011`;
 - `BACKEND_SOFTWARE_V1`;
-- `MATCHING_V1`.
+- `MATCHING_V1`;
+- `JOB_CONTENT_V1`;
+- `OPERATIONAL_PRIORITY_V1`.
 
-El trabajo de **content freshness + operational/application priority v1** fue implementado, validado, aplicado sobre la DB local y todavía está pendiente de publicación en GitHub.
+El trabajo de **shortlist/report v1** fue implementado y validado localmente después de ese commit y todavía está pendiente de publicación en GitHub.
 
-Estado local esperado antes de publicar este slice:
+Estado local esperado antes de publicar este slice, después de limpiar scripts temporales:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-M  src/chamba_hunter/repositories/job_lead_repository.py
-M  src/chamba_hunter/repositories/job_repository.py
-?? migrations/010_job_content_freshness.sql
-?? migrations/011_job_operational_priorities.sql
-?? src/chamba_hunter/commands/prioritize_jobs.py
-?? src/chamba_hunter/domain/job_content.py
-?? src/chamba_hunter/repositories/job_freshness_repository.py
-?? src/chamba_hunter/repositories/job_operational_priority_repository.py
-?? src/chamba_hunter/services/job_operational_priority_service.py
+M  pyproject.toml
+?? src/chamba_hunter/commands/export_shortlist.py
+?? src/chamba_hunter/repositories/job_shortlist_report_repository.py
+?? src/chamba_hunter/services/job_shortlist_report_service.py
 ```
 
-La DB SQLite local contiene los últimos resultados persistidos de evaluación:
+Output local generado y deliberadamente ignorado por Git:
 
 ```text
-Run 81
-SKILLS_V1
+output/chamba-shortlist.xlsx
+```
 
-Run 82
-SENIORITY_V1
+La DB SQLite local sigue teniendo como último run persistido:
 
-Run 83
-MATCHING_V1
-BACKEND_SOFTWARE_V1
-
+```text
 Run 84
 OPERATIONAL_PRIORITY_V1
 baseline
 ```
+
+La generación del reporte es read-only y no crea runs.
 
 GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
 
@@ -119,6 +116,7 @@ más una corrida funcional/manual focalizada.
 - Pydantic v2 en boundaries externos.
 - dataclasses en domain/tracing.
 - `httpx` como HTTP client.
+- `openpyxl` para export XLSX local.
 - migraciones SQL inmutables.
 - services para reglas de negocio.
 - commands para workflows manuales.
@@ -165,7 +163,9 @@ professional matching
     ↓
 operational / application priority
     ↓
-shortlist / Excel report / manual action     ← PRÓXIMO VERTICAL
+shortlist / Excel report
+    ↓
+manual application tracking / refresh workflow    ← PRÓXIMO VERTICAL
 ```
 
 El end game debe soportar además un refresh manual orientado a **early application**:
@@ -367,14 +367,12 @@ Migraciones confirmadas en GitHub `main`:
 007_job_skill_classifications.sql
 008_job_seniority_classifications.sql
 009_job_professional_matches.sql
-```
-
-Migraciones locales implementadas y aplicadas, pendientes de publicación:
-
-```text
 010_job_content_freshness.sql
 011_job_operational_priorities.sql
 ```
+
+No hay migrations locales pendientes en el slice de reporting.
+
 
 Tablas/vistas relevantes:
 
@@ -3052,159 +3050,573 @@ Cambios materiales futuros deben usar nuevas versiones explícitas.
 
 ---
 
-## 20. Próximo vertical: shortlist / report / manual action
-
-### Estado
-
-NO implementado todavía.
-
-Todos los verticales de comprensión/evaluación necesarios para producir una lista accionable están implementados localmente:
-
-```text
-canonicalization
-geography
-occupation/backend
-skills
-seniority
-professional matching
-freshness
-operational priority
-```
-
-El próximo objetivo es convertir ese estado en una salida cómoda para revisión manual y aplicación.
+## 20. Shortlist / report v1 — TERMINADO
 
 ### Objetivo
 
-Producir un shortlist/reporte que permita ver rápidamente:
-
-```text
-NEW + VERY_HIGH
-UPDATED + VERY_HIGH
-NEW + HIGH
-UPDATED + HIGH
-KNOWN + VERY_HIGH
-KNOWN + HIGH
-```
-
-seguido de niveles inferiores cuando sea necesario.
-
-Campos mínimos:
-
-```text
-company
-title
-operational state
-professional match level
-professional score
-match reasons
-first_seen_at
-last_changed_at
-published_at when available
-application channel
-application target
-job_url
-apply_url
-origin/provider
-record_kind + record_id
-```
-
-Debe usar:
+Convertir el estado persistido de:
 
 ```text
 job_operational_priorities
-```
-
-como fuente de estado operacional y:
-
-```text
++
 job_professional_matches
 ```
 
-para razones profesionales detalladas cuando hagan falta.
-
-### Primer formato recomendado
-
-Mantener CLI/local-first.
-
-Antes de agregar UI, generar un reporte reproducible y fácil de abrir.
-
-Formato probable:
+en una salida local cómoda para:
 
 ```text
-Excel / XLSX
+review
+prioritization
+manual application
 ```
 
-con al menos:
+sin recalcular matching, freshness ni operational priority.
+
+### Discovery real
+
+Estado usado:
 
 ```text
-Actionable
-New or Updated
-Very High / High
-All Current
-Non-actionable / historical
+Run 84
+OPERATIONAL_PRIORITY_V1
 ```
 
-o una organización equivalente que surja del discovery.
-
-No implementar todavía una web UI.
-
-### Manual action
-
-El reporte debe exponer el mejor canal:
+Rows:
 
 ```text
-DIRECT_APPLY_URL
-JOB_URL
-GENERAL_APPLICATION_URL
-PUBLIC_CONTACT
+993
 ```
 
-pero no debe:
+Estados:
 
 ```text
-auto-apply
-auto-email
-infer recruiter emails
+NEW            0
+UPDATED        0
+KNOWN        993
+INACTIVE       0
+SUPERSEDED     0
+OUT_OF_SCOPE   0
 ```
 
-El usuario decide manualmente qué oportunidades accionar.
+Professional levels:
 
-### Applications
+```text
+VERY_HIGH   12
+HIGH        36
+MEDIUM     120
+LOW        825
+```
 
-La tabla existente:
+Application channels:
+
+```text
+DIRECT_APPLY_URL   606
+JOB_URL            387
+GENERAL_APPLICATION_URL 0
+PUBLIC_CONTACT      0
+NONE                0
+```
+
+High value:
+
+```text
+VERY_HIGH + HIGH = 48
+```
+
+Current applications:
+
+```text
+0
+```
+
+No se deduplica automáticamente.
+
+Discovery observó:
+
+```text
+31 exact company+title duplicate groups
+32 normalized company+title duplicate groups
+```
+
+Los IDs/URLs pueden representar postings distintos, regiones distintas o variantes reales.
+
+Por eso el reporte sólo expone:
+
+```text
+Same-title Count
+```
+
+como señal informativa.
+
+### Decisión de formato
+
+Formato V1:
+
+```text
+XLSX
+```
+
+Razones:
+
+- múltiples vistas lógicas;
+- URLs clickeables;
+- filters/sorting;
+- evidencia profesional ancha;
+- mejor workflow manual que CSV;
+- sólo 993 rows actuales, por lo que XLSX es suficientemente pequeño.
+
+Dependencia nueva:
+
+```text
+openpyxl>=3.1,<4
+```
+
+en:
+
+```text
+pyproject.toml
+```
+
+### Archivos del slice
+
+```text
+pyproject.toml
+src/chamba_hunter/commands/export_shortlist.py
+src/chamba_hunter/repositories/job_shortlist_report_repository.py
+src/chamba_hunter/services/job_shortlist_report_service.py
+```
+
+Report version:
+
+```text
+SHORTLIST_REPORT_V1
+```
+
+Default search profile:
+
+```text
+BACKEND_SOFTWARE_V1
+```
+
+Default output:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+`output/` ya está ignorado por Git.
+
+### Repository de reporting
+
+```text
+JobShortlistReportRepository
+```
+
+Es read-only.
+
+Lee:
+
+```text
+search_profiles
+job_operational_priorities
+job_professional_matches
+applications
+runs
+```
+
+No crea:
+
+```text
+runs
+run_steps
+DB writes
+```
+
+El source run del workbook se deriva del:
+
+```text
+evaluated_run_id
+```
+
+persistido en `job_operational_priorities` del profile.
+
+No usa simplemente “latest global prioritize run” como sustituto del snapshot realmente exportado.
+
+### Application tracking en reporte
+
+Para ATS:
+
+```text
+record_kind = ATS
+```
+
+el reporte puede mostrar el último row existente de:
 
 ```text
 applications
 ```
 
-sigue disponible para tracking manual posterior.
+por `job_id`.
 
-Estado observado antes de este vertical:
+Campos:
+
+```text
+application_type
+status
+applied_at
+updated_at
+```
+
+Actualmente:
+
+```text
+applications rows = 0
+```
+
+Para LEAD no se inventa tracking.
+
+La tabla `applications` existente sigue keyed a:
+
+```text
+job_id
+```
+
+y por lo tanto no se amplió preventivamente durante reporting.
+
+### Workbook
+
+Hojas:
+
+```text
+Overview
+Focus
+High Value
+All Current
+History
+```
+
+#### Overview
+
+Incluye:
+
+```text
+report version
+search profile
+source priority run
+source run timestamp
+generation timestamp
+priority rule
+professional rule
+counts
+links a las hojas
+notas de semántica
+```
+
+#### Focus
+
+Semántica:
+
+```text
+NEW or UPDATED
++
+VERY_HIGH or HIGH
+```
+
+Es la cola primaria después de refreshes futuros.
+
+En el baseline Run 84:
 
 ```text
 0 rows
 ```
 
-No ampliar su schema preventivamente hasta ver qué necesita realmente el workflow de shortlist/manual action.
+#### High Value
 
-### Discovery antes de implementar reporte
+```text
+all current VERY_HIGH / HIGH
+```
 
-Antes de decidir workbook/schema final:
+Baseline:
 
-1. inspeccionar `job_operational_priorities` real;
-2. revisar el top `VERY_HIGH/HIGH` con estados/channels;
-3. decidir cuántas filas mostrar por defecto;
-4. decidir hojas/columnas del XLSX;
-5. definir qué parte de `reasons_json` debe expandirse a columnas;
-6. preservar URLs clickeables;
-7. distinguir current actionable vs historical/non-actionable;
-8. decidir si applications existentes deben excluir, marcar o simplemente mostrarse;
-9. no cambiar las reglas de matching/freshness/priority para acomodar el reporte.
+```text
+48 rows
+```
+
+#### All Current
+
+```text
+all actionable
+NEW / UPDATED / KNOWN
+```
+
+Baseline:
+
+```text
+993 rows
+```
+
+#### History
+
+```text
+INACTIVE
+SUPERSEDED
+OUT_OF_SCOPE
+```
+
+Baseline:
+
+```text
+0 rows
+```
+
+### Orden
+
+El reporte reutiliza el orden de operational priority.
+
+No introduce un score nuevo.
+
+Orden:
+
+```text
+actionable
+→ professional match level
+→ operational state
+→ professional score DESC
+→ application channel
+→ first_seen_at DESC
+```
+
+### Columnas
+
+Bloque visible principal:
+
+```text
+Priority Rank
+Operational State
+Match Level
+Professional Score
+Company
+Title
+Origin / Provider
+Application Channel
+Open
+Tracked Status
+First Seen
+Last Changed
+Published At
+Same-title Count
+```
+
+Evidencia profesional:
+
+```text
+Occupation
+Backend Relevance
+Seniority
+Leadership
+Role Pts
+Skills Pts
+Seniority Pts
+Leadership Pts
+Tech Penalty
+Score Ceiling
+Exact Skills
+Peer Skills
+Related Skills
+Secondary Skills
+Alternate Stack
+Ceiling Reasons
+```
+
+Tracking/identidad/URLs:
+
+```text
+Application Type
+Applied At
+Record Kind
+Record ID
+Application Target
+Job URL
+Apply URL
+```
+
+### Validación real
+
+Workbook generado:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Size observado:
+
+```text
+283966 bytes
+```
+
+Sheets observadas:
+
+```text
+Overview
+Focus
+High Value
+All Current
+History
+```
+
+Rows:
+
+```text
+Focus          0
+High Value    48
+All Current  993
+History        0
+```
+
+Hyperlinks:
+
+```text
+High Value    48
+All Current  993
+```
+
+Top row:
+
+```text
+Improving
+Semi Senior Back-end Engineer: Java
+88.9
+```
+
+Duplicate signal:
+
+```text
+max Same-title Count = 8
+```
+
+DB read-only invariant:
+
+```text
+runs before = 84
+runs after  = 84
+latest prioritize_jobs = 84
+```
+
+No formulas fueron necesarias.
+
+No hubo errores de fórmula.
+
+### Nota sobre el falso fallo del validator
+
+El validator local terminó con:
+
+```text
+FAILED
+- unexpected overview title
+```
+
+Ese resultado fue un falso negativo del runner.
+
+El workbook real contiene exactamente:
+
+```text
+Chamba Hunter — Shortlist
+```
+
+en:
+
+```text
+Overview!A1
+```
+
+La causa fue Windows PowerShell 5.1 interpretando un `.ps1` UTF-8 sin BOM como ANSI y corrompiendo el em dash de la **cadena esperada del validator**.
+
+No fue un defecto del workbook.
+
+Todos los otros invariantes del validator pasaron y el workbook fue inspeccionado directamente después.
+
+No es necesario volver a correr validation.
+
+### Regla para futuros `.ps1`
+
+Por preferencia operativa del usuario:
+
+```text
+cuando se entregue un único .ps1
+→ entregarlo dentro de un ZIP
+```
+
+Esto evita que el navegador abra el script en panel lateral.
+
+También preferir bloques:
+
+```powershell
+@'
+...
+'@ | python -
+```
+
+frente a `python -c` con SQL/quotes complejos.
 
 ---
 
-## 21. Restricciones para shortlist / reporting
+## 21. Próximo vertical: manual application tracking + refresh workflow
 
+### Estado
+
+NO implementado todavía.
+
+El pipeline ya puede producir:
+
+```text
+corpus
+→ evaluations
+→ professional match
+→ freshness
+→ operational priority
+→ XLSX shortlist
+```
+
+Falta cerrar el workflow diario/manual posterior.
+
+### Objetivos
+
+Resolver de forma mínima y explícita:
+
+1. cómo registrar que una oportunidad fue aplicada;
+2. cómo mostrar esa aplicación en reportes futuros;
+3. qué hacer con LEAD frente al schema actual `applications.job_id`;
+4. cómo ejecutar un refresh completo repetible;
+5. cómo regenerar `Focus` después de refresh;
+6. cómo evitar reaplicar manualmente a una oportunidad ya trackeada;
+7. cómo revisar `INACTIVE/SUPERSEDED/OUT_OF_SCOPE`;
+8. cómo mantener todo local-first y sin auto-apply.
+
+### Preguntas de discovery
+
+Antes de cambiar schema:
+
+- ¿qué estados de aplicación reales necesita el usuario?
+- ¿basta `SAVED/APPLIED/INTERVIEW/REJECTED/WITHDRAWN/...` o el enum actual ya alcanza?
+- ¿conviene extender `applications` a `(record_kind, record_id)`?
+- ¿o sólo trackear ATS inicialmente y resolver LEAD al canonicalizar/aplicar?
+- ¿debe el workbook ocultar applied por default o sólo marcarlos?
+- ¿debe `Focus` excluir ya aplicadas?
+- ¿qué comando mínimo conviene para registrar aplicación manual?
+- ¿qué command sequence actual representa un refresh completo?
+- ¿conviene un wrapper `refresh_search` que componga commands existentes sin duplicar reglas?
+- ¿cómo reportar fallos parciales por provider sin perder un refresh útil?
+
+No modificar schema hasta responder estas preguntas con código/DB real.
+
+---
+
+## 22. Restricciones para application tracking / refresh
+
+- No auto-apply.
+- No auto-email.
+- No inferir emails personales.
+- No UI web.
 - No modificar `ARGENTINA_V1`.
 - No modificar `OCCUPATION_V1`.
 - No modificar `SKILLS_V1`.
@@ -3212,20 +3624,18 @@ Antes de decidir workbook/schema final:
 - No modificar `MATCHING_V1`.
 - No modificar `JOB_CONTENT_V1`.
 - No modificar `OPERATIONAL_PRIORITY_V1`.
-- No recalcular professional fit en reporting.
-- No redefinir `NEW` con una ventana de horas.
-- No usar `last_seen_at` como `UPDATED`.
-- No hacer auto-apply.
-- No enviar emails automáticamente.
-- No inferir emails personales.
-- No agregar web UI todavía.
-- No introducir una dependencia pesada si `openpyxl`/CSV existente es suficiente.
-- No borrar estados históricos `INACTIVE`, `SUPERSEDED` u `OUT_OF_SCOPE`.
-- No hacer acquisition/ATS discovery como parte del reporte salvo defecto concreto que bloquee la salida.
+- No modificar `SHORTLIST_REPORT_V1` sólo para acomodar application tracking salvo defecto real.
+- No borrar historial de operational priority.
+- No usar `last_seen_at` como change signal.
+- No crear otra capa de scoring.
+- No convertir el reporte en una fuente de verdad editable.
+- La DB sigue siendo source of truth.
+- Mantener application action manual.
+- Mantener URLs y channels explícitos.
 
 ---
 
-## 22. Runs y estados actuales
+## 23. Runs y estados actuales
 
 Últimos runs relevantes:
 
@@ -3247,6 +3657,8 @@ Antes de decidir workbook/schema final:
 84 operational priority initial baseline apply
 ```
 
+El reporting no crea runs.
+
 Estados actuales:
 
 ```text
@@ -3255,8 +3667,6 @@ ARGENTINA_V1
   eligible      831
   ineligible   3046
   unknown       162
-  missing         0
-  stale           0
 
 OCCUPATION_V1
   scope          993
@@ -3265,18 +3675,12 @@ OCCUPATION_V1
   tech adjacent   55
   non technical  180
   unknown        375
-  missing          0
-  stale            0
 
 SKILLS_V1
   scope                  993
   candidates with skills 512
   candidates no skills   481
   skill rows            2664
-  duplicate keys           0
-  invalid evidence         0
-  stale                    0
-  wrong rule version       0
 
 SENIORITY_V1
   scope             993
@@ -3289,10 +3693,6 @@ SENIORITY_V1
   entry               8
   principal           8
   intern              4
-  missing             0
-  stale               0
-  duplicate keys      0
-  wrong rule version  0
 
 MATCHING_V1 / BACKEND_SOFTWARE_V1
   scope               993
@@ -3302,11 +3702,6 @@ MATCHING_V1 / BACKEND_SOFTWARE_V1
   high                 36
   medium              120
   low                 825
-  missing               0
-  stale                 0
-  duplicate keys        0
-  wrong rule version    0
-  invalid scores        0
 
 JOB_CONTENT_V1
   jobs total                    3662
@@ -3326,104 +3721,93 @@ OPERATIONAL_PRIORITY_V1
   out of scope          0
   direct apply        606
   job URL             387
-  duplicate keys        0
-  wrong rule version    0
+
+SHORTLIST_REPORT_V1
+  focus                 0
+  high value           48
+  all current         993
+  history               0
+  XLSX generated        yes
 ```
 
-Run 84 es el último estado persistido confirmado.
+Run 84 sigue siendo el último estado persistido confirmado.
 
 ---
 
-## 23. Checklist antes de publicar operational priority
+## 24. Checklist antes de publicar shortlist/report
 
-El worktree debería contener exactamente:
+Después de limpiar scripts temporales, el worktree debería contener exactamente:
 
 ```text
 M  docs/PROJECT_CONTEXT.md
-M  src/chamba_hunter/repositories/job_lead_repository.py
-M  src/chamba_hunter/repositories/job_repository.py
-?? migrations/010_job_content_freshness.sql
-?? migrations/011_job_operational_priorities.sql
-?? src/chamba_hunter/commands/prioritize_jobs.py
-?? src/chamba_hunter/domain/job_content.py
-?? src/chamba_hunter/repositories/job_freshness_repository.py
-?? src/chamba_hunter/repositories/job_operational_priority_repository.py
-?? src/chamba_hunter/services/job_operational_priority_service.py
+M  pyproject.toml
+?? src/chamba_hunter/commands/export_shortlist.py
+?? src/chamba_hunter/repositories/job_shortlist_report_repository.py
+?? src/chamba_hunter/services/job_shortlist_report_service.py
 ```
 
-No versionar diagnósticos temporales:
+No versionar:
 
 ```text
-operational-priority-discovery.ps1
-operational-priority-discovery.txt
-operational-priority-v1-dry-run.ps1
-operational-priority-v1-dry-run.txt
-operational-priority-v1-apply-and-validate.ps1
-operational-priority-v1-apply-validation.txt
+shortlist-report-discovery.ps1
+shortlist-report-v1-validate.ps1
+shortlist-report-v1-validate-fixed.ps1
+shortlist-report-v1-validate-fixed-v2.ps1
+shortlist-report-discovery.txt
+shortlist-report-v1-validation.txt
 ```
 
-Antes de commit/push:
+`output/` ya está ignorado.
+
+Conservar localmente si resulta útil:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Validación mínima antes de commit:
 
 ```powershell
 python -m compileall -q src
-
-git add -N -- `
-    "migrations/010_job_content_freshness.sql" `
-    "migrations/011_job_operational_priorities.sql" `
-    "src/chamba_hunter/commands/prioritize_jobs.py" `
-    "src/chamba_hunter/domain/job_content.py" `
-    "src/chamba_hunter/repositories/job_freshness_repository.py" `
-    "src/chamba_hunter/repositories/job_operational_priority_repository.py" `
-    "src/chamba_hunter/services/job_operational_priority_service.py"
-
 git diff --check
-
-git reset -- `
-    "migrations/010_job_content_freshness.sql" `
-    "migrations/011_job_operational_priorities.sql" `
-    "src/chamba_hunter/commands/prioritize_jobs.py" `
-    "src/chamba_hunter/domain/job_content.py" `
-    "src/chamba_hunter/repositories/job_freshness_repository.py" `
-    "src/chamba_hunter/repositories/job_operational_priority_repository.py" `
-    "src/chamba_hunter/services/job_operational_priority_service.py"
-
 git diff --stat
 git status --short
 ```
 
-Los warnings LF→CRLF de Git en Windows son informativos si `git diff --check` retorna exit code `0`.
+Los warnings LF→CRLF son informativos si `git diff --check` retorna exit code `0`.
+
+No hace falta volver a generar ni revalidar el workbook actual.
 
 El usuario decide y ejecuta commit/push manualmente.
 
 ---
 
-## 24. Prompt operativo para nueva conversación
+## 25. Prompt operativo para nueva conversación
 
 ```text
 Repositorio: Gtestino92/chamba-hunter
 Base: main
 
 Primero:
-- verificar HEAD y últimos commits reales en GitHub;
+- verificar HEAD real y últimos commits;
 - leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si migrations 010/011 y operational priority ya están publicados;
-- distinguir GitHub code vs DB local observed state;
-- no asumir que los conteos históricos siguen vigentes;
+- confirmar si SHORTLIST_REPORT_V1 ya fue publicado;
+- código/GitHub es source of truth;
+- DB local observada más reciente: Run 84 operational baseline, salvo refresh posterior;
 - preservar ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1 y OPERATIONAL_PRIORITY_V1;
-- no modificar matching para necesidades de reporting;
-- no redefinir NEW por una ventana temporal fija;
-- no usar last_seen_at como UPDATED;
-- usar Run 84 como baseline/watermark histórico confirmado hasta que exista un refresh posterior;
-- siguiente vertical: shortlist / report / manual action;
-- comenzar por discovery read-only del output real de job_operational_priorities;
-- diseñar un reporte local reproducible, probablemente XLSX;
-- mostrar NEW/UPDATED antes de KNOWN dentro de cada professional match level;
-- preservar application channel y URLs;
-- incluir professional reasons sin duplicar la lógica del matcher;
-- separar current actionable de retained historical/non-actionable;
+- preservar SHORTLIST_REPORT_V1 salvo defecto real;
 - no auto-apply;
 - no auto-email;
 - no inferir emails personales;
-- no UI web todavía;
+- no web UI;
+- next: discovery read-only de manual application tracking + end-to-end refresh workflow;
+- inspeccionar schema real de applications y cualquier repository/command existente;
+- medir qué record_kind tienen las oportunidades que probablemente se aplicarían;
+- decidir si LEAD necesita identidad generalizada para application tracking;
+- revisar command sequence real de refresh y tracing;
+- evaluar un wrapper de refresh sólo si compone commands existentes sin duplicar reglas;
+- decidir cómo Focus debe tratar oportunidades ya aplicadas;
+- no cambiar schema antes de discovery;
+- cuando se entregue un único .ps1, empaquetarlo en ZIP;
 - no evasión anti-bot.
 ```
