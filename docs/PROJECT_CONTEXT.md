@@ -3,11 +3,13 @@
 **Fecha:** 2026-08-07  
 **Repositorio:** `Gtestino92/chamba-hunter`  
 **Rama operativa:** `main`  
-**HEAD de referencia al cerrar este handoff:** `ed9db20034f57aa7edb75ae4f4b91837ab33f4a1`  
-**Commit de referencia:** `ats detection`
+**HEAD de referencia al cerrar este handoff:** `a06fc5ef5462f1a134850c59214fad92fa1b612a`  
+**Commit de referencia:** `harden broad ATS discovery and Himalayas enrichment`
 
-> El SHA anterior es sólo una referencia temporal. **GitHub `main` y el código actual son siempre la fuente de verdad.**
+> Este SHA es sólo una referencia temporal. **GitHub `main` y el código actual son siempre la fuente de verdad.**
 > Antes de recomendar, diseñar o escribir código en una sesión nueva, volver a inspeccionar GitHub y reconciliar este handoff contra el estado real del repo.
+>
+> La base SQLite local contiene resultados de corridas manuales que no están versionados en GitHub. Los conteos operativos de este documento deben tratarse como evidencia del estado local observado, no como contrato de schema ni como datos reproducibles desde el repo.
 
 ---
 
@@ -16,9 +18,14 @@
 Antes de proponer cambios:
 
 1. Conectarse al repositorio GitHub `Gtestino92/chamba-hunter`.
-2. Verificar rama/default branch actual, HEAD actual de `main`, últimos commits relevantes y árbol real del repo.
-3. Leer primero este handoff si está en el repo.
-4. Después inspeccionar directamente en GitHub, como mínimo:
+2. Verificar:
+   - default branch;
+   - HEAD actual de `main`;
+   - últimos commits relevantes;
+   - árbol real del repo.
+3. Leer `docs/PROJECT_CONTEXT.md`.
+4. Inspeccionar directamente en GitHub los archivos reales involucrados en la tarea siguiente.
+5. Como mínimo, cuando sean relevantes:
    - `pyproject.toml`
    - `migrations/`
    - `src/chamba_hunter/domain/enums.py`
@@ -30,21 +37,25 @@ Antes de proponer cambios:
    - `src/chamba_hunter/sources/`
    - `src/chamba_hunter/commands/`
    - `examples/`
-5. Verificar especialmente los archivos involucrados en la tarea siguiente antes de diseñar interfaces o repositorios nuevos.
-6. Tratar cualquier diferencia entre este documento y GitHub como señal de que **GitHub ganó**.
-7. No asumir que la DB local coincide exactamente con datos históricos escritos aquí; los resultados de corridas son evidencia operativa, no schema contractual.
+6. Distinguir siempre:
+   - confirmado por código actual;
+   - confirmado por corrida manual del usuario;
+   - inferido;
+   - pendiente de verificar.
+7. Si este documento contradice GitHub, **GitHub gana**.
+8. No asumir que la DB local coincide exactamente con conteos históricos escritos aquí.
 
-### Forma recomendada de iniciar el contexto
+Forma recomendada de iniciar una nueva sesión:
 
 ```text
 Repositorio: Gtestino92/chamba-hunter
 Base: main
 
 Primero:
-- inspeccionar HEAD/tree reales en GitHub;
-- leer este handoff;
+- verificar HEAD/tree reales en GitHub;
+- leer docs/PROJECT_CONTEXT.md;
 - inspeccionar los archivos reales afectados por el próximo vertical;
-- distinguir confirmado por código vs confirmado por corrida manual;
+- distinguir código vs evidencia de corridas manuales;
 - recién entonces proponer cambios.
 ```
 
@@ -53,39 +64,40 @@ Primero:
 ## 2. Preferencias operativas del usuario
 
 - Conversación y explicaciones: **español**.
-- Código: **inglés**.
-- El usuario actualmente trabaja con ChatGPT directamente, no con Codex.
-- Desarrollo incremental, vertical slices pequeños.
+- Código, nombres técnicos y comentarios de código: **inglés**.
+- Desarrollo incremental en vertical slices pequeños.
 - Evitar sobrearquitectura.
 - SQLite es la fuente de verdad local.
-- No UI/web API por ahora.
+- Sin UI/web API por ahora.
 - No automatizar postulaciones.
-- El usuario hace los `push` manualmente.
+- El usuario hace `commit`/`push` manualmente.
 - No crear branches/PRs ni escribir en GitHub salvo pedido explícito.
-- **No agregar tests por ahora.** El usuario quiere incorporarlos más adelante con Codex.
+- **No agregar tests por ahora.**
 - Sí usar validaciones baratas:
   - `python -m compileall -q src`
-  - corridas funcionales manuales y diagnósticos puntuales.
-- Antes de sugerir push, preferir una validación funcional.
-- Cuando se modifique un archivo, entregar **el contenido completo del archivo**, nunca snippets parciales.
-- Snippets parciales están bien sólo para diagnósticos one-off de shell/Python/SQL.
+  - `git diff --check`
+  - corridas funcionales manuales;
+  - diagnósticos puntuales de shell/Python/SQL.
+- Antes de sugerir push, preferir al menos una validación funcional.
+- Para cambios de archivos, preferir entregar archivos completos o ZIPs preservando rutas repo-relative.
+- Snippets parciales están bien para diagnósticos one-off.
 - No hacer bypass anti-bot, fake browser ni scraping agresivo.
-- Si una página devuelve 403/429, tratarlo como señal operativa (`BLOCKED`/warning), no intentar evadir la protección.
-- Evitar nuevas dependencias salvo necesidad real.
+- 401/403/429 de páginas externas deben tratarse como señal operacional (`BLOCKED`/warning), no como invitación a evadir protección.
+- Evitar dependencias nuevas salvo necesidad real.
 - `httpx` es la librería HTTP actual.
-- No reintroducir BeautifulSoup sólo para sortear páginas que bloquean scraping.
+- No introducir BeautifulSoup sólo para sortear bloqueos.
 
-### Entorno local observado
+Entorno local observado:
 
 ```text
 ~/Documents/Git/chamba-hunter
 Windows + Git Bash (MINGW64)
-Python 3.12.5
+Python 3.12.x
 venv: .venv
 package: chamba_hunter
 ```
 
-Activación:
+Activación habitual:
 
 ```bash
 source .venv/Scripts/activate
@@ -97,37 +109,43 @@ source .venv/Scripts/activate
 
 Chamba Hunter es una herramienta local de inteligencia para búsqueda laboral.
 
-No aplica automáticamente. Su objetivo es construir y mantener una base útil de:
+No aplica automáticamente. Debe construir y mantener una base útil de:
 
 - empresas;
+- fuentes que las descubrieron;
 - careers pages;
 - ATS;
 - vacantes;
+- leads de aggregators;
 - compatibilidad geográfica;
 - matching contra el perfil profesional;
 - contactos/canales públicos para outreach manual;
 - output final accionable.
 
-Flujo global:
+Arquitectura conceptual vigente:
 
 ```text
-company discovery
+wide-net job sources
     ↓
-dedup + enrichment
+broad job leads
     ↓
-company classification
-    ↓
-geography / priority
+companies / public identity
     ↓
 careers discovery
     ↓
-ATS detection
+ATS evidence
     ↓
-ATS adapters / job ingestion        ← PRÓXIMO FOCO
+full ATS board sync when supported
     ↓
-job normalization
+larger normalized candidate corpus
     ↓
-matching / ranking
+cross-source canonicalization
+    ↓
+Argentina eligibility
+    ↓
+occupation / backend classification
+    ↓
+skills + seniority + matching / ranking
     ↓
 Excel report / manual action
 ```
@@ -139,16 +157,17 @@ company
     ↓
 no matching job
     ↓
-public recruiting/careers email or general application URL
+public recruiting/careers email
+or explicit general application URL
     ↓
 manual outreach candidate
 ```
 
-Nunca descubrir o adivinar emails personales de recruiters. Sólo contactos explícitamente públicos de la empresa.
+Nunca descubrir, inferir ni adivinar emails personales de recruiters. Sólo contactos explícitamente públicos de la empresa.
 
 ---
 
-## 4. Perfil profesional a usar más adelante para matching
+## 4. Perfil profesional futuro para matching
 
 Perfil resumido:
 
@@ -158,7 +177,7 @@ Perfil resumido:
 - Spring Boot
 - REST APIs
 - Distributed Systems
-- batch/schedulers
+- batch / schedulers
 - retries
 - idempotency
 - distributed locks
@@ -167,18 +186,20 @@ Perfil resumido:
 - Oracle
 - MongoDB
 - Flyway / JPA
-- AWS EC2/RDS/S3/SSM
+- AWS EC2 / RDS / S3 / SSM
 - Docker
 - Kubernetes
 - OpenShift
 - GitHub Actions / GitLab CI/CD
 - TypeScript / Node.js / NestJS como stack secundario
-- Android/Compose secundario
+- Android / Compose secundario
 - English C1
+- seniority objetivo aproximado: semisenior / mid-level
 
 Matching conceptual futuro:
 
 ### Core
+
 - Java
 - Kotlin
 - Spring Boot
@@ -187,6 +208,7 @@ Matching conceptual futuro:
 - Distributed Systems
 
 ### Strong support
+
 - microservices
 - batch
 - schedulers
@@ -199,6 +221,7 @@ Matching conceptual futuro:
 - OpenShift
 
 ### Secondary
+
 - TypeScript
 - Node.js
 - NestJS
@@ -208,13 +231,13 @@ No exigir todos los keywords simultáneamente.
 
 ---
 
-## 5. Foundation ya construida
+## 5. Foundation actual
 
-Arquitectura vigente:
+Arquitectura:
 
 - Python package bajo `src/chamba_hunter`.
-- Pydantic v2 sólo en boundaries externos.
-- Domain/tracing con `@dataclass(slots=True)`.
+- Pydantic v2 en boundaries externos.
+- Domain/tracing con dataclasses.
 - Repositories explícitos sobre `sqlite3`.
 - Sin SQLAlchemy.
 - SQLite local.
@@ -222,15 +245,17 @@ Arquitectura vigente:
 - `httpx` para HTTP.
 - editable install previsto con `pip install -e .`.
 
-Dependencias conocidas principales:
+Migraciones actuales:
 
 ```text
-pydantic >= 2.13,<3
-httpx >= 0.28,<1
-pytest en dev, pero NO agregar tests ahora
+001_initial_schema.sql
+002_company_classifications.sql
+003_broad_job_acquisition.sql
 ```
 
-Tablas principales ya diseñadas:
+Las migraciones aplicadas son inmutables. Si hace falta cambiar schema, crear una migración nueva.
+
+Tablas/vistas relevantes actuales incluyen:
 
 - `companies`
 - `company_sources`
@@ -245,87 +270,46 @@ Tablas principales ya diseñadas:
 - `runs`
 - `run_steps`
 - `ats_syncs`
-
-Migración adicional existente:
-
-- `002_company_classifications.sql`
-
-Las migraciones ya aplicadas son inmutables. Si hace falta cambiar schema, crear `003_...sql`, etc.
+- `company_classifications`
+- `job_leads`
+- `job_ats_hints`
+- view `job_candidates`
 
 ---
 
-## 6. Company discovery e import — terminado para MVP
+## 6. Company discovery / import — MVP terminado
+
+Fuentes históricas de company discovery:
 
 ### Himalayas
 
-Fuente pública:
+Feed público:
 
 ```text
 https://himalayas.app/jobs/api/search
 ```
 
-No se scrapean perfiles de empresa de Himalayas porque devolvían 403.
-
-Resultados observados:
-
-```text
-Queries:     17
-Raw hits:    429
-Discovered:  148
-Created:     95
-Existing:    53
-```
-
-Segunda corrida:
-
-```text
-Created:  0
-Existing: 148
-```
-
 ### Get on Board
 
-Feed público:
+Feed público de Programming:
 
 ```text
 https://www.getonbrd.com/api/v0/categories/programming/jobs
 ```
 
-Corrida observada:
-
-```text
-Jobs seen:             200
-Companies discovered:   79
-```
-
-Idempotencia confirmada.
-
----
-
-## 7. Dedup/import — decisiones importantes
-
-Orden conceptual:
+El import/dedup de empresas sigue estos principios:
 
 1. misma identidad de source;
 2. mismo dominio oficial;
 3. fallback por `normalized_name` sólo si es único y compatible;
-4. empresa existente sin dominio puede enriquecerse con una source posterior que sí trae dominio;
+4. una empresa existente sin dominio puede enriquecerse si otra fuente trae dominio;
 5. no fusionar dominios diferentes sólo por nombre.
 
-Esto evitó duplicados como:
-
-```text
-Himalayas: Checkr sin domain
-Get on Board: Checkr con checkr.com
-```
-
-`careers_url` ya forma parte del import manual y puede rellenarse sin pisar un valor conocido.
+Precisión de identidad > cobertura.
 
 ---
 
-## 8. Company classification — terminado para MVP
-
-Classifier V3 para Get on Board.
+## 7. Company classification y geography — MVP existente
 
 Tipos:
 
@@ -337,46 +321,22 @@ OTHER
 UNKNOWN
 ```
 
-Principios:
+No clasificar sólo por nombre y no forzar `UNKNOWN` a cero.
 
-- `PRODUCT`: producto/plataforma/SaaS/marketplace/tecnología propia.
-- `CONSULTANCY`: consulting/services/staff augmentation/outsourcing/custom software/client work.
-- `RECRUITER`: recruiting/staffing/headhunting/placement.
-- `UNKNOWN`: evidencia débil.
-- No clasificar sólo por nombre.
-- No intentar llevar `UNKNOWN` a cero.
-- `OTHER` existe pero no se forzó todavía para compañías no-software.
-
-Distribución final observada sobre 79 empresas Get on Board:
-
-```text
-PRODUCT      11
-CONSULTANCY  16
-RECRUITER     1
-OTHER         0
-UNKNOWN      51
-```
-
-Precisión > cobertura.
-
----
-
-## 9. Geography + target priority — terminado para MVP
-
-Se detectan señales separadas:
+Señales geográficas existentes:
 
 - company Argentina
 - company Buenos Aires
 - job Argentina
 - job Buenos Aires
 - remote global
-- remote LATAM/South America
+- remote LATAM / South America
 - remote Argentina-compatible
 - remote + Buenos Aires
 
 No inferir remote Argentina sólo porque la empresa esté basada en Argentina.
 
-Prioridades:
+Prioridades existentes:
 
 ```text
 VERY_HIGH
@@ -386,108 +346,41 @@ LOW
 UNKNOWN
 ```
 
-Corrida observada:
-
-```text
-Processed:   79
-Failed:       0
-
-VERY_HIGH:    0
-HIGH:        11
-MEDIUM:      25
-LOW:         11
-UNKNOWN:     32
-
-remote Argentina-compatible: 31
-remote LATAM-compatible:     29
-```
-
-Nota: `remote_latam=True` persiste compatibilidad LATAM y puede incluir global remote; no equivale necesariamente a mención textual explícita de “LATAM”.
-
-Empresas `HIGH` observadas:
-
-```text
-Coderslab.io
-Devsu
-Kreitech
-LemonTech
-Magnar
-nCube
-Niuro
-PlainTech Solutions
-Rapidseedbox LLC
-Travefy
-Whitestack
-```
-
-No seguir calibrando prioridad ahora salvo problema real posterior.
+No recalibrar esta capa ahora salvo defecto concreto.
 
 ---
 
-## 10. Seed manual curado de careers — terminado
+## 8. Careers / ATS detection
 
-Lista curada:
+Servicio principal:
 
 ```text
-Canonical
-Konfio
-dLocal
-Remote
-GitLab
-Platzi
-Lumenalta
-Toptal
-Globant
-Stori
-Bitso
-Deel
-Belvo
+src/chamba_hunter/services/careers_ats_detection_service.py
 ```
 
-Archivo previsto:
+Comandos relevantes:
 
 ```text
-examples/linkedin_careers_seed.csv
+src/chamba_hunter/commands/detect_careers_ats.py
+src/chamba_hunter/commands/refresh_careers_ats.py
+src/chamba_hunter/commands/discover_broad_ats.py
 ```
 
-Primera corrida:
+Pipeline conceptual:
 
 ```text
-Processed: 13
-Created:   12
-Existing:   1
-Invalid:    0
-```
-
-Segunda corrida:
-
-```text
-Processed: 13
-Created:    0
-Existing:  13
-Invalid:    0
-```
-
-Idempotencia confirmada.
-
----
-
-## 11. Careers / ATS detection — terminado para el vertical actual
-
-Objetivo: a partir de careers URL conocida —o homepage → careers— detectar un ATS con evidencia trazable.
-
-Pipeline:
-
-```text
-careers URL
+known careers URL
+or company homepage
     ↓
 HTTP fetch + redirects
     ↓
-links / iframe / scripts / URL params
+careers link discovery
+    ↓
+links / iframe / scripts / raw URLs / URL params
     ↓
 ATS candidates
     ↓
-public API / board probes cuando corresponde
+public API / board probes only when there is public provider evidence
     ↓
 ats_detections
     ↓
@@ -508,9 +401,7 @@ BAMBOOHR
 CUSTOM
 ```
 
-`WORKABLE` y `BAMBOOHR` son detectables; eso NO implica adapters de ingestion existentes.
-
-Métodos:
+Métodos relevantes:
 
 ```text
 HOMEPAGE_LINK
@@ -534,480 +425,806 @@ BLOCKED
 ERROR
 ```
 
-403/429 no se evaden.
+Reglas:
+
+- no blind-probing de ATS identifiers;
+- los provider probes se usan sólo cuando la página pública ya dio evidencia del provider;
+- 401/403/429 se registran; no se evaden;
+- URLs malformadas encontradas dentro del HTML se ignoran en vez de tumbar el scan completo;
+- `company_ats` representa estado actual;
+- `ats_detections` conserva tracing histórico.
 
 ---
 
-## 12. Tracing ATS
+## 9. Calibraciones ATS importantes
 
-Ahora se usan:
+### Greenhouse
 
-- `runs`
-- `run_steps`
-- `company_scans`
-- `ats_detections`
-- `company_ats`
+Probe por Job Board API aceptado cuando:
 
-Repositorios incorporados:
-
-```text
-src/chamba_hunter/repositories/tracing_repository.py
-src/chamba_hunter/repositories/company_ats_repository.py
-```
-
-El historial de scans/detections se conserva.
-
-`company_ats` representa estado actual.
-
-Regla actual:
-
-- cuando un ATS se selecciona/upsertea como primario/activo;
-- los otros `company_ats` de esa empresa se desactivan (`is_primary=0`, `is_active=0`);
-- no se borra el historial de `ats_detections`.
-
----
-
-## 13. Calibración ATS — lecciones
-
-### SmartRecruiters
-
-Se descubrió un falso positivo sistemático:
-
-```text
-SMARTRECRUITERS platzi
-200
-totalFound: 0
-
-SMARTRECRUITERS fake
-200
-totalFound: 0
-```
-
-Conclusión:
-
-> En SmartRecruiters, HTTP 200 + colección vacía NO valida un company identifier.
-
-Regla actual:
-
-```text
-SmartRecruiters PUBLIC_API_PROBE sólo es evidencia positiva
-si devuelve al menos un posting activo.
-```
-
-Cinco estados actuales SmartRecruiters generados por el probe defectuoso fueron desactivados:
-
-```text
-SmartRecruiters rows deactivated: 5
-```
-
-No se eliminó tracing.
-
-### Lever
-
-```text
-dlocal → 200 + job
-toptal → 200 + job
-fake   → 404
-```
-
-Probe aceptado.
+- board responde válidamente;
+- el nombre es compatible con la empresa.
 
 ### Ashby
 
+La API puede conservar boards históricos.
+
+Regla actual para identifiers derivados:
+
+- HTTP 200 no alcanza;
+- debe existir evidencia suficiente de postings activos para validar el board derivado.
+
+### Lever
+
+El endpoint público de postings se usa para validar identifiers con evidencia previa.
+
+### SmartRecruiters
+
+Importante:
+
 ```text
-belvo → 200 + jobs
-deel  → 200 + jobs=[]
-fake  → 404
+HTTP 200 + totalFound = 0
 ```
 
-Un board válido puede tener cero jobs.
+NO valida un identifier.
+
+Sólo se considera probe positivo cuando devuelve postings activos.
+
+### Workable
+
+Un board histórico o una página genérica no alcanza.
+
+El probe verifica:
+
+- URL final compatible;
+- nombre compatible;
+- evidencia de postings activos.
+
+### BambooHR
+
+Es detectable, pero no existe todavía ingestion adapter.
+
+---
+
+## 10. ATS ingestion implementado
+
+Adapters / sync implementados:
+
+```text
+GREENHOUSE
+ASHBY
+LEVER
+```
+
+Comandos:
+
+```text
+python -m chamba_hunter.commands.sync_greenhouse_jobs
+python -m chamba_hunter.commands.sync_ashby_jobs
+python -m chamba_hunter.commands.sync_lever_jobs
+```
+
+Cada sync mantiene snapshot actual:
+
+- upsert de postings observados;
+- `first_seen_at` preservado;
+- `last_seen_at` actualizado;
+- postings ausentes del snapshot del board se desactivan;
+- tracing mediante `runs` / `run_steps` / `ats_syncs`.
+
+Adapters NO implementados todavía:
+
+```text
+WORKABLE
+SMARTRECRUITERS
+BAMBOOHR
+```
+
+---
+
+## 11. Snapshot ATS observado antes del broad discovery reciente
+
+Últimos conteos manuales confirmados antes de sincronizar cualquier board nuevo descubierto en broad discovery:
 
 ### Greenhouse
 
 ```text
-bitso      → 200, board name Bitso
-canonical  → 200, board name Canonical
-gitlab     → 200, board name GitLab
-remotecom  → 200, board name Remote
-fake       → 404
+Canonical 303
+GitLab    188
+Remote    204
+Bitso       8
+TOTAL     703
 ```
 
-Se compara nombre del board contra empresa.
-
-### Workable
-
-Boards reales observados:
+### Ashby
 
 ```text
-Globant /globant/ → 200, title "Globant - Current Openings"
-Konfio  /konfio/  → 200, title "konfio - Current Openings"
-Platzi  /platzi/  → 200, title "Platzi - Current Openings"
-Stori   /stori/   → 200, title "Stori - Current Openings"
+Belvo       6
+TOTAL       6
 ```
 
-Fake:
+### Lever
 
 ```text
-/apply.workable.com/definitely-not-a-real-company-xyz/
-→ redirect a /oops
-title: Workable
-company name absent
+dLocal     58
+Toptal     26
+TOTAL      84
 ```
 
-El `BOARD_PROBE` exige URL final compatible + nombre de empresa, por lo que el fake no pasa.
+Total ATS jobs observado:
 
-Limitación conocida:
+```text
+793
+```
 
-> Que exista un board Workable válido no prueba necesariamente que sea el único o actual ATS primario enlazado desde la careers page; podría ser histórico.
-
-Para el MVP se acepta con tracing/confidence. No seguir calibrando por inercia.
+Estos números son datos locales históricos; verificar de nuevo antes de usarlos como estado actual.
 
 ---
 
-## 14. Última corrida ATS aceptada
+## 12. Broad job acquisition
+
+Migración:
 
 ```text
-Processed:     13
-Detected:      12
-Not detected:   1
-Blocked:        0
-Failed:         0
-Skipped:        0
+003_broad_job_acquisition.sql
 ```
 
-Mappings:
+Nuevas entidades:
+
+### `job_leads`
+
+Staging/provenance para postings provenientes de aggregators.
+
+Identidad:
 
 ```text
-Belvo       → ASHBY [belvo]
-Bitso       → GREENHOUSE [bitso]
-Canonical   → GREENHOUSE [canonical]
-Deel        → ASHBY [deel]
-dLocal      → LEVER [dlocal]
-GitLab      → GREENHOUSE [gitlab]
-Globant     → WORKABLE [globant]
-Konfio      → WORKABLE [konfio]
-Lumenalta   → NOT_DETECTED
-Platzi      → WORKABLE [platzi]
-Remote      → GREENHOUSE [remotecom]
-Stori       → WORKABLE [stori]
-Toptal      → LEVER [toptal]
+UNIQUE(source_type, external_id)
 ```
 
-Warnings de fetch bloqueado pero detección independiente válida:
+Puede enlazarse más adelante con:
 
 ```text
-Belvo  → HTTP 403 warning
-Konfio → HTTP 403 warning
-Toptal → HTTP 403 warning
+canonical_job_id -> jobs.id
 ```
 
-No hubo bypass.
+### `job_ats_hints`
+
+Evidencia ATS concreta extraída de URLs de leads.
+
+No promueve automáticamente un ATS a `company_ats`.
+
+### view `job_candidates`
+
+Une:
+
+```text
+active ATS jobs
+UNION ALL
+active unresolved broad leads
+```
+
+El resultado es un corpus crudo previo a deduplicación cross-source.
+
+Fuentes broad implementadas:
+
+```text
+HIMALAYAS
+GETONBOARD
+```
+
+Comando:
+
+```bash
+python -m chamba_hunter.commands.acquire_broad_jobs \
+  --himalayas-max-jobs 200 \
+  --getonboard-max-pages 2
+```
+
+Semántica importante:
+
+- broad aggregator pagination es parcial;
+- ausencia de un lead en una corrida NO implica que la vacante cerró;
+- por eso broad leads no usan la misma snapshot-deactivation que los ATS boards;
+- `first_seen_at` se preserva;
+- `last_seen_at` se actualiza.
+
+Última corrida broad estabilizada observada:
+
+```text
+HIMALAYAS
+received:   200
+normalized: 200
+updated:    200
+
+GETONBOARD
+received:   200
+normalized: 200
+updated:    200
+
+Active unresolved leads: 400
+Stored ATS hints:         0
+Raw active candidates:    1193
+```
+
+El `1193` era:
+
+```text
+793 ATS jobs + 400 unresolved broad leads
+```
+
+antes de sincronizar boards descubiertos posteriormente.
 
 ---
 
-## 15. Archivos ATS clave actuales
+## 13. Lecciones de normalización broad
 
-Confirmar siempre contra GitHub, pero al cierre:
+### Himalayas pagination
+
+Páginas adyacentes pueden solaparse por GUID.
+
+Regla:
+
+- ignorar GUID duplicado;
+- avanzar offset por cantidad de filas devueltas por provider, no por cantidad de filas nuevas.
+
+### Himalayas timestamps
+
+En datos observados, `pubDate` / `expiryDate` numéricos pueden venir en segundos aunque documentación externa sugiera milisegundos.
+
+Heurística estabilizada:
 
 ```text
-src/chamba_hunter/commands/detect_careers_ats.py
-src/chamba_hunter/domain/enums.py
-src/chamba_hunter/domain/models.py
-src/chamba_hunter/domain/tracing.py
-src/chamba_hunter/repositories/company_ats_repository.py
-src/chamba_hunter/repositories/tracing_repository.py
-src/chamba_hunter/services/careers_ats_detection_service.py
+>= 100_000_000_000 -> milliseconds
+otherwise          -> seconds
 ```
 
-HEAD de referencia:
+### Himalayas `applicationLink`
+
+Dato empírico importante:
+
+- `applicationLink` apunta a la página del job dentro de Himalayas;
+- NO es el external ATS apply URL.
+
+Semántica actual:
 
 ```text
-ed9db20034f57aa7edb75ae4f4b91837ab33f4a1
-ats detection
+applicationLink -> job_url
+apply_url       -> None
+```
+
+Un backfill one-shot corrigió localmente los 200 leads históricos que tenían esa URL en `apply_url`.
+
+La utilidad de backfill no quedó en el repo; el código productivo actual ya escribe correctamente hacia adelante.
+
+---
+
+## 14. Protección de identidad Himalayas
+
+Se observó un incidente upstream transitorio:
+
+```text
+companyName = "name"
+```
+
+26 leads de 17 `companySlug` distintos habían quedado fusionados en una única empresa local.
+
+Se hizo una reparación local one-shot:
+
+- 17 slugs reconciliados vía Himalayas MCP;
+- 17 empresas reales creadas/reutilizadas;
+- 26 leads movidos;
+- 17 `company_sources` movidos;
+- scan inválido histórico eliminado;
+- empresa basura eliminada;
+- `PRAGMA foreign_key_check`: OK.
+
+Después de la reparación:
+
+```text
+bad company/name rows: 0
+```
+
+Único caso multi-slug restante observado:
+
+```text
+XKTalent Inc. - Rimutee
+slugs: rekluti, xktalent-inc-rimutee
+```
+
+Se decidió NO separarlo automáticamente porque la evidencia observada es compatible con alias/rebrand de la misma entidad.
+
+Protección productiva actual:
+
+- si Himalayas vuelve a entregar exactamente `companyName="name"`,
+- no se usa ese placeholder como identidad compartida;
+- se deriva un nombre seed estable desde `companySlug`;
+- el nombre canónico puede enriquecerse después vía MCP.
+
+---
+
+## 15. Himalayas company enrichment vía MCP
+
+Scrapear HTML de perfiles Himalayas con `httpx` devolvió 403 de forma consistente.
+
+Esa estrategia fue abandonada y no debe reintroducirse como workaround.
+
+Solución productiva:
+
+```text
+src/chamba_hunter/sources/himalayas_mcp.py
+src/chamba_hunter/commands/enrich_himalayas_websites.py
+```
+
+MCP público:
+
+```text
+https://mcp.himalayas.app/mcp
+```
+
+El cliente usa el tool público:
+
+```text
+get_company_details(company_slug)
+```
+
+y extrae:
+
+- nombre canónico;
+- website oficial.
+
+El enrichment apunta a empresas:
+
+- activas;
+- con leads HIMALAYAS activos y unresolved;
+- sin ATS activo;
+- sin website;
+- con slug HIMALAYAS disponible.
+
+Resultados manuales observados:
+
+Primer lote histórico:
+
+```text
+Processed: 10
+Found:     10
+Conflicts: 0
+Failed:    0
+```
+
+Después de reparar la identidad, quedaron 145 elegibles.
+
+Corridas:
+
+```text
+25 / 25 FOUND
+120 / 120 FOUND
+```
+
+Total de esas 145 pendientes:
+
+```text
+Found:     145
+Not found: 0
+Conflicts: 0
+Failed:    0
+```
+
+No hacer scraping alternativo de los perfiles si MCP resuelve el dato.
+
+---
+
+## 16. Broad careers / ATS discovery
+
+Comando:
+
+```bash
+python -m chamba_hunter.commands.discover_broad_ats
+```
+
+Filtros relevantes:
+
+```text
+--limit N
+--source ALL|HIMALAYAS|GETONBOARD
+--dry-run
+--include-scanned
+```
+
+Entrada permitida actual:
+
+```text
+KNOWN_CAREERS
+HOMEPAGE
+```
+
+El comando ya NO usa:
+
+```text
+LEAD_APPLY_URL
+LEAD_JOB_URL
+```
+
+como careers entry points.
+
+Razón:
+
+- aggregator URLs no son evidencia suficiente del ATS/careers oficial;
+- en Himalayas `applicationLink` es una URL interna del aggregator.
+
+Por defecto se excluyen empresas ya escaneadas contra su website actual.
+
+`--include-scanned` permite volver a incluirlas explícitamente.
+
+Scans históricos contra entry points obsoletos no cuentan como scan del website actual.
+
+---
+
+## 17. Resultados recientes de broad ATS discovery
+
+Dry-run limpio después del enrichment:
+
+```text
+Companies without ATS: 246
+Usable scan targets:   246
+No usable entry point:   0
+KNOWN_CAREERS:            0
+HOMEPAGE:               246
+```
+
+### Primer lote real: 10
+
+Detecciones:
+
+```text
+2BRAINS -> LEVER
+Devsu   -> WORKABLE
+```
+
+Resultado:
+
+```text
+Processed:    10
+Detected:      2
+Not detected:  8
+Blocked:       0
+Failed:        0
+Active ATS companies: 11 -> 13
+```
+
+Después se corrigió el selector para no reescanear por defecto esos 8 `NOT_DETECTED`.
+
+Dry-run posterior:
+
+```text
+Companies without ATS: 244
+Usable scan targets:   236
+Scanned current site:    8
+```
+
+### Segundo lote real: 50
+
+Detecciones:
+
+```text
+ELVTR                 -> WORKABLE
+Fundraise Up          -> GREENHOUSE
+mercor                -> ASHBY
+Bluelight Consulting  -> LEVER
+Sezzle                -> GREENHOUSE
+Blend360              -> SMARTRECRUITERS
+```
+
+Resultado:
+
+```text
+Processed:    50
+Detected:      6
+Not detected: 32
+Blocked:       9
+Failed:        3
+Skipped:       0
+Active ATS companies: 13 -> 19
+```
+
+Provider distribution de ese lote:
+
+```text
+GREENHOUSE       2
+ASHBY            1
+LEVER            1
+SMARTRECRUITERS  1
+WORKABLE         1
+```
+
+Cumulativo de los dos lotes broad observados:
+
+```text
+GREENHOUSE       2
+ASHBY            1
+LEVER            2
+SMARTRECRUITERS  1
+WORKABLE         2
+TOTAL            8
 ```
 
 ---
 
-# 16. PRÓXIMO FOCO: job ingestion
+## 18. Blocked / failed recientes
 
-**No seguir refinando ATS detection ahora.**
+`BLOCKED` es señal operacional y no requiere bypass.
 
-El próximo vertical debe convertir detecciones ATS en **vacantes reales persistidas**.
+En el lote de 50 hubo 9 bloqueos HTTP 403.
 
-Empezar por **Greenhouse solamente**.
+Tres `FAILED`:
 
-Corpus controlado:
+### Lisit
 
 ```text
-Bitso      → GREENHOUSE [bitso]
-Canonical  → GREENHOUSE [canonical]
-GitLab     → GREENHOUSE [gitlab]
-Remote     → GREENHOUSE [remotecom]
+https://lisit.cl
+ReadTimeout
+```
+
+Tratar como fallo transitorio de red.
+
+### Ascensus
+
+```text
+https://ascensus.com
+SSLV3_ALERT_HANDSHAKE_FAILURE
+```
+
+Tratar como fallo TLS externo/operacional salvo evidencia posterior de bug local.
+
+### 3IT
+
+```text
+https://3it.cl
+ValueError:
+'a-zA-Z0-9-' does not appear to be an IPv4 or IPv6 address
+```
+
+Root cause:
+
+- HTML externo contenía una referencia URL malformada;
+- `urllib.parse.urlsplit()` podía lanzar `ValueError`;
+- eso hacía fallar el scan completo.
+
+Fix productivo actual:
+
+- `_resolve_http_url()` ignora referencias malformadas;
+- `_detect_from_url()` devuelve `None` para URLs inválidas.
+
+Validación manual focalizada:
+
+```text
+resolve: None
+detect:  None
+```
+
+El scan histórico de 3IT sigue registrado como FAILED; no se reescribió tracing.
+
+---
+
+## 19. Estado local inferido después de la última corrida
+
+Confirmado directamente por la última corrida:
+
+```text
+Active ATS companies: 19
+```
+
+A partir de los outputs observados se espera, aproximadamente:
+
+```text
+238 companies without active ATS
+52 already scanned against current site
+~186 not-yet-scanned broad companies
+```
+
+Este último bloque es una inferencia aritmética, NO un snapshot consultado después del commit.
+
+En una sesión nueva, verificar primero con:
+
+```bash
+python -m chamba_hunter.commands.discover_broad_ats --dry-run
+```
+
+antes de asumir esos valores.
+
+---
+
+## 20. Próximo foco inmediato
+
+No empezar todavía por matching/ranking.
+
+El próximo vertical debe cerrar la expansión del corpus de manera controlada.
+
+Orden recomendado:
+
+### Paso A — verificar estado real
+
+1. GitHub `main` / HEAD / `PROJECT_CONTEXT.md`.
+2. DB local mediante outputs del usuario.
+3. `discover_broad_ats --dry-run`.
+
+### Paso B — continuar broad ATS discovery sobre empresas nunca escaneadas
+
+Objetivo:
+
+- ampliar la muestra;
+- medir cobertura real por provider;
+- no reescanear sistemáticamente `NOT_DETECTED`/`BLOCKED`/`ERROR`;
+- no hacer bypass.
+
+Puede escalarse por lotes controlados.
+
+### Paso C — sincronizar boards recién detectados de providers ya soportados
+
+Nuevos boards observados que deberían revisarse/sincronizarse con adapters existentes:
+
+```text
+GREENHOUSE
+- Fundraise Up
+- Sezzle
+
+ASHBY
+- mercor
+
+LEVER
+- 2BRAINS
+- Bluelight Consulting
+```
+
+Antes de ejecutar sync:
+
+- inspeccionar `company_ats` real;
+- verificar identifiers/board URLs actuales;
+- usar los comandos provider existentes;
+- observar jobs creados/actualizados/desactivados.
+
+### Paso D — medir provider distribution antes de crear otro adapter
+
+Candidates actuales sin ingestion adapter observados:
+
+```text
+WORKABLE
+- Devsu
+- ELVTR
+
+SMARTRECRUITERS
+- Blend360
+```
+
+No elegir adapter por intuición.
+
+Primero terminar/expandir suficiente discovery y comparar frecuencia real de:
+
+```text
+WORKABLE
+SMARTRECRUITERS
+BAMBOOHR
+otros
+```
+
+Luego implementar sólo el adapter con mayor valor marginal.
+
+---
+
+## 21. Después del broad ATS expansion
+
+Una vez que se haya:
+
+- escaneado suficiente universo broad;
+- sincronizado Greenhouse/Ashby/Lever recién descubiertos;
+- elegido e implementado el siguiente adapter si vale la pena;
+
+pasar a:
+
+### Cross-source canonicalization
+
+Prioridad de matching:
+
+1. match fuerte por ATS URL / provider / external id;
+2. fallback conservador por company + title + location/date;
+3. sólo entonces asignar `job_leads.canonical_job_id`.
+
+No sobre-deduplicar.
+
+Después medir:
+
+```text
+unique active candidate corpus
+duplicates resolved
+unresolved broad leads
+ATS jobs
 ```
 
 ---
 
-## 17. Orden recomendada para Greenhouse ingestion
+## 22. Roadmap posterior
 
-Antes de editar:
+Después de canonicalization:
 
-1. Ingerir estado real de GitHub `main`.
-2. Inspeccionar:
-   - `Job` en `domain/models.py`;
-   - schema de `jobs`;
-   - `AtsSync`;
-   - `company_ats`;
-   - `company_ats_repository.py`;
-   - `tracing_repository.py`;
-   - converters;
-   - commands/services existentes.
-3. Verificar la API pública actual de Greenhouse antes de fijar endpoint/payload.
-4. Diseñar el cambio mínimo.
+1. Argentina eligibility;
+2. occupation/software/backend classification;
+3. skills extraction;
+4. seniority;
+5. matching/ranking contra perfil;
+6. outreach candidates sólo con contactos públicos;
+7. Excel final.
 
-Vertical:
+Tabs futuras sugeridas:
 
 ```text
-active primary company_ats
-provider = GREENHOUSE
-external_identifier = token
-        ↓
-Greenhouse public Job Board API
-        ↓
-normalize external jobs
-        ↓
-upsert jobs
-        ↓
-mark missing previous jobs inactive
-        ↓
-ats_sync tracing
-        ↓
-CLI summary
-```
-
-Evitar todavía:
-
-- framework genérico enorme de adapters;
-- plugins;
-- colas;
-- cron;
-- UI;
-- matching;
-- Excel;
-- LLM ranking;
-- notificaciones;
-- outreach;
-- varios ATS a la vez.
-
----
-
-## 18. Semántica deseada de jobs
-
-El modelo/schema ya contempla aproximadamente:
-
-```text
-company_id
-company_ats_id
-external_id
-title
-description
-location_text
-workplace_type
-employment_type
-job_url
-apply_url
-published_at
-first_seen_at
-last_seen_at
-is_active
-raw_payload
-```
-
-Verificar contra GitHub antes de implementar.
-
-Reglas esperadas:
-
-- identidad: `(company_ats_id, external_id)`;
-- primera aparición → insert;
-- existente → update mutable fields + `last_seen_at`;
-- presente → `is_active=True`;
-- antes activo pero ya no aparece → `is_active=False`;
-- conservar `first_seen_at`;
-- raw payload sólo si aporta trazabilidad;
-- no inferir datos que Greenhouse no entregue claramente.
-
----
-
-## 19. Tracing deseado para ingestion
-
-Usar `ats_syncs`; no crear infraestructura paralela.
-
-Guardar:
-
-```text
-run_step_id
-company_ats_id
-status
-http_status
-jobs_received
-jobs_created
-jobs_updated
-jobs_deactivated
-error_type
-error_message
-started_at
-finished_at
+Top Matches
+Review
+Outreach
+Rejected / reasons   (opcional)
 ```
 
 ---
 
-## 20. Validación manual del próximo vertical
+## 23. Cosas que NO hacer en el próximo chat
 
-No agregar pytest.
+- No crear UI.
+- No crear API web.
+- No automatizar applications.
+- No bypass de 403/429.
+- No fake browser.
+- No introducir Selenium/Playwright sólo para evadir bloqueos.
+- No reintroducir scraping HTML de Himalayas profiles si MCP funciona.
+- No blind-probar slugs/identifiers ATS sin evidencia pública.
+- No implementar Workable/SmartRecruiters/BambooHR antes de medir cobertura suficiente.
+- No empezar matching antes de ampliar/canonicalizar el corpus.
+- No crear migraciones innecesarias.
+- No agregar tests todavía salvo cambio explícito de decisión.
+- No crear branch/commit/push/PR sin pedido explícito del usuario.
+- No asumir que utilidades one-shot de reparación/backfill existen en el repo: fueron deliberadamente eliminadas antes del push.
 
-Primero:
+---
+
+## 24. Validaciones estándar
+
+Para cambios Python:
 
 ```bash
 python -m compileall -q src
+git diff --check
 ```
 
-Después corrida controlada sobre Greenhouse, idealmente con `--limit 1` o equivalente seguro.
+Después, validación funcional focalizada del comando o provider afectado.
 
-Validar:
-
-1. jobs recibidos > 0 en algún board conocido;
-2. filas creadas en SQLite;
-3. segunda corrida no duplica;
-4. `first_seen_at` no cambia;
-5. `last_seen_at` se refresca;
-6. `ats_syncs` tiene trazabilidad;
-7. deactivation sólo si puede probarse de forma segura.
-
-Luego ampliar a:
-
-```text
-Bitso
-Canonical
-GitLab
-Remote
-```
-
-Sólo tras eso decidir push.
+No correr exploraciones masivas de red sólo para “probar” un cambio pequeño.
 
 ---
 
-## 21. Próximos verticales tentativos
+## 25. Último push verificado al cerrar este handoff
+
+`main`:
 
 ```text
-1. Greenhouse ingestion
-2. Ashby ingestion
-3. Lever ingestion
-4. SmartRecruiters ingestion si hay detecciones sólidas
-5. Workable/BambooHR cuando valga la pena
-6. job geography normalization
-7. deterministic matching contra perfil
-8. action candidates
-9. Excel report
-10. scheduling/cron
+a06fc5ef5462f1a134850c59214fad92fa1b612a
+harden broad ATS discovery and Himalayas enrichment
 ```
 
----
-
-## 22. Output final futuro
-
-Conceptualmente:
+Archivos incluidos en ese commit:
 
 ```text
-GitLab
-  Backend Engineer
-  Remote LATAM
-  HIGH MATCH
-  → aplicar manualmente
-
-Canonical
-  Senior Software Engineer
-  Remote
-  MEDIUM/HIGH MATCH
-  → aplicar manualmente
-
-Company X
-  no matching jobs
-  public careers/recruiting contact available
-  → outreach manual candidate
+src/chamba_hunter/commands/discover_broad_ats.py
+src/chamba_hunter/commands/enrich_himalayas_websites.py
+src/chamba_hunter/services/broad_job_acquisition_service.py
+src/chamba_hunter/services/careers_ats_detection_service.py
+src/chamba_hunter/sources/himalayas_mcp.py
 ```
 
-XLSX futuro:
+Cambios esenciales:
 
-```text
-Companies
-Matching Jobs
-Contacts / Outreach
-ATS Tracing
-Run Summary
-```
+- broad ATS discovery sólo por careers conocida / homepage oficial;
+- exclusión por defecto de companies ya escaneadas en su website actual;
+- `--include-scanned`;
+- Himalayas MCP website enrichment;
+- protección contra `companyName="name"`;
+- `applicationLink` de Himalayas tratado como `job_url`;
+- tolerancia a URLs HTML malformadas.
 
-No CSV como output final.
-
----
-
-## 23. Definiciones de terminado
-
-### Company discovery
-MVP suficiente.
-
-### Dedup
-MVP suficiente.
-
-### Get on Board classification
-MVP suficiente. No V4 salvo evidencia real.
-
-### Company priority
-MVP suficiente.
-
-### Manual curated seeds
-Funcionando e idempotente.
-
-### Careers / ATS detection
-Vertical cerrado para MVP.
-
-Limitaciones aceptadas:
-- 403;
-- JS-heavy careers;
-- Workable potencialmente histórico;
-- SmartRecruiters vacío no valida identifier;
-- `NOT_DETECTED` no significa `CUSTOM`.
-
-### Job ingestion
-**No implementado todavía. Es el próximo foco.**
-
----
-
-## 24. Regla de fuente de verdad
-
-```text
-HANDOFF = orientación
-GITHUB MAIN = verdad
-MANUAL RUN OUTPUT = evidencia funcional
-```
-
-Si algo no coincide:
-
-```text
-GitHub main > handoff
-```
-
----
-
-## 25. Instrucción corta para pegar al iniciar otra sesión
-
-```text
-Continuamos con Chamba Hunter.
-
-Repo: Gtestino92/chamba-hunter
-Base: main.
-
-Antes de recomendar o escribir código, conectate a GitHub e ingerí el estado real del repo: HEAD, tree y archivos relevantes. Leé el handoff del proyecto si existe, pero tratá GitHub main como fuente de verdad y reconciliá cualquier diferencia.
-
-No agregues tests por ahora. Trabajo incremental, cambios pequeños. Código en inglés, explicación en español. Cuando modifiques un archivo, entregá el archivo completo. No branches/PR/push salvo pedido explícito.
-
-El vertical de careers/ATS detection está cerrado para MVP. Próximo foco: job ingestion, empezando sólo por Greenhouse sobre los boards ya detectados/validados (Bitso, Canonical, GitLab, Remote), usando los modelos/tables existentes de jobs y ats_syncs y sin crear infraestructura paralela.
-```
+Fin del handoff.
