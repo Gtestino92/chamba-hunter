@@ -9,13 +9,15 @@
 Último `main` confirmado en GitHub durante esta sesión:
 
 ```text
-2e431c0413dd8825e0497001ecc4981b099b6edb
-shortlist
+5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
+tracking
 ```
 
-Ese `main` ya contiene:
+Ese `main` ya contiene el pipeline operativo completo v1:
 
-- Hiring Room;
+- broad acquisition;
+- careers / ATS discovery;
+- Greenhouse, Lever, Ashby, Workable, SmartRecruiters, BambooHR y Hiring Room ingestion;
 - cross-source canonicalization v1;
 - Argentina eligibility v1;
 - occupation / IT / backend classification v1;
@@ -25,34 +27,25 @@ Ese `main` ya contiene:
 - content freshness v1;
 - operational/application priority v1;
 - shortlist/report v1;
-- migraciones `004` a `011`;
+- manual application tracking v1;
+- end-to-end refresh v1;
+- migraciones `001` a `012`;
 - `BACKEND_SOFTWARE_V1`;
 - `MATCHING_V1`;
 - `JOB_CONTENT_V1`;
 - `OPERATIONAL_PRIORITY_V1`;
 - `SHORTLIST_REPORT_V1`.
 
-El trabajo de **manual application tracking + end-to-end refresh v1** fue implementado y validado localmente después de ese commit y todavía está pendiente de publicación en GitHub.
-
-Estado local esperado antes de publicar este slice, después de limpiar scripts temporales:
+El slice **manual application tracking + end-to-end refresh v1** fue publicado en:
 
 ```text
-M  docs/PROJECT_CONTEXT.md
-M  src/chamba_hunter/repositories/job_shortlist_report_repository.py
-?? migrations/012_application_opportunity_identity.sql
-?? src/chamba_hunter/commands/refresh_search.py
-?? src/chamba_hunter/commands/track_application.py
-?? src/chamba_hunter/repositories/application_repository.py
-?? src/chamba_hunter/services/application_tracking_service.py
+5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
+tracking
 ```
 
-Output local generado y deliberadamente ignorado por Git:
+Después del push no queda una vertical obligatoria pendiente para que Chamba Hunter sea utilizable como MVP local.
 
-```text
-output/chamba-shortlist.xlsx
-```
-
-Estado SQLite local confirmado después del primer refresh end-to-end real:
+Estado SQLite local más reciente confirmado:
 
 ```text
 Run 99
@@ -63,7 +56,22 @@ applications rows = 0
 migration 012 applied = yes
 ```
 
-La generación del reporte no crea runs. `track_application` sólo modifica `applications` cuando el usuario registra manualmente una acción real.
+Shortlist local más reciente:
+
+```text
+Focus          34
+High Value     82
+All Current  1120
+History         0
+```
+
+Output local deliberadamente ignorado por Git:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Después de publicar el commit `tracking`, el worktree debería quedar limpio salvo archivos locales deliberadamente no trackeados/ignorados.
 
 GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
 
@@ -378,7 +386,7 @@ Migraciones confirmadas en GitHub `main`:
 011_job_operational_priorities.sql
 ```
 
-Migration local implementada, aplicada y validada, pendiente de publicación:
+Migration `012` confirmada en `main`:
 
 ```text
 012_application_opportunity_identity.sql
@@ -4424,86 +4432,251 @@ No se crea una fila histórica por cada transición en V1.
 
 ---
 
-## 24. Checklist antes de publicar application tracking + refresh
+## 24. Cierre del MVP operativo v1
 
-Después de limpiar scripts temporales, el worktree esperado es:
+### Publicación
 
-```text
-M  docs/PROJECT_CONTEXT.md
-M  src/chamba_hunter/repositories/job_shortlist_report_repository.py
-?? migrations/012_application_opportunity_identity.sql
-?? src/chamba_hunter/commands/refresh_search.py
-?? src/chamba_hunter/commands/track_application.py
-?? src/chamba_hunter/repositories/application_repository.py
-?? src/chamba_hunter/services/application_tracking_service.py
-```
-
-No versionar:
+Commit confirmado en `main`:
 
 ```text
-application-refresh-discovery.ps1
-application-refresh-v1-dry-run.ps1
-application-refresh-v1-dry-run-fixed.ps1
-application-refresh-v1-apply-and-validate.ps1
-application-refresh-v1-real-refresh.ps1
-application-refresh-discovery.txt
-application-refresh-v1-dry-run.txt
-application-refresh-v1-apply-validation.txt
-application-refresh-v1-real-refresh.txt
+5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
+tracking
 ```
 
-Los `.txt` root ya están ignorados.
-
-`output/` ya está ignorado.
-
-Conservar localmente:
+Incluye:
 
 ```text
-output/chamba-shortlist.xlsx
+migrations/012_application_opportunity_identity.sql
+src/chamba_hunter/commands/refresh_search.py
+src/chamba_hunter/commands/track_application.py
+src/chamba_hunter/repositories/application_repository.py
+src/chamba_hunter/repositories/job_shortlist_report_repository.py
+src/chamba_hunter/services/application_tracking_service.py
+docs/PROJECT_CONTEXT.md
 ```
 
-Validación mínima antes de commit:
+No queda código de este slice pendiente de publicación.
 
-```powershell
-python -m compileall -q src
-git diff --check
-git diff --stat
-git status --short
+### Estado funcional
+
+El sistema ya cubre de punta a punta:
+
+```text
+wide acquisition
+→ ATS ingestion
+→ canonicalization
+→ geography
+→ occupation/backend
+→ skills
+→ seniority
+→ professional matching
+→ freshness / operational priority
+→ Focus / High Value XLSX
+→ manual application tracking
+→ repeatable end-to-end refresh
 ```
 
-No volver a ejecutar `refresh_search --apply` sólo para validar: hacerlo movería nuevamente el watermark y dejaría de ser una validación neutra.
+Por lo tanto:
 
-El usuario decide y ejecuta commit/push manualmente.
+```text
+Chamba Hunter MVP local operativo = COMPLETE
+```
+
+No confundir esto con “producto sin posibilidades de mejora”.
+
+Significa que ya existe un workflow usable, persistente y repetible para la búsqueda backend actual.
+
+### Próximas líneas posibles
+
+No existe una única vertical obligatoria.
+
+Las siguientes líneas son independientes y deben elegirse por valor observado en uso real.
+
+#### A. Operational usage + tuning
+
+Usar realmente:
+
+```text
+Focus
+High Value
+track_application
+```
+
+y observar:
+
+- falsos positivos de matching;
+- falsos negativos;
+- calidad de las 34 oportunidades actuales de Focus;
+- si los duplicados son molestos en la práctica;
+- si falta información visible para decidir;
+- estados de aplicación realmente usados;
+- fricción del workflow manual.
+
+Regla:
+
+```text
+no tuning sin evidencia de uso real
+```
+
+Ésta es la continuación recomendada por defecto.
+
+#### B. ATS discovery coverage de nuevas compañías broad
+
+Run 85 creó muchas compañías nuevas desde broad acquisition.
+
+El refresh rutinario no ejecuta discovery ATS por default:
+
+```text
+--discover-broad-ats-limit 0
+```
+
+Puede hacerse un vertical específico para medir:
+
+- cuántas nuevas companies no tienen ATS;
+- cuántas tienen entrypoint usable;
+- cuántas ya fueron scanned;
+- rendimiento marginal de nuevos scans;
+- si conviene una cadencia separada de discovery;
+- si vale incorporar discovery acotado al refresh habitual.
+
+No hacerlo automáticamente sin discovery de costo/beneficio.
+
+#### C. Manual outreach fallback
+
+Ya estaba definido como feature separada:
+
+```text
+company
+→ no matching job
+→ public careers/recruiting email
+   or explicit general application URL
+→ manual outreach candidate
+```
+
+No es necesario para el MVP de job matching.
+
+Si se implementa:
+
+- sólo contactos públicos;
+- nunca inferir emails personales;
+- nunca auto-enviar;
+- mantenerlo separado del ranking de postings.
+
+#### D. Search profiles adicionales
+
+Arquitectura futura permitida:
+
+```text
+shared corpus
+→ multiple search profiles
+```
+
+No empezar esto por anticipación.
+
+Sólo hacerlo si aparece un segundo caso de búsqueda real.
+
+### Qué NO hacer como siguiente paso automático
+
+- no agregar UI web por inercia;
+- no auto-apply;
+- no auto-email;
+- no inferir recruiter emails;
+- no refactorizar a un framework genérico de profesiones;
+- no ejecutar `refresh_search --apply` sólo para validar;
+- no cambiar thresholds sin revisar resultados reales;
+- no agregar nuevos providers sin evidencia de cobertura útil;
+- no convertir XLSX en source of truth.
 
 ---
 
 ## 25. Prompt operativo para nueva conversación
 
 ```text
+Proyecto: Chamba Hunter
 Repositorio: Gtestino92/chamba-hunter
 Base: main
 
-Primero:
-- verificar HEAD real y últimos commits;
-- leer docs/PROJECT_CONTEXT.md completo;
-- confirmar si application tracking + refresh v1 ya fue publicado;
-- código/GitHub es source of truth;
-- DB local observada más reciente después del primer refresh end-to-end: Run 99 OPERATIONAL_PRIORITY_V1 SUCCESS;
-- migration 012 está aplicada localmente;
-- applications rows observadas: 0;
-- current shortlist: Focus 34, High Value 82, All Current 1120, History 0;
-- preservar ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1, OPERATIONAL_PRIORITY_V1 y SHORTLIST_REPORT_V1;
-- application tracking usa (record_kind, record_id) y soporta ATS + LEAD;
-- ATS conserva job_id; LEAD usa job_id NULL;
-- refresh_search compone los existing commands y es PLAN ONLY sin --apply;
-- no ejecutar refresh real sólo para comprobar código porque movería el watermark;
-- no auto-apply;
-- no auto-email;
-- no inferir emails personales;
-- no web UI;
-- próximo trabajo debe surgir del uso operativo real, no de una generalización preventiva;
-- revisar Focus primero y registrar aplicaciones reales con track_application;
-- si aparece una necesidad nueva, hacer discovery contra código/DB actual antes de cambiar schema;
-- cuando se entregue un único .ps1, empaquetarlo en ZIP;
-- no evasión anti-bot.
+Estado publicado confirmado al cerrar la conversación anterior:
+- HEAD de referencia: 5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2 (`tracking`).
+- Verificar HEAD real de main antes de asumir que sigue siendo ése.
+- Leer docs/PROJECT_CONTEXT.md completo.
+- Código/GitHub actual es source of truth.
+
+MVP operativo:
+- COMPLETE para la búsqueda local BACKEND_SOFTWARE_V1.
+- Pipeline publicado:
+  broad acquisition
+  → ATS ingestion
+  → canonicalization
+  → ARGENTINA_V1
+  → OCCUPATION_V1
+  → SKILLS_V1
+  → SENIORITY_V1
+  → MATCHING_V1
+  → JOB_CONTENT_V1
+  → OPERATIONAL_PRIORITY_V1
+  → SHORTLIST_REPORT_V1
+  → manual application tracking
+  → end-to-end refresh.
+
+DB local observada al cierre:
+- latest operational priority: Run 99 SUCCESS;
+- migration 012 applied;
+- applications rows: 0;
+- current shortlist:
+  Focus 34
+  High Value 82
+  All Current 1120
+  History 0.
+Estos conteos son estado local observado, no contratos permanentes.
+
+Application tracking:
+- identity: (record_kind, record_id);
+- supports ATS + LEAD;
+- ATS keeps job_id = record_id;
+- LEAD keeps job_id NULL;
+- command: chamba_hunter.commands.track_application;
+- no application history per transition in V1; one current row per opportunity.
+
+Refresh:
+- command: chamba_hunter.commands.refresh_search;
+- without --apply = PLAN ONLY;
+- with --apply = real network/data refresh and advances operational watermark;
+- do NOT run --apply merely as a code validation;
+- routine refresh does not run broad ATS discovery unless --discover-broad-ats-limit > 0.
+
+Operational workflow:
+- review Focus first;
+- then High Value;
+- apply manually;
+- record real status with track_application;
+- regenerate XLSX with export_shortlist when needed.
+
+There is no mandatory next engineering vertical.
+Choose the next work from observed value:
+A) operational usage/tuning from real Focus/application experience — recommended default;
+B) ATS discovery coverage/cadence for newly discovered broad companies;
+C) separate manual outreach fallback using only public careers/recruiting contacts;
+D) another search profile only if a real second use case appears.
+
+Before implementing any of A-D:
+- perform read-only discovery against current GitHub/code/DB;
+- distinguish confirmed code, observed DB behavior, inference, and pending reproduction;
+- do not change stable rules without evidence;
+- preserve ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1, OPERATIONAL_PRIORITY_V1 and SHORTLIST_REPORT_V1 unless a concrete defect is demonstrated.
+
+Operating constraints:
+- Windows PowerShell.
+- explanations Spanish; code/comments/prompts English.
+- complete files/scripts, never fragments.
+- multi-file changes preferably one ZIP with repo-relative paths.
+- when the only artifact is a .ps1, package it inside a ZIP.
+- large command output should go directly to .txt for upload.
+- no project tests unless explicitly requested; use focused compileall/diff/invariant/manual validations.
+- user commits/pushes manually.
+- do not commit/push/open PR unless explicitly requested.
+- no UI/web API unless deliberately chosen later.
+- no automated applications.
+- no anti-bot evasion.
+- never infer personal recruiter emails.
 ```
