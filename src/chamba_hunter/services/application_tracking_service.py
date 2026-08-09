@@ -21,12 +21,99 @@ class ApplicationTrackingResult:
     previous_status: str | None
 
 
+class OpportunityResolutionError(
+    RuntimeError
+):
+    def __init__(
+        self,
+        *,
+        company_name: str,
+        title: str,
+        matches: list[
+            ApplicationOpportunity
+        ],
+    ) -> None:
+        self.company_name = company_name
+        self.title = title
+        self.matches = tuple(
+            matches
+        )
+
+        if not matches:
+            detail = (
+                "no active exact match"
+            )
+        else:
+            identities = ", ".join(
+                (
+                    f"{match.record_kind} "
+                    f"{match.record_id}"
+                )
+                for match in matches
+            )
+            detail = (
+                f"{len(matches)} active "
+                f"exact matches: {identities}"
+            )
+
+        super().__init__(
+            "Could not resolve unique "
+            "application opportunity for "
+            f"{company_name!r} / {title!r}: "
+            f"{detail}"
+        )
+
+
 class ApplicationTrackingService:
     def __init__(
         self,
         repository: ApplicationRepository,
     ) -> None:
         self.repository = repository
+
+    def resolve_job(
+        self,
+        *,
+        company_name: str,
+        title: str,
+    ) -> ApplicationOpportunity:
+        normalized_company = (
+            company_name.strip()
+        )
+        normalized_title = (
+            title.strip()
+        )
+
+        if not normalized_company:
+            raise ValueError(
+                "company_name must not be empty"
+            )
+
+        if not normalized_title:
+            raise ValueError(
+                "title must not be empty"
+            )
+
+        matches = (
+            self.repository
+            .find_active_opportunities(
+                company_name=(
+                    normalized_company
+                ),
+                title=normalized_title,
+            )
+        )
+
+        if len(matches) != 1:
+            raise OpportunityResolutionError(
+                company_name=(
+                    normalized_company
+                ),
+                title=normalized_title,
+                matches=matches,
+            )
+
+        return matches[0]
 
     def track_job(
         self,
@@ -49,6 +136,49 @@ class ApplicationTrackingService:
                 "Opportunity not found: "
                 f"{record_kind} {record_id}"
             )
+
+        return self.track_opportunity(
+            opportunity=opportunity,
+            status=status,
+            notes=notes,
+            notes_provided=notes_provided,
+        )
+
+    def track_job_by_company_title(
+        self,
+        *,
+        company_name: str,
+        title: str,
+        status: ApplicationStatus,
+        notes: str | None,
+        notes_provided: bool,
+    ) -> ApplicationTrackingResult:
+        opportunity = self.resolve_job(
+            company_name=company_name,
+            title=title,
+        )
+
+        return self.track_opportunity(
+            opportunity=opportunity,
+            status=status,
+            notes=notes,
+            notes_provided=notes_provided,
+        )
+
+    def track_opportunity(
+        self,
+        *,
+        opportunity: ApplicationOpportunity,
+        status: ApplicationStatus,
+        notes: str | None,
+        notes_provided: bool,
+    ) -> ApplicationTrackingResult:
+        record_kind = (
+            opportunity.record_kind
+        )
+        record_id = (
+            opportunity.record_id
+        )
 
         existing = (
             self.repository

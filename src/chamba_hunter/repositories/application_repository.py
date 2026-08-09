@@ -77,6 +77,47 @@ def _optional_datetime(
     )
 
 
+def _opportunity_from_row(
+    row,
+) -> ApplicationOpportunity:
+    return ApplicationOpportunity(
+        record_kind=str(
+            row["record_kind"]
+        ),
+        record_id=int(
+            row["record_id"]
+        ),
+        company_id=int(
+            row["company_id"]
+        ),
+        company_name=str(
+            row["company_name"]
+        ),
+        title=str(
+            row["title"]
+        ),
+        is_active=bool(
+            row["is_active"]
+        ),
+        job_url=(
+            str(
+                row["job_url"]
+            )
+            if row["job_url"]
+            is not None
+            else None
+        ),
+        apply_url=(
+            str(
+                row["apply_url"]
+            )
+            if row["apply_url"]
+            is not None
+            else None
+        ),
+    )
+
+
 def _application_from_row(
     row,
 ) -> ApplicationRecord:
@@ -209,42 +250,57 @@ class ApplicationRepository:
         if row is None:
             return None
 
-        return ApplicationOpportunity(
-            record_kind=str(
-                row["record_kind"]
-            ),
-            record_id=int(
-                row["record_id"]
-            ),
-            company_id=int(
-                row["company_id"]
-            ),
-            company_name=str(
-                row["company_name"]
-            ),
-            title=str(
-                row["title"]
-            ),
-            is_active=bool(
-                row["is_active"]
-            ),
-            job_url=(
-                str(
-                    row["job_url"]
-                )
-                if row["job_url"]
-                is not None
-                else None
-            ),
-            apply_url=(
-                str(
-                    row["apply_url"]
-                )
-                if row["apply_url"]
-                is not None
-                else None
-            ),
+        return _opportunity_from_row(
+            row
         )
+
+    def find_active_opportunities(
+        self,
+        *,
+        company_name: str,
+        title: str,
+    ) -> list[ApplicationOpportunity]:
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    jc.record_kind,
+                    jc.record_id,
+                    jc.company_id,
+                    companies.name
+                        AS company_name,
+                    jc.title,
+                    jc.is_active,
+                    jc.job_url,
+                    jc.apply_url
+                FROM job_candidates jc
+                JOIN companies
+                  ON companies.id =
+                     jc.company_id
+                WHERE jc.is_active = 1
+                  AND TRIM(companies.name)
+                      = ? COLLATE NOCASE
+                  AND TRIM(jc.title)
+                      = ? COLLATE NOCASE
+                ORDER BY
+                    CASE jc.record_kind
+                        WHEN 'ATS' THEN 0
+                        ELSE 1
+                    END,
+                    jc.record_id
+                """,
+                (
+                    company_name.strip(),
+                    title.strip(),
+                ),
+            ).fetchall()
+
+        return [
+            _opportunity_from_row(
+                row
+            )
+            for row in rows
+        ]
 
     def get_job_application(
         self,
