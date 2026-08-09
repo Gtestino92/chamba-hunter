@@ -11,6 +11,10 @@ from chamba_hunter.services.job_shortlist_report_service import (
     REPORT_VERSION,
     export_shortlist,
 )
+from chamba_hunter.services.openoffice_shortlist_actions import (
+    OPENOFFICE_ACTIONS_VERSION,
+    add_openoffice_application_actions,
+)
 
 
 DEFAULT_OUTPUT = Path(
@@ -87,11 +91,25 @@ def main() -> None:
         profile_name=args.profile,
     )
 
+    action_count = (
+        add_openoffice_application_actions(
+            args.output
+        )
+    )
+
     print("Chamba Hunter shortlist export")
     print("-----------------------------")
     print(
         "Report version: ",
         REPORT_VERSION,
+    )
+    print(
+        "OpenOffice:     ",
+        OPENOFFICE_ACTIONS_VERSION,
+    )
+    print(
+        "APPLY links:    ",
+        action_count,
     )
     print(
         "Profile:        ",

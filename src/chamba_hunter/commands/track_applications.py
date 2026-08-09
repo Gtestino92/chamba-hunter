@@ -24,6 +24,9 @@ from chamba_hunter.services.job_shortlist_report_service import (
     DEFAULT_PROFILE_NAME,
     export_shortlist,
 )
+from chamba_hunter.services.openoffice_shortlist_actions import (
+    add_openoffice_application_actions,
+)
 
 
 DEFAULT_OUTPUT = Path(
@@ -408,6 +411,12 @@ def main() -> None:
         profile_name=args.profile,
     )
 
+    action_count = (
+        add_openoffice_application_actions(
+            args.output
+        )
+    )
+
     print()
     print(
         "Shortlist regenerated"
@@ -418,6 +427,10 @@ def main() -> None:
     print(
         "Output:      ",
         args.output.resolve(),
+    )
+    print(
+        "APPLY links: ",
+        action_count,
     )
     print(
         "Focus:       ",
