@@ -29,45 +29,50 @@ Antes de recomendar o implementar:
 Último `main` confirmado al cerrar este handoff:
 
 ```text
+9760d76eceb755ce58ebc4bcdec56470bb3ef61c
+simplify application tracking
+```
+
+Parent de contexto:
+
+```text
+f57b679c12f22a183070482666c04c90c31d4f4a
+context
+```
+
+Commit geo/recency V2:
+
+```text
 034fcf34b92c3cfe6e6a75cb7cff2033815b3921
 final and fixes
 ```
 
-Parent:
-
-```text
-0902b45a91eb612c1afc77e785a05f59c32658c7
-context
-```
-
-Commit funcional anterior:
+Commit que cerró manual application tracking + refresh V1:
 
 ```text
 5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
 tracking
 ```
 
-`034fcf34...` publicó el slice:
+`9760d76e...` publicó el slice de simplificación de application tracking:
 
 ```text
-Get on Board geography enrichment
+exact company + title resolution
 +
-source publication recency
+batch stdin / clipboard tracking
 +
-OPERATIONAL_PRIORITY_V2
+APPLIED default for job applications
 +
-SHORTLIST_REPORT_V2
+automatic shortlist export
 ```
 
 No hubo migration nueva.
 
 ### Sobre este PROJECT_CONTEXT
 
-El commit `034fcf34...` incluyó accidentalmente una compactación grande de este archivo junto con el slice funcional.
-
 La decisión vigente es conservar un **handoff canónico compacto** para operación futura.
 
-El handoff histórico detallado previo a esa compactación sigue recuperable en:
+El handoff histórico detallado pre-V2 sigue recuperable en:
 
 ```text
 0902b45a91eb612c1afc77e785a05f59c32658c7
@@ -97,10 +102,25 @@ Migration:
 Application tracking observado:
 
 ```text
-8 rows creadas con status SENT
+8 job applications
+status = APPLIED
 ```
 
-Shortlist:
+Las ocho filas fueron migradas explícitamente:
+
+```text
+SENT → APPLIED
+```
+
+El `applied_at` de esas ocho filas fue inicializado durante la conversión del 2026-08-09 alrededor de:
+
+```text
+2026-08-09T04:14:49Z
+```
+
+Ese timestamp refleja el momento de la corrección de tracking, no necesariamente la hora histórica exacta de cada postulación.
+
+Shortlist regenerado después de la conversión:
 
 ```text
 Focus          11
@@ -394,7 +414,7 @@ Migraciones publicadas:
 012_application_opportunity_identity.sql
 ```
 
-No hubo migration para geo/recency V2.
+No hubo migration para geo/recency V2 ni para batch application tracking.
 
 Tablas/vistas relevantes:
 
@@ -1493,9 +1513,9 @@ Reduction comes from:
 
 ---
 
-## 21. Manual application tracking
+## 21. Manual application tracking — flujo simplificado
 
-Migration 012 identity:
+Migration 012 identity permanece:
 
 ```text
 record_kind
@@ -1523,27 +1543,6 @@ One current row per job opportunity.
 
 No transition-history table in V1.
 
-Command:
-
-```powershell
-python -m chamba_hunter.commands.track_application `
-    --record-kind <ATS|LEAD> `
-    --record-id <ID> `
-    --status <STATUS>
-```
-
-Statuses:
-
-```text
-PENDING
-APPLIED
-SENT
-INTERVIEW
-REJECTED
-WITHDRAWN
-NO_RESPONSE
-```
-
 ### Source of truth
 
 ```text
@@ -1551,92 +1550,201 @@ DB   = source of truth for tracking
 XLSX = review / regenerable output
 ```
 
-Do not edit `Tracked Status` manually in OpenOffice/Excel expecting persistence.
+No editar `Tracked Status` manualmente en OpenOffice/Excel esperando persistencia.
 
-After tracking:
+### Semántica de estados vigente
+
+Para una postulación real a un job:
+
+```text
+APPLIED
+```
+
+es el estado operativo por default.
+
+`SENT` queda disponible para semánticas futuras como outreach/email y no es el default para job applications.
+
+`applied_at`:
+
+```text
+first transition to APPLIED
+→ initialize applied_at
+
+later transitions
+→ preserve applied_at
+```
+
+### Single opportunity — identidad estable
+
+Continúa soportado:
 
 ```powershell
-python -m chamba_hunter.commands.export_shortlist
+python -m chamba_hunter.commands.track_application `
+    --record-kind <ATS|LEAD> `
+    --record-id <ID>
 ```
 
-### Applications observed
+El `--status` es opcional.
 
-8 opportunities were created with:
-
-```text
-status = SENT
-```
-
-Rows:
+Default:
 
 ```text
-LEAD 828
-Pomelo
-Software Engineer
-
-LEAD 1004
-2BRAINS
-Software Engineer Back-end (Semi Senior)
-
-LEAD 168
-Improving
-Semi Senior Back-end Engineer: Java
-
-ATS 8
-Bitso
-Software Engineer - Latam or Europe
-
-ATS 3516
-Credencial Payments
-Senior Backend Developer
-
-ATS 3353
-ITSM Consulting
-Desarrollador Backend - SSR
-
-LEAD 46
-PlainTech Solutions
-Back-end Developer Kotlin/Java
-
-ATS 3359
-Grupo ST
-Desarrollador/a Backend Ssr.
-```
-
-Last creation observed:
-
-```text
-Application id: 8
-```
-
-### SENT vs APPLIED
-
-Current semantics:
-
-```text
-SENT
-→ applied_at remains empty
-
 APPLIED
-→ first transition initializes applied_at
 ```
 
-Do not automatically convert current rows.
+### Single opportunity — company + title
 
-If later deciding:
+Nuevo flujo publicado:
+
+```powershell
+python -m chamba_hunter.commands.track_application `
+    --company "Improving" `
+    --title "Semi Senior Back-end Engineer: Java"
+```
+
+La resolución usa:
 
 ```text
-job applications → APPLIED
-outreach/email   → SENT
+active job_candidates
++
+exact trimmed company name
++
+exact trimmed title
++
+case-insensitive comparison
 ```
 
-make it an explicit product decision first.
+Debe existir exactamente una oportunidad activa.
+
+Si hay:
+
+```text
+0 matches
+or
+>1 match
+```
+
+el command aborta.
+
+No elige silenciosamente.
+
+### Batch tracking por stdin / clipboard
+
+Command:
+
+```text
+src/chamba_hunter/commands/track_applications.py
+```
+
+Input:
+
+```text
+Company<TAB>Title
+Company<TAB>Title
+...
+```
+
+Puede aceptar header:
+
+```text
+Company<TAB>Title
+```
+
+y lo ignora.
+
+Uso normal desde clipboard:
+
+```powershell
+Get-Clipboard | python -m chamba_hunter.commands.track_applications
+```
+
+Default:
+
+```text
+status = APPLIED
+```
+
+Flujo:
+
+```text
+parse all rows
+→ deduplicate repeated company/title pairs
+→ resolve every row
+→ if all are unique, begin writes
+→ track each resolved opportunity
+→ regenerate shortlist automatically
+```
+
+Importante:
+
+```text
+resolution is all-before-write
+```
+
+Una ambigüedad de resolución aborta antes de cualquier application write.
+
+Los writes se ejecutan después de resolver toda la tanda; no se promete una única transacción SQLite para toda la tanda.
+
+### Batch dry-run
+
+```powershell
+Get-Clipboard |
+    python -m chamba_hunter.commands.track_applications --dry-run
+```
+
+Semántica:
+
+```text
+resolve all
+→ print canonical ATS/LEAD identities
+→ no application writes
+→ no XLSX export
+```
+
+### Skip export
+
+Por default, un batch exitoso regenera:
+
+```text
+output/chamba-shortlist.xlsx
+```
+
+Puede evitarse con:
+
+```text
+--skip-export
+```
+
+### Aplicaciones observadas al cierre
+
+Las ocho oportunidades previamente registradas fueron resueltas exitosamente por company + title en dry-run:
+
+```text
+LEAD 828 | Pomelo | Software Engineer
+LEAD 1004 | 2BRAINS | Software Engineer Back-end (Semi Senior)
+LEAD 168 | Improving | Semi Senior Back-end Engineer: Java
+ATS 8 | Bitso | Software Engineer - Latam or Europe
+ATS 3516 | Credencial Payments | Senior Backend Developer
+ATS 3353 | ITSM Consulting | Desarrollador Backend - SSR
+LEAD 46 | PlainTech Solutions | Back-end Developer Kotlin/Java
+ATS 3359 | Grupo ST | Desarrollador/a Backend Ssr.
+```
+
+Después del dry-run se ejecutó el batch real:
+
+```text
+SENT → APPLIED
+```
+
+para las ocho.
+
+Todas quedaron con `applied_at` inicializado.
 
 ### 2BRAINS 1004
 
-`LEAD 1004` is now `OUT_OF_SCOPE` after geography correction.
+`LEAD 1004` está `OUT_OF_SCOPE` después de geography correction.
 
-Its manual tracking remains valid.
+Su tracking `APPLIED` permanece válido.
 
 ```text
 operational eligibility
@@ -1737,23 +1845,65 @@ Do not treat this isolated failure as a geo/recency defect.
 
 ## 23. Workflow operativo
 
-Routine:
+### Routine refresh
+
+Cuando se quiere traer y recalcular oportunidades nuevas:
+
+```powershell
+python -m chamba_hunter.commands.refresh_search --apply
+```
+
+Luego:
 
 ```text
-refresh_search --apply
-→ open output/chamba-shortlist.xlsx
+open output/chamba-shortlist.xlsx
 → Focus
 → High Value
 → apply manually
-→ track_application in DB
-→ export_shortlist if tracking must appear immediately
 ```
 
-Do not modify tracking manually inside XLSX.
+### Registrar postulaciones
 
-`Tracked Status` is visible for review/filtering.
+Workflow diario recomendado:
 
-Focus does not automatically exclude already-applied opportunities.
+```text
+1. postularse manualmente a una o varias oportunidades;
+2. copiar del XLSX las columnas Company + Title de esas filas;
+3. ejecutar un único batch desde clipboard;
+4. DB queda actualizada como APPLIED;
+5. XLSX se regenera automáticamente.
+```
+
+Command:
+
+```powershell
+Get-Clipboard | python -m chamba_hunter.commands.track_applications
+```
+
+Para revisar la resolución sin escribir:
+
+```powershell
+Get-Clipboard |
+    python -m chamba_hunter.commands.track_applications --dry-run
+```
+
+No hace falta correr `refresh_search` después de cada postulación.
+
+No hace falta ejecutar `export_shortlist` manualmente después de un batch normal porque `track_applications` exporta por default.
+
+Para single-item tracking puede seguir usándose:
+
+```text
+track_application
+```
+
+por canonical identity o exact company + title.
+
+### Tracking y ranking siguen separados
+
+`Tracked Status` es visible para review/filtering.
+
+Focus no excluye automáticamente already-applied opportunities.
 
 Reason:
 
@@ -1771,43 +1921,49 @@ manual application state
 Chamba Hunter MVP local operativo = COMPLETE
 ```
 
-V2 fixed defects observed during real usage.
+Geo/recency V2 corrigió defects observados durante uso real.
 
-There is no mandatory next engineering vertical.
+Batch application tracking redujo fricción real del workflow de postulaciones.
+
+No existe una vertical obligatoria inmediata.
 
 Possible future lines:
 
 ### A. Operational usage / tuning
 
-Continue using:
+Continuar usando:
 
 ```text
 Focus
 High Value
-track_application
+track_applications
 ```
 
-and collect real false-positive/false-negative evidence.
+y recolectar evidencia real de falsos positivos/negativos.
 
-### B. Tracking semantics
+### B. Application tracking sólo si aparece nueva fricción
 
-Only if real friction appears:
+El problema inmediato de ingresar manualmente `Record Kind + Record ID` ya está resuelto.
+
+No rediseñar preventivamente.
+
+Posibles mejoras futuras sólo ante evidencia:
 
 ```text
-SENT vs APPLIED
-applied_at semantics
 status transition history
+bulk notes
+additional disambiguation only if exact company/title becomes frequently ambiguous
 ```
 
 ### C. ATS discovery coverage
 
-Measure marginal value of discovering ATS for new broad companies.
+Medir marginal value de descubrir ATS para nuevas broad companies.
 
-Do not enable indiscriminately in routine refresh.
+No activar indiscriminadamente en routine refresh.
 
 ### D. Outreach fallback
 
-Only:
+Sólo:
 
 ```text
 public careers/recruiting email
@@ -1818,9 +1974,11 @@ Never infer personal recruiter emails.
 
 Never auto-send.
 
+Para outreach futuro podría ser razonable usar `SENT`, separado de job applications `APPLIED`.
+
 ### E. Additional search profiles
 
-Only when a real second use case exists.
+Sólo cuando exista un segundo caso real.
 
 ---
 
@@ -1837,12 +1995,13 @@ Only when a real second use case exists.
 - no XLSX as source of truth;
 - no `refresh_search --apply` as a simple code test;
 - no assumption that `NEW` means recently published;
-- no assumption that `SENT` fills `applied_at`;
+- no usar `SENT` como default de job application;
+- no volver a pedir `Record Kind + Record ID` para el workflow normal cuando Company + Title puede resolver de forma única;
 - no project tests unless explicitly requested.
 
 ---
 
-## 26. Published geo/recency V2 files
+## 26. Published geo/recency V2
 
 Commit:
 
@@ -1862,13 +2021,58 @@ src/chamba_hunter/services/job_shortlist_report_service.py
 src/chamba_hunter/sources/getonboard_jobs.py
 ```
 
-The same commit also contained the previous compacted `docs/PROJECT_CONTEXT.md`.
+---
 
-This docs-only follow-up exists to make that compact handoff canonical and accurate.
+## 27. Published simplified application tracking
+
+Commit:
+
+```text
+9760d76eceb755ce58ebc4bcdec56470bb3ef61c
+simplify application tracking
+```
+
+Files:
+
+```text
+src/chamba_hunter/commands/track_application.py
+src/chamba_hunter/commands/track_applications.py
+src/chamba_hunter/repositories/application_repository.py
+src/chamba_hunter/services/application_tracking_service.py
+```
+
+Key behavior:
+
+```text
+track_application
+→ identity OR exact active company+title
+→ APPLIED default
+
+track_applications
+→ Company<TAB>Title stdin
+→ resolve all before writes
+→ APPLIED default
+→ export shortlist by default
+```
+
+Validation observed:
+
+```text
+8 / 8 existing applications resolved uniquely in dry-run
+dry-run made no application writes
+8 / 8 transitioned SENT → APPLIED
+all 8 received applied_at
+XLSX regenerated
+Focus 11
+High Value 68
+All Current 1079
+History 41
+git diff --check PASS before publication
+```
 
 ---
 
-## 27. Prompt operativo para nueva conversación
+## 28. Prompt operativo para nueva conversación
 
 ```text
 Proyecto: Chamba Hunter
@@ -1882,19 +2086,17 @@ Source of truth:
 - DB counts are observed state, not permanent contracts.
 
 Published reference at this handoff:
-- 034fcf34b92c3cfe6e6a75cb7cff2033815b3921 (`final and fixes`);
-- contains published Get on Board geography enrichment;
-- contains job_recency.py;
-- contains OPERATIONAL_PRIORITY_V2;
-- contains SHORTLIST_REPORT_V2;
-- no new migration;
-- ARGENTINA_V1 and MATCHING_V1 unchanged.
+- 9760d76eceb755ce58ebc4bcdec56470bb3ef61c
+  (`simplify application tracking`);
+- parent docs context: f57b679c12f22a183070482666c04c90c31d4f4a;
+- geo/recency V2: 034fcf34b92c3cfe6e6a75cb7cff2033815b3921;
+- no migration after 012.
 
 Historical detailed handoff:
 - if detailed pre-V2 reasoning is needed, inspect
   docs/PROJECT_CONTEXT.md at
-  0902b45a91eb612c1afc77e785a05f59c32658c7.
-- current compact context is the canonical operational handoff.
+  0902b45a91eb612c1afc77e785a05f59c32658c7;
+- current compact context is canonical for operations.
 
 Current observed DB:
 - latest operational priority: Run 114 SUCCESS;
@@ -1942,17 +2144,27 @@ Recency:
 Application tracking:
 - DB = source of truth;
 - XLSX = regenerable output;
-- 8 opportunities recorded as SENT:
-  LEAD 828 Pomelo;
-  LEAD 1004 2BRAINS;
-  LEAD 168 Improving;
-  ATS 8 Bitso;
-  ATS 3516 Credencial Payments;
-  ATS 3353 ITSM Consulting;
-  LEAD 46 PlainTech Solutions;
-  ATS 3359 Grupo ST.
-- SENT currently does not initialize applied_at.
-- do not convert to APPLIED without explicit decision.
+- job applications use APPLIED by default;
+- SENT is not the default for job applications and may remain useful for future outreach;
+- 8 existing job opportunities were explicitly migrated SENT → APPLIED;
+- their applied_at timestamps were initialized during that conversion, not backdated.
+
+Normal application workflow:
+- manually apply;
+- copy Company + Title rows from XLSX;
+- run:
+  Get-Clipboard | python -m chamba_hunter.commands.track_applications
+- command resolves all rows before any tracking write;
+- 0 or multiple active exact matches abort resolution;
+- successful batch uses APPLIED by default;
+- shortlist is regenerated automatically;
+- --dry-run resolves without writes/export;
+- --skip-export avoids automatic XLSX regeneration.
+
+Single tracking:
+- track_application still accepts ATS/LEAD identity;
+- it also accepts exact --company + --title;
+- default status is APPLIED.
 
 Delivery directives:
 - diagnostic Python inline in PowerShell using @' ... '@ | python -;
