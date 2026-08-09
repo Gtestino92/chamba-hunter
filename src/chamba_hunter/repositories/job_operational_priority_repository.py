@@ -38,6 +38,7 @@ class OperationalCandidateRow:
     first_seen_at: datetime
     last_seen_at: datetime
     last_changed_at: datetime | None
+    raw_payload_json: str | None
 
     professional_score: float
     professional_match_level: str
@@ -284,6 +285,7 @@ class JobOperationalPriorityRepository:
                 jc.last_seen_at,
                 {last_changed_expression}
                     AS last_changed_at,
+                jc.raw_payload_json,
                 pm.score AS professional_score,
                 pm.match_level
                     AS professional_match_level,
@@ -446,6 +448,14 @@ class JobOperationalPriorityRepository:
             ),
             last_changed_at=_optional_datetime(
                 row["last_changed_at"]
+            ),
+            raw_payload_json=(
+                str(
+                    row["raw_payload_json"]
+                )
+                if row["raw_payload_json"]
+                is not None
+                else None
             ),
             professional_score=float(
                 row["professional_score"]
@@ -806,6 +816,7 @@ class JobOperationalPriorityRepository:
             first_seen_at=first_seen_at,
             last_seen_at=last_seen_at,
             last_changed_at=last_changed_at,
+            raw_payload_json=None,
             professional_score=float(
                 previous["professional_score"]
             ),

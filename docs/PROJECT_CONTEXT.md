@@ -1,376 +1,291 @@
 # Chamba Hunter — Project Context / Handoff operativo
 
-**Fecha de actualización:** 2026-08-08  
-**Repositorio:** `Gtestino92/chamba-hunter`  
+**Fecha de actualización:** 2026-08-09
+**Repositorio:** `Gtestino92/chamba-hunter`
 **Rama operativa:** `main`
-
-## Estado actual de GitHub y worktree
-
-Último `main` confirmado en GitHub durante esta sesión:
-
-```text
-5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
-tracking
-```
-
-Ese `main` ya contiene el pipeline operativo completo v1:
-
-- broad acquisition;
-- careers / ATS discovery;
-- Greenhouse, Lever, Ashby, Workable, SmartRecruiters, BambooHR y Hiring Room ingestion;
-- cross-source canonicalization v1;
-- Argentina eligibility v1;
-- occupation / IT / backend classification v1;
-- skills classification v1;
-- seniority classification v1;
-- professional matching v1;
-- content freshness v1;
-- operational/application priority v1;
-- shortlist/report v1;
-- manual application tracking v1;
-- end-to-end refresh v1;
-- migraciones `001` a `012`;
-- `BACKEND_SOFTWARE_V1`;
-- `MATCHING_V1`;
-- `JOB_CONTENT_V1`;
-- `OPERATIONAL_PRIORITY_V1`;
-- `SHORTLIST_REPORT_V1`.
-
-El slice **manual application tracking + end-to-end refresh v1** fue publicado en:
-
-```text
-5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
-tracking
-```
-
-Después del push no queda una vertical obligatoria pendiente para que Chamba Hunter sea utilizable como MVP local.
-
-Estado SQLite local más reciente confirmado:
-
-```text
-Run 99
-OPERATIONAL_PRIORITY_V1
-SUCCESS
-
-applications rows = 0
-migration 012 applied = yes
-```
-
-Shortlist local más reciente:
-
-```text
-Focus          34
-High Value     82
-All Current  1120
-History         0
-```
-
-Output local deliberadamente ignorado por Git:
-
-```text
-output/chamba-shortlist.xlsx
-```
-
-Después de publicar el commit `tracking`, el worktree debería quedar limpio salvo archivos locales deliberadamente no trackeados/ignorados.
-
-GitHub/código actual es siempre fuente de verdad frente a este documento. Los conteos de runs son evidencia observada de la DB local y pueden cambiar después de futuros refreshes.
+**Entorno habitual:** Windows + PowerShell + `.venv`
 
 ---
 
-## 1. Reglas operativas
+## 0. Fuente de verdad y estado actual
 
-Antes de recomendar, diseñar o escribir código:
+Código/GitHub actual es siempre fuente de verdad frente a este documento.
 
-1. Verificar HEAD real de `main`, últimos commits y worktree.
-2. Leer este `docs/PROJECT_CONTEXT.md`.
-3. Inspeccionar directamente los archivos reales del vertical a tocar.
-4. Distinguir siempre:
-   - confirmado por código;
-   - confirmado por corrida manual;
+Antes de recomendar o implementar:
+
+1. verificar HEAD real de `main`;
+2. verificar `git status --short`;
+3. leer este archivo completo;
+4. inspeccionar directamente los archivos del vertical a tocar;
+5. distinguir:
+   - publicado en GitHub;
+   - cambio local pendiente;
+   - observado en DB/corrida manual;
    - inferido;
-   - pendiente.
-5. No asumir que conteos históricos siguen vigentes sin consultar la DB local.
-6. No crear branches, commits, pushes, PRs ni writes a GitHub salvo pedido explícito.
-7. El usuario hace commit/push manualmente.
-8. Trabajar en vertical slices pequeños.
-9. Código/comentarios en inglés; explicación en español.
-10. Windows + PowerShell es el entorno operativo habitual.
-11. Para scripts inline en PowerShell, preferir:
+   - pendiente de reproducción.
+
+### GitHub publicado
+
+Último `main` confirmado al cerrar este handoff:
+
+```text
+0902b45a91eb612c1afc77e785a05f59c32658c7
+```
+
+El commit publicado anterior que cerró manual application tracking + refresh fue:
+
+```text
+5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
+tracking
+```
+
+`0902b45...` sólo actualizó contexto; funcionalmente el baseline publicado sigue siendo el pipeline v1 de `5f8d0b3...`.
+
+### Slice local validado pero todavía NO publicado
+
+Existe un slice local ya aplicado y validado:
+
+```text
+Get on Board geography enrichment
++
+source publication recency
++
+OPERATIONAL_PRIORITY_V2
++
+SHORTLIST_REPORT_V2
+```
+
+Archivos locales esperados antes de publicar:
+
+```text
+M  src/chamba_hunter/repositories/job_operational_priority_repository.py
+M  src/chamba_hunter/services/broad_job_acquisition_service.py
+M  src/chamba_hunter/services/job_operational_priority_service.py
+M  src/chamba_hunter/services/job_shortlist_report_service.py
+M  src/chamba_hunter/sources/getonboard_jobs.py
+?? src/chamba_hunter/domain/job_recency.py
+M  docs/PROJECT_CONTEXT.md
+```
+
+No asumir que este slice está en GitHub hasta verificar un commit posterior a `0902b45...`.
+
+No hubo migration nueva para este slice.
+
+---
+
+## 1. Directivas operativas de trabajo
+
+### Git / publicación
+
+- No crear branches, commits, pushes, PRs ni writes a GitHub salvo pedido explícito.
+- El usuario hace commit/push manualmente.
+- Antes de cualquier recomendación concreta, verificar HEAD/worktree actuales.
+- Trabajar en vertical slices pequeños.
+- No modificar reglas estables silenciosamente; cambios materiales requieren nueva versión explícita.
+- No ejecutar `refresh_search --apply` sólo como validación de código: modifica DB y avanza watermark operacional.
+
+### Idioma / estilo
+
+- Explicaciones: español.
+- Código, comentarios y prompts de agentes: inglés.
+- Entorno operativo habitual: Windows + PowerShell.
+
+### Scripts de diagnóstico / consulta
+
+No pedir al usuario que cree archivos `.py` temporales para diagnósticos manejables.
+
+Entregar Python inline ejecutable directamente desde PowerShell:
 
 ```powershell
 @'
-...
+# python
 '@ | python -
 ```
 
-12. Cuando se entregue un script o archivo para reemplazar, entregarlo completo; no fragmentos/parches.
-13. No agregar tests salvo pedido explícito.
-14. Validaciones baratas estándar:
+Usar archivos `.txt` para salida larga que deba subirse.
+
+### Implementaciones / archivos
+
+Cuando se entregue una implementación:
+
+- entregar **un ZIP**;
+- el ZIP debe contener directamente rutas **repo-relative**, por ejemplo:
+
+```text
+src/chamba_hunter/...
+docs/...
+migrations/...
+```
+
+- no agregar `apply_*.py`;
+- no agregar carpetas auxiliares como `files/`;
+- no pedir que el usuario copie fragmentos manualmente.
+
+Junto con cada ZIP, entregar **un único bloque PowerShell** que:
+
+1. descomprima sobre la raíz del repo;
+2. ejecute las validaciones/acciones necesarias;
+3. falle sin ocultar errores;
+4. borre el ZIP sólo si lo anterior salió bien;
+5. muestre `git diff --stat` y `git status --short` cuando corresponda.
+
+Si el único artefacto fuera un `.ps1`, también empaquetarlo en ZIP.
+
+### Validación
+
+No agregar ni ejecutar project tests salvo pedido explícito.
+
+Validaciones baratas estándar:
 
 ```powershell
 python -m compileall -q src
 git diff --check
 ```
 
-más una corrida funcional/manual focalizada.
-15. Para cambios multiarchivo, preferir ZIP con rutas repo-relative.
-16. No hacer bypass anti-bot, fake browser ni scraping agresivo.
-17. 401/403/429 son señales operativas, no una invitación a evadir protección.
-18. Evitar dependencias nuevas salvo necesidad clara.
+más validaciones funcionales/manuales focalizadas.
+
+### Red / scraping
+
+- No bypass anti-bot.
+- No fake browser / evasión.
+- No proxies para sortear protecciones.
+- `401/403/429` son señales operativas, no una invitación a evadir.
+- Evitar dependencias nuevas salvo necesidad clara.
 
 ---
 
-## 2. Stack y arquitectura
-
-- Python 3.12.x.
-- venv `.venv`.
-- package `chamba_hunter`.
-- SQLite local.
-- repositories explícitos con `sqlite3`.
-- sin SQLAlchemy.
-- Pydantic v2 en boundaries externos.
-- dataclasses en domain/tracing.
-- `httpx` como HTTP client.
-- `openpyxl` para export XLSX local.
-- migraciones SQL inmutables.
-- services para reglas de negocio.
-- commands para workflows manuales.
-- tracing con `runs`, `run_steps`, `ats_syncs`.
-- sin UI/web API por ahora.
-- sin automated applications.
-
----
-
-## 3. Objetivo del producto
+## 2. Objetivo del producto
 
 Chamba Hunter es una herramienta local de inteligencia para búsqueda laboral.
 
-No aplica automáticamente. Construye y mantiene un corpus amplio para reducirlo de manera auditable hasta obtener oportunidades accionables.
+No aplica automáticamente y no envía emails automáticamente.
 
-Pipeline conceptual vigente:
+Pipeline vigente:
 
 ```text
 wide-net job sources
-    ↓
-broad job leads
-    ↓
-companies / public identity
-    ↓
-careers discovery
-    ↓
-ATS evidence
-    ↓
-full ATS board sync
-    ↓
-normalized raw corpus
-    ↓
-cross-source canonicalization
-    ↓
-Argentina eligibility
-    ↓
-occupation / IT / backend classification
-    ↓
-skills
-    ↓
-seniority
-    ↓
-professional matching
-    ↓
-operational / application priority
-    ↓
-shortlist / Excel report
-    ↓
-manual application tracking / refresh workflow
-```
-
-El end game debe soportar además un refresh manual orientado a **early application**:
-
-```text
-refresh acquisition / ATS
+→ broad job leads
+→ companies / public identity
+→ optional careers / ATS discovery
+→ ATS ingestion
 → canonicalization
-→ geography
-→ occupation
+→ Argentina eligibility
+→ occupation / backend
 → skills
 → seniority
-→ matching
-→ operational priority
-→ shortlist de oportunidades nuevas/relevantes
+→ professional matching
+→ operational priority / source recency
+→ shortlist XLSX
+→ manual application tracking
+→ repeatable refresh
 ```
 
-Outreach futuro y separado:
-
-```text
-company
-    ↓
-no matching job
-    ↓
-public recruiting/careers email
-or explicit general application URL
-    ↓
-manual outreach candidate
-```
-
-
-Nunca inferir ni adivinar emails personales de recruiters.
-
-### Future architecture consideration — reusable search profiles
-
-La prioridad sigue siendo la búsqueda de **Backend Software Engineer**.
-
-No generalizar anticipadamente todo el proyecto ni construir un framework abstracto para múltiples profesiones. Tampoco refactorizar código estable sólo por una posibilidad futura.
-
-Sin embargo, preservar esta separación:
-
-```text
-job acquisition / normalization / understanding
-```
-
-de:
-
-```text
-preferences of one specific professional search
-```
-
-Arquitectura conceptual:
-
-```text
-SHARED JOB SEARCH ENGINE
-
-acquisition
-ATS discovery
-ATS ingestion
-normalization
-canonicalization
-freshness
-application channels
-tracing
-        ↓
-SEARCH-SPECIFIC EVALUATION
-
-geographic eligibility
-occupation
-skills / domains
-credentials when applicable
-seniority
-matching
-ranking
-```
-
-La primera parte debe ser ampliamente reutilizable sobre un mismo corpus.
-
-La segunda puede depender de un:
-
-```text
-search_profile
-```
-
-El perfil implementado actualmente es:
-
-```text
-BACKEND_SOFTWARE_V1
-```
-
-y expresa preferencias de búsqueda sobre:
-
-```text
-occupation/backend relevance
-skills y transferibilidad
-seniority
-leadership
-```
-
-El principio fundamental es:
+Principio central:
 
 ```text
 job understanding
 !=
 search-profile matching
-```
-
-Por ejemplo:
-
-```text
-job skills:
-- Java
-- Spring Boot
-- PostgreSQL
-```
-
-significa que esas skills fueron observadas en el posting.
-
-No significa por sí mismo:
-
-```text
-this is a good match for the current search profile
-```
-
-La comparación contra preferencias, experiencia y transferibilidad pertenece a `MATCHING_V1`.
-
-La implementación actual ya prueba el modelo:
-
-```text
-one shared job corpus
-        ↓
-search_profiles
-        ↓
-job_professional_matches
-```
-
-sin modificar geography, occupation, skills ni seniority para adaptarlos al usuario.
-
-Un futuro segundo search profile puede reutilizar acquisition, ATS ingestion, normalization, canonicalization, freshness y application channels, pero no debe motivar una abstracción preventiva ahora.
-
----
-
-## 4. Search profile backend actual
-
-
-Este perfil se usa en `MATCHING_V1`, no para adquisición ni para decidir si una skill existe en una vacante:
-
-- Backend Software Engineer.
-- Java.
-- Kotlin.
-- Spring Boot.
-- REST APIs.
-- Distributed Systems.
-- batch / schedulers.
-- retries.
-- idempotency.
-- distributed locks.
-- resilience.
-- PostgreSQL.
-- Oracle.
-- MongoDB.
-- Flyway / JPA.
-- AWS EC2 / RDS / S3 / SSM.
-- Docker.
-- Kubernetes.
-- OpenShift.
-- GitHub Actions.
-- GitLab CI/CD.
-- TypeScript / Node.js / NestJS como stack secundario.
-- Android / Compose secundario.
-- English C1.
-- seniority objetivo aproximado: semisenior / mid-level.
-
-Orden correcto:
-
-```text
-geography
-→ occupation/backend
-→ skills
-→ seniority
-→ professional matching
-→ operational priority
+!=
+operational priority
+!=
+manual application state
 ```
 
 No mezclar estas capas.
 
 ---
 
-## 5. Schema y migraciones
+## 3. Stack
 
-Migraciones confirmadas en GitHub `main`:
+- Python 3.12.x.
+- `.venv`.
+- package `chamba_hunter`.
+- SQLite local.
+- `sqlite3`, sin SQLAlchemy.
+- Pydantic v2 en boundaries externos.
+- dataclasses en domain/tracing.
+- `httpx`.
+- `openpyxl`.
+- migraciones SQL inmutables.
+- services para reglas de negocio.
+- commands para workflows manuales.
+- tracing con `runs`, `run_steps`, `ats_syncs`.
+- sin UI/web API.
+- sin auto-apply.
+
+---
+
+## 4. Search profile actual
+
+Perfil:
+
+```text
+BACKEND_SOFTWARE_V1
+```
+
+Target aproximado:
+
+```text
+Backend Software Engineer
+Java / Kotlin
+Spring Boot
+REST APIs
+Distributed Systems
+batch / schedulers
+retries / idempotency / distributed locks
+resilience
+PostgreSQL / Oracle / MongoDB
+Flyway / JPA
+AWS EC2 / RDS / S3 / SSM
+Docker / Kubernetes / OpenShift
+GitHub Actions / GitLab CI
+TypeScript / Node.js / NestJS como stack secundario
+English C1
+seniority objetivo: semisenior / mid-level
+```
+
+Orden conceptual:
+
+```text
+geography
+→ occupation/backend
+→ skills
+→ seniority
+→ MATCHING_V1
+→ OPERATIONAL_PRIORITY_V2
+```
+
+---
+
+## 5. Versiones vigentes
+
+Estables y publicadas:
+
+```text
+BACKEND_SOFTWARE_V1
+ARGENTINA_V1
+OCCUPATION_V1
+SKILLS_V1
+SENIORITY_V1
+MATCHING_V1
+JOB_CONTENT_V1
+```
+
+Localmente validadas, pendientes de publicación:
+
+```text
+OPERATIONAL_PRIORITY_V2
+SHORTLIST_REPORT_V2
+```
+
+`ARGENTINA_V1` y `MATCHING_V1` NO fueron modificadas para el slice geo/recency.
+
+---
+
+## 6. Schema / migrations
+
+Migraciones publicadas:
 
 ```text
 001_initial_schema.sql
@@ -384,15 +299,10 @@ Migraciones confirmadas en GitHub `main`:
 009_job_professional_matches.sql
 010_job_content_freshness.sql
 011_job_operational_priorities.sql
-```
-
-Migration `012` confirmada en `main`:
-
-```text
 012_application_opportunity_identity.sql
 ```
 
-Agrega identidad genérica de oportunidad a `applications` para soportar tanto `ATS` como `LEAD` sin inventar un `jobs.id`.
+Migration 012 está aplicada en la DB local.
 
 Tablas/vistas relevantes:
 
@@ -404,112 +314,40 @@ ats_detections
 company_ats
 public_contacts
 jobs
-search_profiles
-job_matches
-applications
-runs
-run_steps
-ats_syncs
-company_classifications
 job_leads
 job_ats_hints
+job_candidates            # view
 job_eligibility_classifications
 job_occupation_classifications
 job_skill_classifications
 job_seniority_classifications
+search_profiles
 job_professional_matches
 job_operational_priorities
-view job_candidates
+applications
+runs
+run_steps
+ats_syncs
 ```
 
 ---
 
-## 6. Companies y broad acquisition
+## 7. Fuentes
 
-Fuentes broad implementadas:
+### Broad
 
 ```text
 HIMALAYAS
 GETONBOARD
 ```
 
-La adquisición es deliberadamente amplia.
+La adquisición broad es deliberadamente amplia.
 
-No filtrar por Argentina ni por IT/backend en adapters.
+No filtrar Argentina/backend en adapters.
 
-Principios:
+### ATS
 
-- preservar provenance;
-- `UNIQUE(source_type, external_id)` para leads;
-- broad pagination puede ser parcial;
-- ausencia en una corrida broad no implica cierre;
-- broad leads no usan snapshot-deactivation de ATS;
-- `first_seen_at` se preserva;
-- `last_seen_at` se actualiza.
-
-Última adquisición broad confirmada localmente:
-
-```text
-Run 85
-
-HIMALAYAS
-  received   500
-  created    500
-  updated      0
-
-GETONBOARD
-  received   339
-  created    139
-  updated    200
-
-TOTAL received   839
-TOTAL created    639
-TOTAL updated    200
-```
-
-Estado inmediatamente después de adquisición y antes de la nueva canonicalization:
-
-```text
-active unresolved leads   1016
-raw active candidates     4678
-stored ATS hints              0
-```
-
-La corrida amplió deliberadamente la ventana broad respecto del baseline anterior de 200 + 200.
-
-`job_ats_hints` sigue en cero para el corpus observado.
-
----
-
-## 7. ATS detection
-
-Providers soportados actualmente:
-
-```text
-GREENHOUSE
-ASHBY
-LEVER
-SMARTRECRUITERS
-WORKABLE
-BAMBOOHR
-HIRINGROOM
-CUSTOM
-```
-
-Principios:
-
-- no blind probing;
-- provider probes sólo con evidencia pública previa;
-- `company_ats` representa estado actual;
-- `ats_detections` preserva evidencia histórica;
-- 401/403/429 se registran y no se evaden;
-- no promover un ATS sólo por una URL dudosa.
-
----
-
-## 8. ATS ingestion
-
-Adapters/sync activos:
+Soportados:
 
 ```text
 GREENHOUSE
@@ -521,37 +359,17 @@ BAMBOOHR
 HIRINGROOM
 ```
 
-Último snapshot activo confirmado después de Runs 86–92:
+`CUSTOM` existe como provider de detection, no como sync genérico equivalente.
 
-```text
-GREENHOUSE       1659
-LEVER            1139
-HIRINGROOM        485
-SMARTRECRUITERS   197
-ASHBY              90
-WORKABLE           65
-BAMBOOHR           24
-----------------------
-ATS ACTIVE       3659
-```
+Hiring Room sigue modelado como ATS, no como broad.
 
-En ese refresh Greenhouse creó 2 jobs y desactivó 5; los demás providers no crearon ni desactivaron jobs.
+Bumeran/ZonaJobs directos no se fuerzan con bypass; `Bumeran Selecta` y `Jobint` entran vía Hiring Room.
 
-Estos números son estado local observado y pueden cambiar.
+---
 
-### Semántica importante de freshness
+## 8. Freshness de contenido
 
-Antes de migration `010`, `JobRepository.sync_board_jobs()` y `JobLeadRepository.upsert_source_jobs()` sólo podían distinguir:
-
-```text
-first_seen_at
-last_seen_at
-is_active
-```
-
-El contador `updated` de los syncs históricos significa “registro existente re-observado/escrito”, no necesariamente “contenido cambió”.
-
-Desde el slice local pendiente de publicación se agrega:
+`JOB_CONTENT_V1` persiste en `jobs` y `job_leads`:
 
 ```text
 content_hash
@@ -559,20 +377,7 @@ content_hash_version
 last_changed_at
 ```
 
-a:
-
-```text
-jobs
-job_leads
-```
-
-Hash version:
-
-```text
-JOB_CONTENT_V1
-```
-
-Contenido material incluido:
+Material hash incluye:
 
 ```text
 title
@@ -583,10 +388,10 @@ employment_type
 job_url
 apply_url
 published_at
-expires_at   # sólo job_leads
+expires_at   # leads
 ```
 
-No se incluyen:
+No incluye:
 
 ```text
 last_seen_at
@@ -597,2091 +402,473 @@ raw_payload_json
 Semántica:
 
 ```text
-first observation
-→ content_hash current
-→ last_changed_at = NULL
+new
+→ hash actual
+→ last_changed_at NULL
 
-same content observed again
-→ update last_seen_at
+same material content
 → preserve last_changed_at
 
-material content hash changes
+material change
 → last_changed_at = seen_at
 ```
 
-La inicialización de migration `010` se hace desde Python porque SQLite no tiene SHA-256 built-in.
-
-El baseline inicializó hashes para:
-
-```text
-jobs       3662
-job_leads   400
-```
-
-sin fabricar cambios históricos:
-
-```text
-jobs last_changed_at != NULL        0
-job_leads last_changed_at != NULL   0
-```
-
-`last_seen_at` sigue significando “observado nuevamente”, no “cambió”.
-
-ATS snapshot absence puede desactivar `jobs`.
-
-Broad source absence sigue sin implicar cierre automático.
-
-Freshness es parte del shared job search engine y permanece separada de `MATCHING_V1`.
+`jobs_updated` de un sync y `last_seen_at` significan re-observación/escritura; no prueban cambio material.
 
 ---
 
-## 9. Hiring Room — terminado
+## 9. Get on Board geography enrichment — slice local validado
 
-Hiring Room se modela como:
+### Defecto que motivó el cambio
 
-```text
-AtsProvider.HIRINGROOM
-```
-
-No como broad `SourceType`.
-
-Archivos publicados:
+La API broad entregaba:
 
 ```text
-src/chamba_hunter/sources/hiringroom.py
-src/chamba_hunter/services/hiringroom_job_ingestion_service.py
-src/chamba_hunter/commands/sync_hiringroom_jobs.py
+remote
+remote_modality
+countries / remote_zone / location resources
 ```
 
-Contrato público utilizado:
+pero la normalización anterior perdía `remote_modality`.
+
+Eso hacía que muchos:
 
 ```text
-https://{tenant}.hiringroom.com/jobs
-POST https://{tenant}.hiringroom.com/jobs/getVacanciesForPortal/{page}
-GET  https://{tenant}.hiringroom.com/jobs/get_vacancy/{id}
+remote_local
 ```
 
-No se fabrican timestamps exactos desde edades relativas.
-
-Última corrida confirmada:
+quedaran normalizados sólo como:
 
 ```text
-Run 92
-Tenants:       28
-Succeeded:     28
-Failed:         0
-Jobs received: 485
-Created:         0
-Updated:       485
-Deactivated:     0
+Remote
 ```
 
-Hiring Room discovery manual/indexado queda cerrado por diminishing returns.
-
----
-
-## 10. Bumeran / ZonaJobs
-
-HTML público directo de `bumeran.com.ar` y `zonajobs.com.ar` devolvió sólo shell SPA bajo las restricciones actuales.
-
-No implementar bypass de Cloudflare/browser/proxies.
-
-`Bumeran Selecta` y `Jobint` sí fueron incorporados vía Hiring Room.
-
----
-
-## 11. Cross-source canonicalization v1 — TERMINADO
-
-Objetivo:
-
-```text
-job_leads.canonical_job_id -> jobs.id
-```
-
-sin destruir provenance.
-
-Archivos publicados:
-
-```text
-migrations/004_job_lead_canonicalization.sql
-src/chamba_hunter/repositories/job_lead_canonicalization_repository.py
-src/chamba_hunter/services/job_lead_canonicalization_service.py
-src/chamba_hunter/commands/canonicalize_job_leads.py
-```
-
-Reglas v1:
-
-1. misma `company_id`;
-2. título normalizado;
-3. si hay exactamente un candidato → `TITLE`;
-4. si hay varios → desempatar por location;
-5. si aún hay varios → desempatar por workplace;
-6. nada de fuzzy title;
-7. nada de cross-company matching;
-8. nada de borrado del lead.
-
-Métodos:
-
-```text
-TITLE
-TITLE_LOCATION
-TITLE_LOCATION_WORKPLACE
-```
-
-Run 77:
-
-```text
-Total leads:   400
-Linked:         23
-Unresolved:    377
-Broken links:    0
-```
-
-Métodos:
-
-```text
-TITLE                     19
-TITLE_LOCATION             3
-TITLE_LOCATION_WORKPLACE   1
-```
-
-Casos ambiguos deliberadamente no resueltos incluyeron:
-
-- Bluelight Consulting;
-- Mood Health;
-- Remote.
-
-Después de canonicalization:
-
-```text
-ATS candidates   3662
-LEAD candidates   377
-----------------------
-job_candidates   4039
-```
-
----
-
-## 12. Argentina eligibility v1 — TERMINADO
-
-Principio central:
-
-**`REMOTE` no significa automáticamente “trabajable desde Argentina”.**
-
-Clasificación separada y recomputable. No modifica `jobs` ni `job_leads`.
-
-Archivos publicados:
-
-```text
-migrations/005_job_eligibility_classifications.sql
-src/chamba_hunter/repositories/job_eligibility_repository.py
-src/chamba_hunter/services/argentina_eligibility_service.py
-src/chamba_hunter/commands/classify_argentina_eligibility.py
-```
-
-Tabla:
-
-```text
-job_eligibility_classifications
-```
-
-Identidad:
-
-```text
-UNIQUE(record_kind, record_id)
-```
-
-Estados:
-
-```text
-ELIGIBLE
-INELIGIBLE
-UNKNOWN
-```
-
-También persiste:
-
-```text
-reason
-method
-rule_version
-evidence_json
-classified_at
-```
-
-Rule version:
+y terminaran:
 
 ```text
 ARGENTINA_V1
+→ UNKNOWN / REMOTE_SCOPE_UNKNOWN
 ```
 
-Fuentes de evidencia:
+aunque la página pública exigiera residir en otro país.
 
-- `location_text` tiene precedencia;
-- `workplace_type` es señal complementaria;
-- `title` sólo es fallback para señales geográficas fuertes;
-- `description` no se usa para geography;
-- `Remote` sin scope queda `UNKNOWN`;
-- no intentar forzar `UNKNOWN = 0`.
+### Implementación local
 
-Run 79:
+`getonboard_jobs.py` enriquece jobs remotos usando la página pública.
+
+Reglas:
 
 ```text
-Total:       4039
-Eligible:     831
-Ineligible:  3046
-Unknown:      162
-Created:        0
-Updated:     4039
-Deleted:        0
+fully_remote
+→ location_text = Worldwide
+
+remote_local
+→ extraer residencia explícita de la página
+   ej. "candidates must reside in Chile"
+   → location_text = Chile
+```
+
+También captura fecha pública de publicación cuando hay evidencia segura.
+
+El enrichment se persiste dentro de:
+
+```text
+raw_payload_json["_chamba_source_enrichment"]
+```
+
+con:
+
+```text
+location_text
+published_date
+remote_policy_text
+source
+```
+
+No se fabrica `published_at` timestamp desde una fecha de calendario.
+
+### Guardas operativas
+
+- máximo 250 detail fetches por adquisición;
+- request normal con `httpx`;
+- sin evasión;
+- `429` detiene detail enrichment;
+- `401/403` se toleran sin bypass;
+- redirects deben terminar en dominio Get on Board permitido.
+
+### Extracción de fecha
+
+Se endureció después de review.
+
+Aceptar sólo:
+
+- metadata explícita de publication segura; o
+- fecha visible en la región previa al `<h1>` principal.
+
+No buscar indiscriminadamente cualquier fecha de la descripción.
+
+Validación real:
+
+```text
+LEAD 1005
+2BRAINS
+Software Engineer Back-end (Senior)
+
+remote_modality: remote_local
+location: Chile
+published_date: 2026-02-23
+policy:
+Position is 100% remote, but candidates must reside in Chile.
+```
+
+---
+
+## 10. Resultado geográfico observado tras refresh
+
+Refresh real del slice:
+
+```text
+Run 100 acquire_broad_jobs
+...
+Run 109 classify_argentina_eligibility
+```
+
+Run 100:
+
+```text
+HIMALAYAS
+received   500
+updated    500
+
+GETONBOARD
+received   339
+updated    339
+
+TOTAL received   839
+created            0
+updated          839
+
+active unresolved leads  1005
+raw active candidates    4664
+```
+
+Run 109 — `ARGENTINA_V1`:
+
+```text
+Total        4664
+Eligible      962
+Ineligible   3585
+Unknown       117
 ```
 
 Reasons:
 
 ```text
 ELIGIBLE
-  ARGENTINA_LOCATION       590
-  REMOTE_GLOBAL             98
-  REMOTE_LATAM             130
-  REMOTE_LATAM_TITLE        13
+  ARGENTINA_LOCATION        617
+  REMOTE_GLOBAL             183
+  REMOTE_LATAM              154
+  REMOTE_LATAM_TITLE          8
 
 INELIGIBLE
-  FOREIGN_LOCATION         588
-  FOREIGN_ONSITE_HYBRID    371
-  FOREIGN_REGION_SCOPE     198
-  REMOTE_FOREIGN_LOCATION 1889
+  FOREIGN_LOCATION          645
+  FOREIGN_ONSITE_HYBRID     371
+  FOREIGN_REGION_SCOPE      203
+  REMOTE_FOREIGN_LOCATION  2366
 
 UNKNOWN
-  LOCATION_UNRECOGNIZED      1
-  NO_LOCATION                1
-  REMOTE_SCOPE_UNKNOWN     160
+  LOCATION_UNRECOGNIZED       1
+  NO_LOCATION                 1
+  REMOTE_SCOPE_UNKNOWN      115
 ```
 
-DB invariants:
+### Get on Board específico
+
+Current Get on Board observado:
 
 ```text
-classifications total: 4039
-stale:                    0
-missing:                  0
-rule versions:            1
+336
 ```
 
-Toda la tabla está en `ARGENTINA_V1`.
+Eligibility:
+
+```text
+ELIGIBLE
+  ARGENTINA_LOCATION          22
+  REMOTE_GLOBAL               85
+  REMOTE_LATAM                24
+
+INELIGIBLE
+  FOREIGN_LOCATION           164
+  REMOTE_FOREIGN_LOCATION     41
+
+UNKNOWN                        0
+```
+
+Get on Board `MEDIUM+`:
+
+```text
+86 total
+
+ELIGIBLE
+  ARGENTINA_LOCATION   18
+  REMOTE_GLOBAL        56
+  REMOTE_LATAM         12
+
+UNKNOWN                 0
+```
+
+Esto corrige el defecto original: Get on Board ya no deja `remote_local` ambiguo sólo porque el normalizador perdió el scope.
+
+### Casos 2BRAINS de aceptación
+
+```text
+LEAD 1003
+Software Engineer Back-end (Senior)
+location: Worldwide
+eligibility: ELIGIBLE / REMOTE_GLOBAL
+professional: HIGH 76.0
+
+LEAD 1004
+Software Engineer Back-end (Semi Senior)
+location: Chile
+eligibility: INELIGIBLE / REMOTE_FOREIGN_LOCATION
+professional snapshot: VERY_HIGH 81.0
+operational: OUT_OF_SCOPE
+
+LEAD 1005
+Software Engineer Back-end (Senior)
+location: Chile
+eligibility: INELIGIBLE / REMOTE_FOREIGN_LOCATION
+professional snapshot: HIGH 76.0
+operational: OUT_OF_SCOPE
+```
 
 ---
 
-## 13. Corpus efectivo después de geography
+## 11. Occupation / skills / seniority — último refresh
 
-Universo procesado por occupation y skills:
+Scope downstream actual:
 
 ```text
-ELIGIBLE   831
-UNKNOWN    162
-----------------
-TOTAL      993
+ARGENTINA ELIGIBLE + UNKNOWN = 1079
 ```
 
-Los 3046 `INELIGIBLE` se conservan en DB.
+### Run 110 — OCCUPATION_V1
+
+```text
+Total          1079
+Software        276
+IT technical    142
+Tech adjacent    59
+Non technical   189
+Unknown         413
+```
+
+Software backend relevance:
+
+```text
+BACKEND       87
+FULL_STACK    79
+NON_BACKEND   51
+UNKNOWN       59
+```
+
+### Run 111 — SKILLS_V1
+
+```text
+Candidates   1079
+With skills   564
+No skills     515
+Skill rows   3070
+```
+
+Software coverage:
+
+```text
+269 / 276
+97.5%
+```
+
+### Run 112 — SENIORITY_V1
+
+```text
+UNKNOWN       779
+SENIOR        182
+MID            36
+LEAD           30
+JUNIOR         21
+ENTRY           9
+PRINCIPAL       9
+STAFF           9
+INTERN          4
+```
+
+No cambiar semánticas V1 por estos nuevos conteos; son estado observado.
 
 ---
 
-## 14. Occupation / IT / backend classification v1 — TERMINADO
+## 12. Professional matching V1 — último refresh
 
-Archivos publicados en GitHub:
-
-```text
-migrations/006_job_occupation_classifications.sql
-src/chamba_hunter/repositories/job_occupation_repository.py
-src/chamba_hunter/services/job_occupation_classification_service.py
-src/chamba_hunter/commands/classify_job_occupations.py
-```
-
-Tabla:
+Run:
 
 ```text
-job_occupation_classifications
+113
+MATCHING_V1
+BACKEND_SOFTWARE_V1
 ```
-
-Identidad:
-
-```text
-UNIQUE(record_kind, record_id)
-```
-
-Campos:
-
-```text
-occupation_class
-backend_relevance
-reason
-method
-rule_version
-evidence_json
-classified_at
-```
-
-Rule version:
-
-```text
-OCCUPATION_V1
-```
-
-Taxonomía:
-
-```text
-SOFTWARE_ENGINEERING
-IT_TECHNICAL
-TECH_ADJACENT
-NON_TECHNICAL
-UNKNOWN
-```
-
-Backend relevance:
-
-```text
-BACKEND
-FULL_STACK
-NON_BACKEND
-UNKNOWN
-NOT_APPLICABLE
-```
-
-Sólo `SOFTWARE_ENGINEERING` puede tener backend relevance distinta de `NOT_APPLICABLE`.
-
-Principios:
-
-- provider/source no es evidencia ocupacional;
-- title específico tiene precedencia;
-- description sólo decide occupation para familias realmente ambiguas;
-- evitar bolsa global de keywords de description;
-- preservar `UNKNOWN`;
-- no mezclar skills, seniority ni matching;
-- `backend_relevance=UNKNOWN` no es un rechazo;
-- `Engineering Manager`, `Staff`, `Principal`, etc. no se descartan por seniority aquí.
-
-Run 80:
-
-```text
-Total:        993
-Software:       246
-IT technical:   137
-Tech adjacent:   55
-Non technical:  180
-Unknown:        375
-
-Created:        993
-Updated:          0
-Deleted:          0
-Run id:           80
-```
-
-Backend dentro de software:
-
-```text
-BACKEND          75
-FULL_STACK       58
-NON_BACKEND      49
-UNKNOWN          64
--------------------
-TOTAL           246
-```
-
-Methods:
-
-```text
-DESCRIPTION          21
-TITLE               551
-TITLE_DESCRIPTION    46
-UNRESOLVED          375
-```
-
-DB invariants:
-
-```text
-classifications total: 993
-scoped candidates:      993
-missing:                  0
-stale:                    0
-invalid backend:          0
-rule versions:            1
-```
-
-`OCCUPATION_V1` ya fue persistida. Cambios materiales futuros deben usar `OCCUPATION_V2` o posterior.
-
----
-
-## 15. Skills classification v1 — TERMINADO
-
-### Objetivo
-
-Extraer de forma provider-independent, determinista, auditable y recomputable las tecnologías explícitamente mencionadas en cada job geográficamente viable.
 
 Scope:
 
 ```text
-Argentina eligibility:
-ELIGIBLE + UNKNOWN
+1079
+ATS   892
+LEAD  187
 ```
 
-Actualmente:
+Levels:
 
 ```text
-993 candidates
+VERY_HIGH   11
+HIGH        57
+MEDIUM     129
+LOW        882
 ```
 
-Skills no depende de `occupation_class` como condición de entrada.
-
-Esto es deliberado porque occupation `UNKNOWN` puede contener evidencia técnica útil y porque el extractor debe describir el posting sin decidir todavía si es buen match.
-
-### Archivos publicados en GitHub
+Score máximo 100:
 
 ```text
-migrations/007_job_skill_classifications.sql
-src/chamba_hunter/repositories/job_skill_repository.py
-src/chamba_hunter/services/job_skill_classification_service.py
-src/chamba_hunter/commands/classify_job_skills.py
+role/backend fit      45
+skills/transfer       30
+seniority             15
+leadership            10
+technology penalty    min -5
 ```
 
-Tabla:
+Thresholds:
 
 ```text
-job_skill_classifications
+VERY_HIGH >= 80
+HIGH      >= 65
+MEDIUM    >= 45
+LOW        < 45
 ```
 
-Identidad:
-
-```text
-UNIQUE(
-    record_kind,
-    record_id,
-    skill_key
-)
-```
-
-Campos:
-
-```text
-record_kind
-record_id
-skill_key
-skill_category
-title_match
-description_match
-evidence_json
-rule_version
-classified_at
-```
-
-Rule version:
-
-```text
-SKILLS_V1
-```
-
-### Semántica
-
-Una fila significa solamente:
-
-```text
-esta skill reconocida aparece explícitamente
-en title y/o description
-```
-
-No significa:
-
-```text
-REQUIRED
-PREFERRED
-candidate must know it
-exact user match
-reject if missing
-```
-
-No se persisten aquí:
-
-```text
-requirement strength
-preference strength
-skill equivalence
-skill substitutability
-seniority
-matching score
-freshness
-application priority
-```
-
-### Catálogo
-
-`SKILLS_V1` contiene 187 canonical skills con aliases deterministas.
-
-Ejemplos:
-
-```text
-postgres / postgresql
-→ POSTGRESQL
-
-k8s / kubernetes
-→ KUBERNETES
-
-node.js / nodejs
-→ NODEJS
-```
-
-No inferir:
-
-```text
-JAVA         → SPRING
-AWS          → EC2
-AWS          → S3
-JAVASCRIPT   → NODEJS
-KUBERNETES   → OPENSHIFT
-```
-
-Guardas explícitas:
-
-```text
-React Native
-→ REACT_NATIVE
-→ no implica REACT
-
-Azure DevOps
-→ AZURE_DEVOPS
-→ no implica AZURE
-
-SAP BTP
-→ SAP_BTP
-→ no implica SAP genérico
-```
-
-### Categorías observadas
-
-```text
-LANGUAGE
-INFRASTRUCTURE
-CLOUD
-ARCHITECTURE
-DATABASE
-FRAMEWORK
-FRONTEND
-OBSERVABILITY
-DATA_PLATFORM
-BUSINESS_PLATFORM
-CI_CD
-MOBILE
-MESSAGING
-ANALYTICS
-CLOUD_SERVICE
-SECURITY
-TESTING
-ENGINEERING_PRACTICE
-REALTIME
-BUILD_TOOL
-```
-
-Son descriptivas, no weights ni familias de equivalencia.
-
-### Evidence
-
-Cada skill conserva:
-
-```text
-title_match
-description_match
-evidence_json
-```
-
-`evidence_json` conserva aliases/matches y snippets acotados.
-
-Esto permite reinterpretar en el futuro señales como:
-
-```text
-required-like
-preferred-like
-alternative
-```
-
-sin convertir esas heurísticas en semántica rígida de V1.
-
-### Requirement / preferred
-
-Los discoveries mostraron que heurísticas simples por proximidad generan muchas colisiones entre `required-like` y `preferred-like`.
-
-Por eso `SKILLS_V1` no persiste esas etiquetas.
-
-En matching futuro pueden ser señales, nunca hard cuts automáticos.
-
-Principio de producto:
-
-```text
-job: Azure required
-profile: strong AWS experience
-
-NO:
-→ reject
-
-SÍ:
-→ exact Azure evidence absent
-→ transferable cloud evidence present
-→ considerar el resto del match
-```
-
-### Tecnologías transferibles
-
-El corpus mostró relaciones explícitas como:
-
-```text
-AWS / Azure / GCP
-Java / Kotlin
-Spring Boot / Quarkus / Micronaut
-Flask / FastAPI / Django
-PostgreSQL / MySQL
-Kafka / RabbitMQ / SQS
-GitHub Actions / GitLab CI / Jenkins
-```
-
-No modelar estas relaciones dentro de `SKILLS_V1`.
-
-Matching deberá distinguir después:
-
-```text
-EXACT MATCH
-PEER / PARTIALLY SUBSTITUTABLE
-RELATED ECOSYSTEM
-```
-
-mediante taxonomía curada, no inferida automáticamente desde co-mentions.
-
-### Discovery y QA
-
-Se realizaron tres rondas read-only sobre los 993 candidatos.
-
-Hallazgos:
-
-- software tuvo 95.9% de cobertura con catálogo inicial;
-- catálogo expandido llegó a 97.6%;
-- occupation `UNKNOWN` contiene señales técnicas importantes;
-- non-tech puede mencionar tecnologías legítimamente;
-- skill mention no equivale a requirement;
-- alternativas tecnológicas aparecen explícitamente;
-- no intentar 100% de coverage fabricando skills genéricas.
-
-QA focalizada:
-
-```text
-SOFTWARE_ENGINEERING
-240 / 246
-97.6%
-```
-
-Los 6 software jobs sin skill reconocida eran postings con stacks no explícitos o información demasiado genérica.
-
-No se detectaron regex peligrosamente amplios en el muestreo de tokens ambiguos.
-
-### Run 81 — apply confirmado
-
-```text
-Rule version: SKILLS_V1
-Scope:        Argentina ELIGIBLE + UNKNOWN
-Mode:         APPLY
-
-Candidates:   993
-With skills:  512
-No skills:    481
-Skill rows:   2664
-
-Created:      2664
-Updated:         0
-Deleted:         0
-
-Run id:          81
-```
-
-Coverage:
-
-```text
-IT_TECHNICAL            114 / 137   83.2%
-NON_TECHNICAL            51 / 180   28.3%
-SOFTWARE_ENGINEERING    240 / 246   97.6%
-TECH_ADJACENT            30 / 55    54.5%
-UNKNOWN                  77 / 375   20.5%
-```
-
-Sources:
-
-```text
-DESCRIPTION          2430
-TITLE                  68
-TITLE_DESCRIPTION     166
--------------------------
-TOTAL                 2664
-```
-
-Top skills:
-
-```text
-PYTHON               178
-LINUX                147
-AWS                  129
-KUBERNETES           128
-REACT                  94
-SQL                    94
-DOCKER                 70
-POSTGRESQL             64
-REST                   59
-GO                     59
-AZURE                  58
-TYPESCRIPT             58
-GCP                    54
-JAVA                   45
-DISTRIBUTED_SYSTEMS    45
-CPP                    43
-MYSQL                  41
-OPENSTACK              40
-JAVASCRIPT             39
-SAP                    37
-```
-
-Target-stack observation:
-
-```text
-JAVA                     45
-KOTLIN                    3
-SPRING_BOOT               8
-SPRING                    7
-REST                     59
-MICROSERVICES            33
-DISTRIBUTED_SYSTEMS      45
-POSTGRESQL               64
-ORACLE_DB                 1
-MONGODB                  11
-AWS                     129
-EC2                       3
-RDS                      16
-S3                       13
-DOCKER                   70
-KUBERNETES              128
-OPENSHIFT                 2
-GITHUB_ACTIONS           14
-GITLAB_CI                14
-NODEJS                   33
-NESTJS                   12
-TYPESCRIPT               58
-```
-
-DB invariants:
-
-```text
-Duplicate candidate/skill keys:          0
-Rows without title/description evidence: 0
-Rows outside current scope:              0
-Non-SKILLS_V1 rows:                      0
-```
-
-Toda la tabla está en `SKILLS_V1`.
-
-### Refresh semantics
-
-En cada `--apply`:
-
-```text
-current geographic scope
-    ↓
-extract complete current skill set
-    ↓
-upsert current rows
-    ↓
-delete stale skill rows
-```
-
-Skills no modifica ni duplica:
+No participan:
 
 ```text
 first_seen_at
-last_seen_at
 published_at
-is_active
-job_url
-apply_url
+source recency
+application channel
+manual application status
 ```
 
-`SKILLS_V1` ya fue persistida. Cambios materiales futuros deben usar `SKILLS_V2` o posterior.
+No cambiar `MATCHING_V1` silenciosamente.
 
 ---
 
-## 16. Requisito de producto: freshness / early application
+## 13. Source recency — V2 local
 
-El sistema final debe permitir un refresh manual y devolver rápidamente oportunidades nuevas y relevantes.
-
-Debe distinguir conceptualmente:
+Archivo nuevo:
 
 ```text
-NEW
-KNOWN
-UPDATED
-CLOSED / INACTIVE
+src/chamba_hunter/domain/job_recency.py
 ```
 
-y especialmente:
+Buckets:
 
 ```text
-NEW + HIGH MATCH
-```
-
-### Datos ya disponibles
-
-En los 993 candidatos observados:
-
-```text
-first_seen_at   993 / 993  100.0%
-last_seen_at    993 / 993  100.0%
-job_url         993 / 993  100.0%
-apply_url       606 / 993   61.0%
-published_at     46 / 993    4.6%
-```
-
-Por lo tanto `first_seen_at` será la base más fuerte para NEW.
-
-`published_at` es señal adicional sólo cuando exista y sea confiable.
-
-### Limitación de UPDATED
-
-El `updated` actual de sync no prueba cambio de contenido.
-
-`last_seen_at` tampoco representa cambio.
-
-Más adelante diseñar explícitamente:
-
-```text
-content_hash
-last_changed_at
-change event / history
-```
-
-sin mezclarlo con skills ni seniority.
-
-### Professional match vs operational priority
-
-Separar:
-
-```text
-professional_match
-```
-
-de:
-
-```text
-operational_application_priority
-```
-
-`MATCHING_V1` ya considera:
-
-```text
-occupation/backend
-skills
-skill transferability
-seniority
-leadership
-role/title mismatch signals
-```
-
-y lo persiste separado de freshness y application priority.
-
-Operational priority podrá considerar:
-
-```text
-professional_match
-NEW / first_seen_at
-published_at cuando sea confiable
-application channel quality
-future company priority
-change/freshness signals
-```
-
-Ejemplo:
-
-```text
-match 90 + discovered minutes ago
-```
-
-puede ser operacionalmente más prioritario que:
-
-```text
-match 94 + known for 10 days
-```
-
-sin alterar el professional match.
-
-### Application end game
-
-Orden conceptual:
-
-```text
-1. apply_url directo
-2. job_url / careers page
-3. general_application_url
-4. public recruiting/careers email
-```
-
-No habrá auto-apply.
-
-El sistema descubre, clasifica, prioriza y prepara. El usuario revisa y aplica/envía manualmente.
-
----
-
-## 17. Seniority classification v1 — TERMINADO
-
-### Objetivo
-
-Clasificar de manera provider-independent, recomputable y auditable el nivel explícito del puesto, sin convertirlo todavía en una decisión de match.
-
-Scope:
-
-```text
-Argentina eligibility:
-ELIGIBLE + UNKNOWN
-```
-
-Total aplicado:
-
-```text
-993 candidates
-```
-
-Seniority no usa el target profesional del usuario para decidir la clase del job.
-
-### Archivos publicados en GitHub
-
-```text
-migrations/008_job_seniority_classifications.sql
-src/chamba_hunter/repositories/job_seniority_repository.py
-src/chamba_hunter/services/job_seniority_classification_service.py
-src/chamba_hunter/commands/classify_job_seniority.py
-```
-
-Tabla:
-
-```text
-job_seniority_classifications
-```
-
-Identidad:
-
-```text
-UNIQUE(record_kind, record_id)
-```
-
-Rule version:
-
-```text
-SENIORITY_V1
-```
-
-### Dos dimensiones separadas
-
-`SENIORITY_V1` distingue deliberadamente nivel profesional de liderazgo/management.
-
-Seniority:
-
-```text
-INTERN
-ENTRY
-JUNIOR
-MID
-SENIOR
-STAFF
-PRINCIPAL
-LEAD
+VERY_RECENT
+RECENT
+AGING
 UNKNOWN
+OLD
 ```
 
-Leadership title class:
+Rank operacional:
 
 ```text
-NONE
-UNKNOWN
-MANAGER
-DIRECTOR
-HEAD
-VP
-C_LEVEL
+VERY_RECENT > RECENT > AGING > UNKNOWN > OLD
 ```
 
-No asumir una equivalencia total entre estas dos dimensiones.
+### Evidencia
+
+Orden de preferencia:
+
+```text
+1. published_at exacto
+2. Get on Board exact published_date
+3. Hiring Room published_relative
+4. UNKNOWN
+```
+
+### Edad exacta
+
+```text
+0-7 days     VERY_RECENT
+8-30         RECENT
+31-60        AGING
+>60          OLD
+```
+
+### Hiring Room relative
+
+No fabricar fecha exacta desde:
+
+```text
+Hace N días
+Hace N semanas
+Hace N meses
+```
+
+Se conserva un rango.
 
 Ejemplos:
 
 ```text
-Senior Engineering Manager
-→ SENIOR + MANAGER
+Hace 1 mes
+→ 28-31 days
+→ AGING
 
-Engineering Manager
-→ UNKNOWN + MANAGER
+Hace 2 meses
+→ 56-62 days
+→ AGING
 
-Software Engineering Director
-→ UNKNOWN + DIRECTOR
-
-Chief Revenue Officer
-→ UNKNOWN + C_LEVEL
-
-Lead Linux Kernel Engineer
-→ LEAD + NONE
+Hace 3 meses
+→ 84-93 days
+→ OLD
 ```
 
-`Product Manager` no se interpreta automáticamente como people-management sólo por contener `Manager`; puede quedar leadership `UNKNOWN`.
-
-### Principios
-
-- title explícito tiene prioridad;
-- description se usa sólo como fallback conservador;
-- no inferir seniority automáticamente desde años de experiencia;
-- no mapear `Software Engineer II` a una clase universal;
-- no forzar `UNKNOWN = 0`;
-- títulos con múltiples niveles explícitos quedan `UNKNOWN`;
-- management/leadership sin nivel explícito no hereda artificialmente `SENIOR`, `STAFF` o `LEAD` desde la description;
-- `LEAD` no se infiere desde description porque verbos como “lead a team” generan ambigüedad;
-- el perfil actual semisenior/mid-level no modifica la clasificación objetiva.
-
-### Conflictos preservados
-
-Ejemplos observados que quedan deliberadamente `UNKNOWN`:
+Decisión conservadora:
 
 ```text
-Senior/Staff/Principal Engineer
-Junior / Semi Senior Developers
-Semi Senior / Senior
-JR/SSR
-SSR/SR
+un rango sólo es OLD si su mínimo ya supera 60 días
 ```
 
-Esto evita escoger arbitrariamente una de varias vacantes/niveles representados por el mismo posting.
+Por eso `Hace 2 meses` NO se fuerza a `OLD`.
 
-### Description fallback auditado
-
-Después de refinamientos R1-R3 quedaron solamente:
-
-```text
-DESCRIPTION_SENIOR   13
-DESCRIPTION_MID       2
-```
-
-Los 15 casos fueron auditados manualmente.
-
-Todos describían explícitamente el nivel del puesto, por ejemplo:
-
-```text
-senior individual contributor role
-Senior Software Development Consultant
-perfil ... semi senior
-Senior Frontend Engineer
-Senior Shopify Developer
-Software Engineer Senior
-Senior Python Engineer
-Desarrollador/a Full Stack Senior
-semi-senior backend software developer
-Senior Backend Engineer
-Senior AI Engineer
-perfil SR
-senior-level builder
-```
-
-No quedó `DESCRIPTION_LEAD`.
-
-### Años de experiencia
-
-La clasificación extrae también evidencia explícita de años cuando existe, pero no convierte esa evidencia en una tabla rígida de seniority.
-
-Run 82 observó:
-
-```text
-Candidates with experience evidence: 273
-Evidence snippets:                   354
-```
-
-Lower-bound mentions:
-
-```text
- 1 years   12
- 2 years   68
- 3 years   75
- 4 years   32
- 5 years   80
- 6 years   18
- 7 years   20
- 8 years   20
-10 years   14
-12 years   13
-15 years    1
-16 years    1
-```
-
-Ejemplo de principio:
-
-```text
-5+ years
-!= automatically SENIOR
-```
-
-Los años podrán ser una señal posterior de matching.
-
-### Run 82 — apply confirmado
-
-```text
-Rule version: SENIORITY_V1
-Scope:        Argentina ELIGIBLE + UNKNOWN
-Mode:         APPLY
-
-Candidates:   993
-Created:      993
-Updated:        0
-Deleted:        0
-
-Run id:        82
-```
-
-Seniority:
-
-```text
-UNKNOWN       724   72.9%
-SENIOR        158   15.9%
-MID            33    3.3%
-LEAD           30    3.0%
-JUNIOR         19    1.9%
-STAFF           9    0.9%
-ENTRY           8    0.8%
-PRINCIPAL       8    0.8%
-INTERN          4    0.4%
-```
-
-Leadership:
-
-```text
-NONE         854
-UNKNOWN       70
-MANAGER       39
-DIRECTOR      18
-HEAD           5
-C_LEVEL        4
-VP             3
-```
-
-Methods:
-
-```text
-DESCRIPTION     15
-TITLE          383
-UNRESOLVED     595
-```
-
-Seniority dentro de `SOFTWARE_ENGINEERING`:
-
-```text
-total       246
-
-ENTRY         2
-JUNIOR        6
-MID          15
-SENIOR       72
-STAFF         7
-PRINCIPAL     5
-LEAD          6
-UNKNOWN     133
-```
-
-### DB invariants después de apply
-
-```text
-Rows:              993
-Current scope:     993
-Missing:             0
-Stale:               0
-Duplicate keys:      0
-Missing evidence:    0
-Wrong version:       0
-```
-
-Rule versions:
-
-```text
-SENIORITY_V1   993
-```
-
-Tracing:
-
-```text
-Run id:       82
-Command:      classify_job_seniority
-Status:       SUCCESS
-Step:         job_seniority_classification
-Step status:  SUCCESS
-Items:        993 / 993 / 0 failed / 0 skipped
-```
-
-La validación de invariantes terminó:
-
-```text
-PASS
-```
-
-### Refresh semantics
-
-Futuros `--apply` deben mantener la tabla como current-state recomputable para el scope geográfico actual:
-
-```text
-current geographic scope
-    ↓
-recompute seniority
-    ↓
-upsert current candidates
-    ↓
-delete stale candidates
-```
-
-No copiar freshness, URLs ni matching score a esta tabla.
-
-### Regla de versionado
-
-`SENIORITY_V1` ya fue persistida.
-
-No modificar materialmente su semántica manteniendo el mismo `rule_version`.
-
-Cambios materiales futuros deben usar:
-
-```text
-SENIORITY_V2
-```
-
-o posterior, con decisión explícita de recalcular.
+`UNKNOWN` es neutral/intermedio; no se interpreta como nuevo.
 
 ---
 
-## 18. Professional matching v1 — TERMINADO
-
-### Objetivo
-
-Evaluar qué tan bien cada job representa una oportunidad profesional para el search profile backend actual sin destruir ni reinterpretar las clasificaciones objetivas anteriores.
-
-Matching es la primera capa que compara explícitamente:
-
-```text
-job understanding
-```
-
-contra:
-
-```text
-search profile
-```
-
-Scope:
-
-```text
-active job_candidates
-Argentina eligibility = ELIGIBLE + UNKNOWN
-```
-
-Total aplicado:
-
-```text
-993 candidates
-892 ATS
-101 LEAD
-```
-
-### Search profile
-
-Se reutiliza la tabla ya existente:
-
-```text
-search_profiles
-```
-
-Profile:
-
-```text
-BACKEND_SOFTWARE_V1
-```
-
-Profile id observado:
-
-```text
-1
-```
+## 14. Operational priority V2 — local validado
 
 Rule version:
 
 ```text
-MATCHING_V1
+OPERATIONAL_PRIORITY_V2
 ```
 
-El profile se persiste con `rules_json` auditable.
-
-### Persistencia de matches
-
-No se reutiliza la tabla legacy:
-
-```text
-job_matches
-```
-
-porque está keyed sólo por:
-
-```text
-jobs.id
-```
-
-y no puede representar los `LEAD` no canonicalizados que siguen formando parte de `job_candidates`.
-
-La tabla nueva es:
-
-```text
-job_professional_matches
-```
-
-Identidad:
-
-```text
-UNIQUE(
-    record_kind,
-    record_id,
-    search_profile_id
-)
-```
-
-Soporta:
-
-```text
-ATS
-LEAD
-```
-
-La tabla legacy `job_matches` quedó intacta y observada con:
-
-```text
-0 rows
-```
-
-### Archivos locales implementados y aplicados
-
-Pendientes de publicación al momento de este handoff:
-
-```text
-migrations/009_job_professional_matches.sql
-src/chamba_hunter/repositories/job_matching_repository.py
-src/chamba_hunter/services/job_matching_service.py
-src/chamba_hunter/commands/match_jobs.py
-```
-
-### Score
-
-Score profesional máximo:
-
-```text
-100
-```
-
-Componentes:
-
-```text
-role / backend fit      max 45
-skills / transfer      max 30
-seniority fit           max 15
-leadership fit          max 10
-technology penalty      min -5
-```
-
-Freshness, `first_seen_at`, `published_at`, URLs y application channel **no participan** del professional match score.
-
-### Match levels
-
-```text
-VERY_HIGH   >= 80
-HIGH        >= 65
-MEDIUM      >= 45
-LOW          < 45
-```
-
-No son hard eligibility states.
-
-Un `MEDIUM` o incluso `LOW` permanece en DB y puede revisarse.
-
-### Role / backend fit
-
-Base principal:
-
-```text
-SOFTWARE_ENGINEERING + BACKEND      45
-SOFTWARE_ENGINEERING + FULL_STACK   38
-SOFTWARE_ENGINEERING + UNKNOWN      25
-SOFTWARE_ENGINEERING + NON_BACKEND   8
-
-IT_TECHNICAL                         6
-TECH_ADJACENT                        4
-occupation UNKNOWN                   3
-NON_TECHNICAL                        0
-```
-
-Para:
-
-```text
-SOFTWARE_ENGINEERING
-backend_relevance = UNKNOWN
-```
-
-existe un boost acotado:
-
-```text
-25 → 35
-```
-
-sólo cuando el posting tiene evidencia backend fuerte y específica del profile.
-
-Strong JVM:
-
-```text
-Java/Kotlin
-+
-Spring Boot/Spring/JPA/Hibernate/Quarkus/Micronaut/Ktor
-```
-
-Strong Node:
-
-```text
-Node.js/TypeScript
-+
-NestJS
-```
-
-En la corrida final este boost se activó para **1 solo candidato**.
-
-Ejemplo observado:
-
-```text
-Desarrollador Java Ssr /Sr
-Java + Spring
-backend_relevance UNKNOWN
-→ role score 35
-→ final score 65 HIGH
-```
-
-Esto pertenece al matcher profile-specific y no modifica `OCCUPATION_V1`.
-
-### Skills y transferibilidad
-
-Missing skill evidence no es rechazo ni penalización automática.
-
-Las señales están agrupadas para evitar que muchas menciones del mismo ecosistema inflen el score.
-
-Relaciones:
-
-```text
-EXACT
-PEER
-RELATED
-SECONDARY
-```
-
-Ejemplos:
-
-```text
-AWS
-→ EXACT
-
-Azure / GCP
-→ PEER de cloud
-
-Spring Boot
-→ EXACT
-
-Quarkus / Micronaut
-→ PEER de JVM backend framework
-
-PostgreSQL
-→ EXACT
-
-MySQL / SQL Server / MariaDB / Percona
-→ PEER de RDBMS
-
-Terraform / Helm / CloudFormation / Pulumi
-→ RELATED de platform/container ecosystem
-
-Node.js / NestJS / TypeScript
-→ SECONDARY para el profile actual
-```
-
-No asumir equivalencia exacta por pertenecer a la misma familia.
-
-### Stacks backend alternativos
-
-Familias detectadas:
-
-```text
-PYTHON
-GO
-DOTNET
-ELIXIR
-RUBY
-PHP
-RUST
-SCALA
-```
-
-Una tecnología alternativa no causa hard rejection.
-
-Cuando un stack alternativo está explícito en el título y no hay core compatible explícito en ese mismo título:
-
-```text
-technology penalty = -5
-score ceiling = 64
-```
-
-Por lo tanto permanece visible, pero no llega a `HIGH`.
-
-Ejemplos calibrados:
-
-```text
-Backend Developer .NET SSR
-→ MEDIUM
-
-Senior Go Developer
-→ MEDIUM
-
-Senior Backend Engineer (Python)
-→ MEDIUM
-
-Developer PHP SSR
-→ MEDIUM
-```
-
-Un título mixto compatible conserva posibilidad de match fuerte:
-
-```text
-Desarrollador Back-end Golang+Java
-→ VERY_HIGH
-```
-
-### Seniority fit
-
-Target:
-
-```text
-semisenior / mid-level
-```
-
-Base:
-
-```text
-MID        15
-UNKNOWN    12
-SENIOR     10
-JUNIOR      8
-ENTRY       5
-LEAD        5
-STAFF       4
-PRINCIPAL   2
-INTERN      1
-```
-
-`UNKNOWN` sigue siendo viable.
-
-Score ceilings:
-
-```text
-JUNIOR      64
-STAFF       64
-LEAD        64
-PRINCIPAL   60
-ENTRY       55
-INTERN      45
-```
-
-De esa manera siguen visibles, pero no compiten como `HIGH` con el target mid-level.
-
-### Architect guard
-
-`SENIORITY_V1` no inventa una clase universal para `Architect`.
-
-En matching, los títulos:
-
-```text
-Architect
-Arquitecto / Arquitecta
-```
-
-tienen:
-
-```text
-score ceiling = 64
-```
-
-porque suelen implicar una distancia material respecto del target actual aunque no exista una clase IC universal segura.
-
-Ejemplos observados después de calibración:
-
-```text
-BackEnd Architect
-→ MEDIUM 64
-
-Software Architect
-→ MEDIUM <= 64
-```
-
-### Leadership fit
-
-Base:
-
-```text
-NONE       10
-UNKNOWN     8
-MANAGER     2
-DIRECTOR    1
-HEAD        0
-VP          0
-C_LEVEL     0
-```
-
-Ceilings:
-
-```text
-MANAGER    60
-DIRECTOR   55
-HEAD       50
-VP         45
-C_LEVEL    45
-```
-
-Leadership no es lo mismo que IC seniority.
-
-### Title-role mismatch guard
-
-Un posting puede haber sido clasificado upstream como software/backend pero tener un título claramente incompatible con la búsqueda de ingeniería.
-
-`MATCHING_V1` agrega un guard conservador para títulos educativos explícitos:
-
-```text
-Tutor
-Instructor
-Teacher
-Professor
-Docente
-Trainer
-```
-
-Ceiling:
-
-```text
-40
-```
-
-Esto corrigió el caso observado:
-
-```text
-Tutor de trayecto educativo:
-Desarrollo Backend Empresarial con Java y Spring Boot
-```
-
-que antes de calibración podía obtener un score artificialmente alto por stack.
-
-No se modifica `OCCUPATION_V1`; el matcher contiene el falso positivo para este search profile.
-
-### Calibración R1-R3
-
-R1 detectó:
-
-- stacks alternativos demasiado altos;
-- Junior capaz de llegar a HIGH;
-- rol educativo con Java/Spring capaz de llegar a VERY_HIGH.
-
-R2 corrigió:
-
-- stack alternativo explícito en title;
-- Junior ceiling;
-- title-role mismatch educativo.
-
-R3 agregó:
-
-- Architect ceiling;
-- boost muy acotado para backend `UNKNOWN` con strong backend-core evidence.
-
-No hubo R4.
-
-R3 se congeló como:
-
-```text
-MATCHING_V1
-```
-
-### Run 83 — apply confirmado
-
-```text
-Rule version:  MATCHING_V1
-Search profile: BACKEND_SOFTWARE_V1
-Mode:          APPLY
-
-Candidates:    993
-Created:       993
-Updated:         0
-Deleted:         0
-
-Run id:         83
-Profile id:      1
-```
-
-Record kinds:
-
-```text
-ATS    892
-LEAD   101
-```
-
-Match levels:
-
-```text
-VERY_HIGH    12    1.2%
-HIGH         36    3.6%
-MEDIUM      120   12.1%
-LOW         825   83.1%
-```
-
-Por occupation/backend:
-
-```text
-IT_TECHNICAL/NOT_APPLICABLE
-  LOW 137
-
-NON_TECHNICAL/NOT_APPLICABLE
-  LOW 180
-
-SOFTWARE_ENGINEERING/BACKEND
-  VERY_HIGH 12
-  HIGH      16
-  MEDIUM    46
-  LOW        1
-
-SOFTWARE_ENGINEERING/FULL_STACK
-  HIGH      19
-  MEDIUM    38
-  LOW        1
-
-SOFTWARE_ENGINEERING/NON_BACKEND
-  LOW 49
-
-SOFTWARE_ENGINEERING/UNKNOWN
-  HIGH    1
-  MEDIUM 36
-  LOW    27
-
-TECH_ADJACENT/NOT_APPLICABLE
-  LOW 55
-
-UNKNOWN/NOT_APPLICABLE
-  LOW 375
-```
-
-Diagnostics finales:
-
-```text
-Technology penalties      94
-Score ceilings           878
-HIGH with 0 skill points   3
-Title role mismatches       6
-Title alt-stack caps       48
-Title seniority risks       4
-Strong backend boosts       1
-```
-
-Los 3 `HIGH` con cero skill points son deliberadamente válidos:
-
-```text
-Software Engineer Backend - (Semi Senior)   70
-DESARROLLADOR BackEnd                       67
-Software Engineer Backend - (Senior)        65
-```
-
-Son roles backend explícitos. La ausencia de una lista tecnológica detallada no se interpreta como falta de capacidad del candidato.
-
-### Ejemplos del top final
-
-```text
-88.9  VERY_HIGH
-Improving
-Semi Senior Back-end Engineer: Java
-
-85.0  VERY_HIGH
-Bitso
-Software Engineer - Latam or Europe
-
-83.8  VERY_HIGH
-Credencial Payments
-Senior Backend Developer
-
-83.5  VERY_HIGH
-ITSM Consulting
-Desarrollador Backend - SSR
-
-83.5  VERY_HIGH
-PlainTech Solutions
-Back-end Developer Kotlin/Java
-```
-
-El top final está dominado por backend/JVM y evidencia tecnológica relevante, no por conteos indiscriminados.
-
-### DB invariants después de apply
-
-```text
-Profile active:      1
-Rows:              993
-Current scope:     993
-Missing:             0
-Stale:               0
-Duplicate keys:      0
-Wrong version:       0
-Invalid scores:      0
-Legacy job_matches:  0
-```
-
-Rule versions:
-
-```text
-MATCHING_V1   993
-```
-
-Tracing:
-
-```text
-Run id:       83
-Command:      match_jobs
-Status:       SUCCESS
-Step:         professional_matching
-Step status:  SUCCESS
-Items:        993 / 993 / 0 failed / 0 skipped
-```
-
-Validación final:
-
-```text
-PASS
-```
-
-### Refresh semantics
-
-Futuros `--apply` deben mantener current state por profile:
-
-```text
-current geographic scope
-    ↓
-occupation + skills + seniority
-    ↓
-search profile evaluation
-    ↓
-upsert current matches
-    ↓
-delete stale matches for that profile
-```
-
-No copiar freshness ni application priority a `job_professional_matches`.
-
-### Regla de versionado
-
-`MATCHING_V1` ya fue persistida.
-
-No modificar materialmente score semantics, transfer rules, ceilings o match-level thresholds manteniendo el mismo `rule_version`.
-
-Cambios materiales futuros deben usar:
-
-```text
-MATCHING_V2
-```
-
-o posterior, con decisión explícita de recalcular.
-
----
-
-## 19. Content freshness + operational/application priority v1 — TERMINADO
-
-### Objetivo
-
-Separar explícitamente:
-
-```text
-professional fit
-```
-
-de:
-
-```text
-what should be reviewed/applied first
-```
-
-sin degradar `MATCHING_V1` ni usar timestamps débiles como sustitutos de cambios reales.
-
-Dos responsabilidades separadas:
-
-```text
-010_job_content_freshness.sql
-→ shared job corpus freshness
-
-011_job_operational_priorities.sql
-→ search-profile-specific operational state
-```
-
-### Freshness compartido
-
-Migration:
-
-```text
-010_job_content_freshness.sql
-```
-
-Agrega a `jobs` y `job_leads`:
-
-```text
-content_hash
-content_hash_version
-last_changed_at
-```
-
-Hash version:
-
-```text
-JOB_CONTENT_V1
-```
-
-Helper:
-
-```text
-src/chamba_hunter/domain/job_content.py
-```
-
-Los dos puntos comunes de escritura fueron actualizados:
-
-```text
-src/chamba_hunter/repositories/job_repository.py
-src/chamba_hunter/repositories/job_lead_repository.py
-```
-
-No fue necesario modificar cada adapter ATS individual.
-
-Regla:
-
-```text
-new record
-→ write current hash
-→ last_changed_at NULL
-
-existing + same hash
-→ preserve last_changed_at
-
-existing + different hash
-→ last_changed_at = seen_at
-```
-
-No usar:
-
-```text
-last_seen_at
-```
-
-como prueba de modificación.
-
-### Baseline de hash
-
-Repository:
-
-```text
-src/chamba_hunter/repositories/job_freshness_repository.py
-```
-
-La primera ejecución real inicializó:
-
-```text
-3662 jobs
-400 job_leads
-```
-
-Todos quedaron con:
-
-```text
-content_hash_version = JOB_CONTENT_V1
-```
-
-y:
-
-```text
-last_changed_at = NULL
-```
-
-No se inventó historial previo a la existencia de esta feature.
-
-### Operational priority
-
-Migration:
-
-```text
-011_job_operational_priorities.sql
-```
-
-Tabla:
+Persiste en la tabla existente:
 
 ```text
 job_operational_priorities
 ```
 
-Identidad:
+Sin migration nueva.
 
-```text
-UNIQUE(
-    record_kind,
-    record_id,
-    search_profile_id
-)
-```
-
-Soporta:
-
-```text
-ATS
-LEAD
-```
-
-A diferencia de `job_professional_matches`, operational priority **retiene** filas históricas cuando una oportunidad deja de formar parte del current professional scope.
-
-Eso permite representar:
-
-```text
-INACTIVE
-SUPERSEDED
-OUT_OF_SCOPE
-```
-
-sin perder el último snapshot profesional conocido.
-
-### Archivos locales pendientes de publicación
-
-```text
-migrations/010_job_content_freshness.sql
-migrations/011_job_operational_priorities.sql
-src/chamba_hunter/domain/job_content.py
-src/chamba_hunter/repositories/job_repository.py
-src/chamba_hunter/repositories/job_lead_repository.py
-src/chamba_hunter/repositories/job_freshness_repository.py
-src/chamba_hunter/repositories/job_operational_priority_repository.py
-src/chamba_hunter/services/job_operational_priority_service.py
-src/chamba_hunter/commands/prioritize_jobs.py
-```
-
-Rule version:
-
-```text
-OPERATIONAL_PRIORITY_V1
-```
-
-Search profile:
-
-```text
-BACKEND_SOFTWARE_V1
-```
-
-### Estados operativos
+### Estados
 
 ```text
 NEW
@@ -2692,645 +879,211 @@ SUPERSEDED
 OUT_OF_SCOPE
 ```
 
-Semántica:
+Watermark sigue siendo el `finished_at` del último `prioritize_jobs SUCCESS`.
 
-#### `NEW`
-
-No usa “últimas N horas”.
-
-Usa como watermark:
+`NEW`:
 
 ```text
-finished_at
+first_seen_at > previous watermark
 ```
 
-del último:
+`UPDATED`:
 
 ```text
-prioritize_jobs
-status = SUCCESS
+last_changed_at > previous watermark
 ```
 
-Entonces:
+o reentrada al scope desde un estado no accionable.
+
+### Orden V2
 
 ```text
-first_seen_at > previous successful watermark
-→ NEW
+1 actionable
+2 professional match level
+3 source recency
+4 operational state
+5 professional score
+6 application channel
+7 first_seen_at
+8 deterministic identity
 ```
 
-La primera corrida no tiene watermark anterior:
+La recencia ordena **dentro del mismo match level**.
+
+No modifica professional score.
+
+### Run 114
 
 ```text
-initial baseline
-→ KNOWN
-```
-
-Esto evita marcar artificialmente como nuevos todos los jobs existentes cuando se instala la feature.
-
-#### `UPDATED`
-
-```text
-last_changed_at > previous successful watermark
-→ UPDATED
-```
-
-No deriva `UPDATED` desde:
-
-```text
-last_seen_at
-ATS jobs_updated counters
-```
-
-Si una fila previamente no accionable vuelve al current professional scope:
-
-```text
-INACTIVE / SUPERSEDED / OUT_OF_SCOPE
-→ current scope again
-→ UPDATED
-```
-
-#### `KNOWN`
-
-```text
-first_seen_at <= watermark
-and no recorded content change after watermark
-→ KNOWN
-```
-
-#### `INACTIVE`
-
-Se usa cuando la oportunidad previamente retenida:
-
-```text
-source missing/inactive
-```
-
-o cuando:
-
-```text
-expires_at <= now
-```
-
-para una fuente que expone expiry.
-
-#### `SUPERSEDED`
-
-Para un `LEAD` previamente retenido cuando existe:
-
-```text
-canonical_job_id
-```
-
-y el canonical ATS job está activo.
-
-#### `OUT_OF_SCOPE`
-
-El source sigue activo pero ya no existe current professional match para ese search profile.
-
-### Orden de prioridad
-
-No se creó otro score 0–100.
-
-El orden es lexicográfico y auditable:
-
-```text
-1. actionable before non-actionable
-
-2. professional match level
-   VERY_HIGH
-   HIGH
-   MEDIUM
-   LOW
-
-3. operational state
-   NEW
-   UPDATED
-   KNOWN
-
-4. professional score DESC
-
-5. application channel
-   DIRECT_APPLY_URL
-   JOB_URL
-   GENERAL_APPLICATION_URL
-   PUBLIC_CONTACT
-   NONE
-
-6. first_seen_at DESC
-```
-
-Consecuencia intencional:
-
-```text
-NEW VERY_HIGH 88
-> KNOWN VERY_HIGH 92
-```
-
-pero:
-
-```text
-KNOWN VERY_HIGH 92
-> NEW HIGH 77
-```
-
-Freshness puede ordenar dentro del nivel profesional, pero no destruir la jerarquía profesional.
-
-### Application channel
-
-Orden:
-
-```text
-DIRECT_APPLY_URL
-JOB_URL
-GENERAL_APPLICATION_URL
-PUBLIC_CONTACT
-NONE
-```
-
-`apply_url` es conveniencia operacional, no professional quality.
-
-El discovery mostró fuerte dependencia del provider, por lo que no debe dominar el ranking.
-
-Para `GENERAL_APPLICATION_URL` y recruiting/careers email vía `public_contacts`, sólo se consideran contactos:
-
-```text
-is_active = 1
-review_status = VALID
-```
-
-Tipos públicos soportados:
-
-```text
-GENERAL_APPLICATION_URL
-CAREERS_EMAIL
-RECRUITING_EMAIL
-```
-
-No inferir emails personales.
-
-### `published_at`
-
-No participa de `OPERATIONAL_PRIORITY_V1`.
-
-Coverage observada:
-
-```text
-46 / 993
-4.6%
-```
-
-y entre `HIGH`:
-
-```text
-0 / 36
-```
-
-Se preserva para reporting cuando existe.
-
-### Dry-run aislada
-
-La validación usó una copia temporal de la DB real.
-
-Baseline esperado observado:
-
-```text
-Candidates: 993
-
-NEW          0
-UPDATED      0
-KNOWN      993
-INACTIVE     0
-SUPERSEDED   0
-OUT_OF_SCOPE 0
-```
-
-Application channels:
-
-```text
-DIRECT_APPLY_URL   606
-JOB_URL            387
-```
-
-Hash baseline:
-
-```text
-jobs       3662
-job_leads   400
-```
-
-Luego se ejercitaron cambios sintéticos sobre la copia:
-
-```text
-1 NEW
-1 UPDATED
-991 KNOWN
-```
-
-Además:
-
-```text
-ATS unchanged → no last_changed_at
-LEAD unchanged → no last_changed_at
-
-ATS changed → last_changed_at set
-LEAD changed → last_changed_at set
-```
-
-Resultado:
-
-```text
-PASS
-```
-
-La DB real no fue modificada durante esa validación.
-
-### Run 84 — baseline real
-
-Primera ejecución real:
-
-```text
-Rule version:   OPERATIONAL_PRIORITY_V1
-Search profile: BACKEND_SOFTWARE_V1
-Mode:           APPLY
-Candidates:     993
-Watermark:      INITIAL BASELINE
-
-Created:        993
-Updated:          0
-
-Run id:          84
-Profile id:       1
-```
-
-Operational states:
-
-```text
-NEW               0
-UPDATED           0
-KNOWN           993
-INACTIVE          0
-SUPERSEDED        0
-OUT_OF_SCOPE      0
-```
-
-States por professional match:
-
-```text
-VERY_HIGH    KNOWN 12
-HIGH         KNOWN 36
-MEDIUM       KNOWN 120
-LOW          KNOWN 825
-```
-
-Application channels:
-
-```text
-DIRECT_APPLY_URL   606
-JOB_URL            387
-GENERAL_APPLICATION_URL 0
-PUBLIC_CONTACT      0
-NONE                0
-```
-
-Freshness invariants:
-
-```text
-jobs total                       3662
-job_leads total                   400
-jobs missing JOB_CONTENT_V1         0
-leads missing JOB_CONTENT_V1        0
-jobs last_changed_at baseline        0
-leads last_changed_at baseline       0
-```
-
-Operational invariants:
-
-```text
-priority rows                    993
-duplicate keys                     0
-wrong priority rule version        0
-wrong professional rule version    0
-```
-
-Professional snapshot preservado:
-
-```text
-VERY_HIGH   12
-HIGH        36
-MEDIUM     120
-LOW        825
-```
-
-Tracing:
-
-```text
-Run id:       84
-Command:      prioritize_jobs
-Status:       SUCCESS
-
-Step:         operational_priority
-Step status:  SUCCESS
-Items:        993 / 993 / 0 failed / 0 skipped
-```
-
-Validación final:
-
-```text
-PASS
-```
-
-### Refresh semantics a partir de Run 84
-
-Run 84 constituye el primer watermark real.
-
-Un refresh futuro debe ejecutar la cadena correspondiente:
-
-```text
-acquisition / ATS refresh
-→ canonicalization
-→ geography
-→ occupation
-→ skills
-→ seniority
-→ professional matching
-→ operational priority
-```
-
-Entonces:
-
-```text
-new source record after Run 84
-→ NEW
-
-same record, same content hash
-→ KNOWN
-
-same record, content hash changed after Run 84
-→ UPDATED
-
-previous opportunity no longer active/current
-→ retained as INACTIVE / SUPERSEDED / OUT_OF_SCOPE
-```
-
-No volver a correr `prioritize_jobs --apply` sin un refresh previo sólo para “actualizar” el watermark.
-
-### Regla de versionado
-
-No modificar materialmente las reglas anteriores manteniendo:
-
-```text
-JOB_CONTENT_V1
-OPERATIONAL_PRIORITY_V1
-```
-
-Cambios materiales futuros deben usar nuevas versiones explícitas.
-
----
-
-## 20. Shortlist / report v1 — TERMINADO
-
-### Objetivo
-
-Convertir el estado persistido de:
-
-```text
-job_operational_priorities
-+
-job_professional_matches
-```
-
-en una salida local cómoda para:
-
-```text
-review
-prioritization
-manual application
-```
-
-sin recalcular matching, freshness ni operational priority.
-
-### Discovery real
-
-Estado usado:
-
-```text
-Run 84
-OPERATIONAL_PRIORITY_V1
-```
-
-Rows:
-
-```text
-993
+Candidates persisted   1120
+Watermark               2026-08-08T23:49:46.330238+00:00
+Created                    0
+Updated                 1120
 ```
 
 Estados:
 
 ```text
-NEW            0
-UPDATED        0
-KNOWN        993
-INACTIVE       0
-SUPERSEDED     0
-OUT_OF_SCOPE   0
+NEW              0
+UPDATED        127
+KNOWN          952
+INACTIVE         0
+SUPERSEDED       0
+OUT_OF_SCOPE    41
 ```
 
-Professional levels:
+Por match:
 
 ```text
-VERY_HIGH   12
-HIGH        36
-MEDIUM     120
-LOW        825
+VERY_HIGH
+  UPDATED       5
+  KNOWN         6
+  OUT_OF_SCOPE  3
+
+HIGH
+  UPDATED      30
+  KNOWN        27
+  OUT_OF_SCOPE 11
+
+MEDIUM
+  UPDATED      48
+  KNOWN        81
+  OUT_OF_SCOPE 16
+
+LOW
+  UPDATED      44
+  KNOWN       838
+  OUT_OF_SCOPE 11
 ```
 
-Application channels:
+Channels:
 
 ```text
-DIRECT_APPLY_URL   606
-JOB_URL            387
-GENERAL_APPLICATION_URL 0
-PUBLIC_CONTACT      0
-NONE                0
+DIRECT_APPLY_URL 606
+JOB_URL          514
 ```
 
-High value:
+### Recency distribution observada
+
+Todas las priority rows:
 
 ```text
-VERY_HIGH + HIGH = 48
+UNKNOWN       541
+AGING         179
+OLD           173
+RECENT        117
+VERY_RECENT   110
 ```
 
-Current applications:
+Actionable:
 
 ```text
-0
+UNKNOWN       500
+AGING         179
+OLD           173
+RECENT        117
+VERY_RECENT   110
 ```
 
-No se deduplica automáticamente.
-
-Discovery observó:
+High Value:
 
 ```text
-31 exact company+title duplicate groups
-32 normalized company+title duplicate groups
+OLD          27
+UNKNOWN      20
+AGING        10
+RECENT        6
+VERY_RECENT   5
 ```
 
-Los IDs/URLs pueden representar postings distintos, regiones distintas o variantes reales.
-
-Por eso el reporte sólo expone:
+`NEW/UPDATED + VERY_HIGH/HIGH`:
 
 ```text
-Same-title Count
+OLD          24
+RECENT        5
+AGING         5
+VERY_RECENT   1
 ```
 
-como señal informativa.
-
-### Decisión de formato
-
-Formato V1:
+Esto demuestra el valor de separar:
 
 ```text
-XLSX
+Chamba discovery state
 ```
 
-Razones:
-
-- múltiples vistas lógicas;
-- URLs clickeables;
-- filters/sorting;
-- evidencia profesional ancha;
-- mejor workflow manual que CSV;
-- sólo 993 rows actuales, por lo que XLSX es suficientemente pequeño.
-
-Dependencia nueva:
+de:
 
 ```text
-openpyxl>=3.1,<4
+source market age
 ```
 
-en:
+24 de las 35 oportunidades `NEW/UPDATED + VERY_HIGH/HIGH` eran definitivamente `OLD`.
+
+### Nota sobre historical/out-of-scope recency
+
+Una fila retenida como `OUT_OF_SCOPE` puede tener recency `UNKNOWN` si ya no forma parte del current candidate scope y su reconstrucción histórica no lleva `raw_payload_json`.
+
+Ejemplo actual:
 
 ```text
-pyproject.toml
+LEAD 1004
+LEAD 1005
 ```
 
-### Archivos del slice
+Esto no afecta Focus porque ya son no accionables.
+
+---
+
+## 15. Credencial Payments — evidencia de recencia
+
+Observado después de Run 114:
 
 ```text
-pyproject.toml
-src/chamba_hunter/commands/export_shortlist.py
-src/chamba_hunter/repositories/job_shortlist_report_repository.py
-src/chamba_hunter/services/job_shortlist_report_service.py
+ATS 3516
+Senior Backend Developer
+VERY_HIGH 83.75
+KNOWN
+HIRINGROOM_RELATIVE = "Hace 2 meses"
+age range 56-62
+AGING
 ```
+
+Otros:
+
+```text
+ATS 3514
+Desarrollador/a Backend Python
+MEDIUM 64
+Hace 1 mes
+AGING
+
+ATS 3520
+Desarrollador/a Python
+LOW
+Hace 10 meses
+OLD
+```
+
+El caso que motivó el análisis no prueba una fecha exacta superior a 2 meses; el sistema conserva la evidencia real de Hiring Room y no inventa precisión.
+
+---
+
+## 16. Shortlist report V2 — local validado
 
 Report version:
 
 ```text
-SHORTLIST_REPORT_V1
+SHORTLIST_REPORT_V2
 ```
 
-Default search profile:
-
-```text
-BACKEND_SOFTWARE_V1
-```
-
-Default output:
+Default:
 
 ```text
 output/chamba-shortlist.xlsx
 ```
 
-`output/` ya está ignorado por Git.
+El XLSX es **output regenerable y read-only desde el punto de vista del workflow**.
 
-### Repository de reporting
-
-```text
-JobShortlistReportRepository
-```
-
-Es read-only.
-
-Lee:
-
-```text
-search_profiles
-job_operational_priorities
-job_professional_matches
-applications
-runs
-```
-
-No crea:
-
-```text
-runs
-run_steps
-DB writes
-```
-
-El source run del workbook se deriva del:
-
-```text
-evaluated_run_id
-```
-
-persistido en `job_operational_priorities` del profile.
-
-No usa simplemente “latest global prioritize run” como sustituto del snapshot realmente exportado.
-
-### Application tracking en reporte
-
-El reporte originalmente soportaba tracking sólo por `applications.job_id`.
-
-El slice posterior de application tracking generalizó la identidad a:
-
-```text
-record_kind
-record_id
-```
-
-por lo que `SHORTLIST_REPORT_V1` ahora puede mostrar el tracking de:
-
-```text
-ATS
-LEAD
-```
-
-sin cambiar la semántica del reporte.
-
-Campos mostrados:
-
-```text
-application_type
-status
-applied_at
-updated_at
-```
-
-Compatibilidad:
-
-```text
-ATS
-→ record_kind = ATS
-→ record_id = jobs.id
-→ job_id = jobs.id
-
-LEAD
-→ record_kind = LEAD
-→ record_id = job_leads.id
-→ job_id = NULL
-```
-
-Actualmente:
-
-```text
-applications rows = 0
-```
-
-El workbook sigue siendo read-only y no crea ni modifica application tracking.
-
-### Workbook
+No usar el XLSX como source of truth para tracking.
 
 Hojas:
 
@@ -3342,327 +1095,89 @@ All Current
 History
 ```
 
-#### Overview
-
-Incluye:
-
-```text
-report version
-search profile
-source priority run
-source run timestamp
-generation timestamp
-priority rule
-professional rule
-counts
-links a las hojas
-notas de semántica
-```
-
-#### Focus
-
-Semántica:
+### Focus V2
 
 ```text
 NEW or UPDATED
 +
 VERY_HIGH or HIGH
++
+source recency != OLD
 ```
 
-Es la cola primaria después de refreshes futuros.
+Sólo excluye `OLD` demostrado.
 
-En el baseline Run 84:
+`UNKNOWN` permanece elegible para Focus.
+
+### High Value
 
 ```text
-0 rows
+all current VERY_HIGH/HIGH
 ```
 
-#### High Value
+No excluye `OLD`.
+
+Esto preserva oportunidades profesionalmente buenas aunque no sean prioridad inmediata.
+
+### Columnas V2 agregadas
 
 ```text
-all current VERY_HIGH / HIGH
+Source Recency
+Source Age (days)
+Recency Evidence
 ```
 
-Baseline:
+La evidence puede mostrar, por ejemplo:
 
 ```text
-48 rows
+GETONBOARD_PUBLISHED_DATE: 2026-02-24
+HIRINGROOM_RELATIVE: Hace 2 meses
 ```
 
-#### All Current
+### Snapshot actual
+
+Source priority run:
 
 ```text
-all actionable
-NEW / UPDATED / KNOWN
+114
 ```
 
-Baseline:
+Después de registrar aplicaciones y regenerar:
 
 ```text
-993 rows
+Focus          11
+High Value     68
+All Current  1079
+History        41
 ```
 
-#### History
+Antes de V2:
 
 ```text
-INACTIVE
-SUPERSEDED
-OUT_OF_SCOPE
+Focus          34
+High Value     82
+All Current  1120
+History         0
 ```
 
-Baseline:
+La reducción viene de:
 
-```text
-0 rows
-```
-
-### Orden
-
-El reporte reutiliza el orden de operational priority.
-
-No introduce un score nuevo.
-
-Orden:
-
-```text
-actionable
-→ professional match level
-→ operational state
-→ professional score DESC
-→ application channel
-→ first_seen_at DESC
-```
-
-### Columnas
-
-Bloque visible principal:
-
-```text
-Priority Rank
-Operational State
-Match Level
-Professional Score
-Company
-Title
-Origin / Provider
-Application Channel
-Open
-Tracked Status
-First Seen
-Last Changed
-Published At
-Same-title Count
-```
-
-Evidencia profesional:
-
-```text
-Occupation
-Backend Relevance
-Seniority
-Leadership
-Role Pts
-Skills Pts
-Seniority Pts
-Leadership Pts
-Tech Penalty
-Score Ceiling
-Exact Skills
-Peer Skills
-Related Skills
-Secondary Skills
-Alternate Stack
-Ceiling Reasons
-```
-
-Tracking/identidad/URLs:
-
-```text
-Application Type
-Applied At
-Record Kind
-Record ID
-Application Target
-Job URL
-Apply URL
-```
-
-### Validación real
-
-Workbook generado:
-
-```text
-output/chamba-shortlist.xlsx
-```
-
-Size observado:
-
-```text
-283966 bytes
-```
-
-Sheets observadas:
-
-```text
-Overview
-Focus
-High Value
-All Current
-History
-```
-
-Rows:
-
-```text
-Focus          0
-High Value    48
-All Current  993
-History        0
-```
-
-Hyperlinks:
-
-```text
-High Value    48
-All Current  993
-```
-
-Top row:
-
-```text
-Improving
-Semi Senior Back-end Engineer: Java
-88.9
-```
-
-Duplicate signal:
-
-```text
-max Same-title Count = 8
-```
-
-DB read-only invariant:
-
-```text
-runs before = 84
-runs after  = 84
-latest prioritize_jobs = 84
-```
-
-No formulas fueron necesarias.
-
-No hubo errores de fórmula.
-
-### Nota sobre el falso fallo del validator
-
-El validator local terminó con:
-
-```text
-FAILED
-- unexpected overview title
-```
-
-Ese resultado fue un falso negativo del runner.
-
-El workbook real contiene exactamente:
-
-```text
-Chamba Hunter — Shortlist
-```
-
-en:
-
-```text
-Overview!A1
-```
-
-La causa fue Windows PowerShell 5.1 interpretando un `.ps1` UTF-8 sin BOM como ANSI y corrompiendo el em dash de la **cadena esperada del validator**.
-
-No fue un defecto del workbook.
-
-Todos los otros invariantes del validator pasaron y el workbook fue inspeccionado directamente después.
-
-No es necesario volver a correr validation.
-
-### Regla para futuros `.ps1`
-
-Por preferencia operativa del usuario:
-
-```text
-cuando se entregue un único .ps1
-→ entregarlo dentro de un ZIP
-```
-
-Esto evita que el navegador abra el script en panel lateral.
-
-También preferir bloques:
-
-```powershell
-@'
-...
-'@ | python -
-```
-
-frente a `python -c` con SQL/quotes complejos.
+- corrección geográfica;
+- retención histórica `OUT_OF_SCOPE`;
+- exclusión de `OLD` en Focus.
 
 ---
 
-## 21. Manual application tracking + refresh workflow v1 — TERMINADO
+## 17. Manual application tracking
 
-### Discovery
-
-El discovery confirmó que el gap de tracking era material:
-
-```text
-ALL ACTIONABLE
-  ATS    892
-  LEAD   101
-
-VERY_HIGH/HIGH
-  ATS     28
-  LEAD    20
-```
-
-Los 101 LEAD accionables tenían:
-
-```text
-canonical_job_id = NULL
-```
-
-incluidos los 20 LEAD `VERY_HIGH/HIGH`.
-
-Por lo tanto, `applications.job_id` no podía identificar correctamente todas las oportunidades que ya aparecían en el shortlist.
-
-La tabla estaba vacía:
-
-```text
-applications rows = 0
-```
-
-y no existía repository/command de application tracking.
-
-### Migration 012
-
-Archivo:
-
-```text
-migrations/012_application_opportunity_identity.sql
-```
-
-Agrega:
+Migration 012 generaliza identidad:
 
 ```text
 record_kind
 record_id
 ```
 
-a:
-
-```text
-applications
-```
-
-Valores permitidos para job opportunities:
+Soporta:
 
 ```text
 ATS
@@ -3673,65 +1188,26 @@ Compatibilidad:
 
 ```text
 ATS
-→ record_kind = ATS
-→ record_id = jobs.id
-→ job_id = jobs.id
+→ job_id = record_id
 
 LEAD
-→ record_kind = LEAD
-→ record_id = job_leads.id
 → job_id = NULL
 ```
 
-Los campos legacy:
+Un único row actual por job opportunity.
 
-```text
-job_id
-public_contact_id
+No hay historial por transición en V1.
+
+Command:
+
+```powershell
+python -m chamba_hunter.commands.track_application `
+    --record-kind <ATS|LEAD> `
+    --record-id <ID> `
+    --status <STATUS>
 ```
 
-se conservan.
-
-No se hizo una migración destructiva.
-
-### Invariantes DB
-
-Migration 012 agrega:
-
-```text
-idx_applications_record
-uq_applications_job_opportunity
-```
-
-La unique parcial garantiza un único row actual de tracking por:
-
-```text
-application_type = JOB
-+
-record_kind
-+
-record_id
-```
-
-También agrega triggers que:
-
-- exigen `record_kind + record_id` para `application_type = JOB`;
-- verifican que el source ATS/LEAD exista;
-- exigen `ATS job_id == record_id`;
-- impiden `job_id` en LEAD.
-
-Rows JOB existentes con `job_id` pueden backfillearse a:
-
-```text
-record_kind = ATS
-record_id = job_id
-```
-
-### Enums
-
-No fue necesario crear nuevos estados.
-
-Se reutilizan:
+Estados existentes incluyen:
 
 ```text
 PENDING
@@ -3743,217 +1219,113 @@ WITHDRAWN
 NO_RESPONSE
 ```
 
-Application types existentes:
+### Source of truth
+
+Regla operativa:
 
 ```text
-JOB
-SPONTANEOUS_EMAIL
-GENERAL_APPLICATION
+DB   = source of truth para tracking
+XLSX = review / output regenerable
 ```
 
-Este slice sólo agrega el workflow manual de `JOB`.
+No editar `Tracked Status` manualmente en OpenOffice/Excel esperando persistencia.
 
-### Repository/service
-
-Archivos:
-
-```text
-src/chamba_hunter/repositories/application_repository.py
-src/chamba_hunter/services/application_tracking_service.py
-```
-
-Responsabilidad:
-
-```text
-resolve opportunity
-→ read current tracking
-→ create/update one JOB application row
-```
-
-No crea tracing runs.
-
-No toca matching ni operational priority.
-
-### CLI manual
-
-Archivo:
-
-```text
-src/chamba_hunter/commands/track_application.py
-```
-
-Uso conceptual:
+Después de trackear:
 
 ```powershell
-python -m chamba_hunter.commands.track_application `
-    --record-kind LEAD `
-    --record-id 168 `
-    --status APPLIED
+python -m chamba_hunter.commands.export_shortlist
 ```
 
-o:
+### Aplicaciones registradas al cierre
 
-```powershell
-python -m chamba_hunter.commands.track_application `
-    --record-kind ATS `
-    --record-id 8 `
-    --status INTERVIEW
-```
-
-`--notes` es opcional.
-
-Si se omite:
+Se crearon 8 rows con status:
 
 ```text
-existing notes are preserved
+SENT
 ```
 
-Si se pasa vacío:
+Oportunidades:
 
 ```text
-notes are cleared
-```
+LEAD 828
+Pomelo
+Software Engineer
 
-Semántica de `applied_at`:
+LEAD 1004
+2BRAINS
+Software Engineer Back-end (Semi Senior)
 
-```text
-first transition to APPLIED
-→ set applied_at
-
-later status changes
-→ preserve applied_at
-```
-
-Semántica de `last_status_at`:
-
-```text
-status changes
-→ now
-
-same status re-written
-→ preserve existing last_status_at
-```
-
-### Shortlist integration
-
-Archivo modificado:
-
-```text
-src/chamba_hunter/repositories/job_shortlist_report_repository.py
-```
-
-El reporte ahora hace join de tracking por:
-
-```text
-(record_kind, record_id)
-```
-
-cuando migration 012 está disponible.
-
-También conserva fallback legacy ATS-only si se abre una DB pre-012.
-
-No se cambió:
-
-```text
-SHORTLIST_REPORT_V1
-```
-
-ni su ranking.
-
-`Focus` tampoco excluye automáticamente oportunidades aplicadas.
-
-Razón:
-
-```text
-freshness / professional priority
-!=
-manual application state
-```
-
-El estado manual queda visible y filtrable en:
-
-```text
-Tracked Status
-Application Type
-Applied At
-```
-
-### Dry-run aislado
-
-Se validó sobre una copia SQLite real.
-
-Caso ATS:
-
-```text
-ATS 8
-PENDING
-→ APPLIED
-
-job_id = 8
-record_kind = ATS
-record_id = 8
-```
-
-Caso LEAD:
-
-```text
 LEAD 168
+Improving
+Semi Senior Back-end Engineer: Java
+
+ATS 8
+Bitso
+Software Engineer - Latam or Europe
+
+ATS 3516
+Credencial Payments
+Senior Backend Developer
+
+ATS 3353
+ITSM Consulting
+Desarrollador Backend - SSR
+
+LEAD 46
+PlainTech Solutions
+Back-end Developer Kotlin/Java
+
+ATS 3359
+Grupo ST
+Desarrollador/a Backend Ssr.
+```
+
+El último create devolvió:
+
+```text
+Application id: 8
+```
+
+por lo que se observaron 8 applications creadas en esta carga.
+
+### SENT vs APPLIED
+
+Estado actual elegido por el usuario:
+
+```text
+SENT
+```
+
+Con `SENT`, `applied_at` queda vacío porque la lógica actual sólo inicializa `applied_at` al entrar a:
+
+```text
 APPLIED
-
-job_id = NULL
-record_kind = LEAD
-record_id = 168
 ```
 
-Resultado:
+No cambiar automáticamente esta semántica.
+
+Si más adelante se decide que las postulaciones a jobs deben ser `APPLIED` y `SENT` debe reservarse para outreach/email, hacer esa decisión explícita antes de migrar/corregir estados.
+
+### Caso especial 2BRAINS 1004
+
+`LEAD 1004` quedó `OUT_OF_SCOPE` después de corregir geography, pero la aplicación manual ya realizada se preserva.
+
+Esto es correcto:
 
 ```text
-Migration 012             PASS
-JOB application rows      2
-duplicate opportunity     0
-ATS tracking in XLSX      PASS
-LEAD tracking in XLSX     PASS
-All Current rows          993
-```
-
-La DB real quedó intacta durante ese dry-run.
-
-### Apply real de migration 012
-
-Migration aplicada sobre la DB real.
-
-Validación:
-
-```text
-Migration 012                         1
-record_kind/record_id columns         yes
-unique opportunity index             yes
-identity triggers                     4 / 4
-runs before/after                     84 / 84
-applications before/after              0 / 0
-```
-
-El XLSX baseline continuó:
-
-```text
-Focus          0
-High Value    48
-All Current  993
-History        0
+operational eligibility
+!=
+historical fact that the user applied
 ```
 
 ---
 
-## 22. End-to-end refresh v1 — TERMINADO
+## 18. End-to-end refresh
 
-### Objetivo
+Command:
 
-Componer los commands ya existentes sin duplicar reglas de negocio.
-
-Archivo:
-
-```text
-src/chamba_hunter/commands/refresh_search.py
+```powershell
+python -m chamba_hunter.commands.refresh_search
 ```
 
 Sin `--apply`:
@@ -3962,15 +1334,13 @@ Sin `--apply`:
 PLAN ONLY
 ```
 
-No ejecuta nada.
-
 Con:
 
-```text
---apply
+```powershell
+python -m chamba_hunter.commands.refresh_search --apply
 ```
 
-ejecuta secuencialmente:
+ejecuta:
 
 ```text
 1  acquire_broad_jobs
@@ -3991,510 +1361,106 @@ ejecuta secuencialmente:
 16 export_shortlist
 ```
 
-El wrapper usa subprocesses de los commands existentes.
-
-No duplica repositories/services ni reglas de clasificación.
-
-Si un step retorna non-zero:
-
-```text
-refresh stops
-```
-
-Los runs ya persistidos por steps anteriores quedan como evidencia real del intento.
-
-### Opciones
-
-```text
---skip-broad
---skip-ats
---skip-export
---discover-broad-ats-limit N
---himalayas-max-jobs N
---getonboard-max-pages N
---output PATH
-```
-
-`discover_broad_ats` está deshabilitado por default en el refresh rutinario:
-
-```text
---discover-broad-ats-limit 0
-```
-
-Esto separa:
-
-```text
-routine refresh
-```
-
-de:
-
-```text
-careers/ATS discovery for new broad companies
-```
-
-que tiene otra semántica y costo.
-
-### Primer refresh real post-baseline
-
-Baseline anterior:
-
-```text
-Run 84
-finished_at 2026-08-08T22:41:13.367176Z
-```
-
-Primer refresh end-to-end real:
-
-```text
-Runs 85–99
-```
-
-Todos terminaron:
-
-```text
-SUCCESS
-```
-
-Secuencia:
-
-```text
-85 acquire_broad_jobs
-86 sync_greenhouse_jobs
-87 sync_lever_jobs
-88 sync_ashby_jobs
-89 sync_workable_jobs
-90 sync_smartrecruiters_jobs
-91 sync_bamboohr_jobs
-92 sync_hiringroom_jobs
-93 canonicalize_job_leads
-94 classify_argentina_eligibility
-95 classify_job_occupations
-96 classify_job_skills
-97 classify_job_seniority
-98 match_jobs
-99 prioritize_jobs
-```
-
-El export XLSX no crea run.
-
-### Broad acquisition Run 85
-
-```text
-HIMALAYAS received 500
-GETONBOARD received 339
-
-received total   839
-created          639
-updated          200
-```
-
-Después de adquisición:
-
-```text
-active unresolved leads   1016
-raw active candidates     4678
-```
-
-### ATS sync Runs 86–92
-
-Todos los boards/sites/tenants procesados terminaron correctamente.
-
-Snapshot activo:
-
-```text
-GREENHOUSE       1659
-LEVER            1139
-HIRINGROOM        485
-SMARTRECRUITERS   197
-ASHBY              90
-WORKABLE           65
-BAMBOOHR           24
-----------------------
-ATS ACTIVE       3659
-```
-
-Greenhouse:
-
-```text
-created       2
-deactivated   5
-```
-
-Los demás providers:
-
-```text
-created       0
-deactivated   0
-```
-
-### Canonicalization Run 93
-
-```text
-Total       1016
-Resolved      11
-Ambiguous      3
-Unmatched   1002
-Applied       11
-```
-
-### Argentina Run 94
-
-```text
-Total        4664
-Eligible      849
-Ineligible   3544
-Unknown       271
-```
-
-Nuevo downstream scope:
-
-```text
-ELIGIBLE + UNKNOWN = 1120
-```
-
-### Occupation Run 95
-
-```text
-Total          1120
-Software        311
-IT technical    142
-Tech adjacent    59
-Non technical   189
-Unknown         419
-```
-
-Software backend relevance:
-
-```text
-BACKEND       94
-FULL_STACK    95
-NON_BACKEND   54
-UNKNOWN       68
-```
-
-### Skills Run 96
-
-```text
-Candidates      1120
-With skills      604
-No skills        516
-Skill rows       3298
-```
-
-### Seniority Run 97
-
-```text
-Candidates      1120
-
-UNKNOWN          804
-SENIOR           191
-MID               39
-LEAD              32
-JUNIOR            22
-STAFF             10
-ENTRY              9
-PRINCIPAL          9
-INTERN             4
-```
-
-### Matching Run 98
-
-```text
-Candidates     1120
-ATS             892
-LEAD            228
-
-VERY_HIGH        14
-HIGH             68
-MEDIUM          145
-LOW             893
-```
-
-### Operational priority Run 99
-
-Watermark:
-
-```text
-2026-08-08T22:41:13.367176Z
-```
-
-Persisted rows:
-
-```text
-1120
-```
-
-Estados:
-
-```text
-NEW            127
-UPDATED          0
-KNOWN          993
-INACTIVE         0
-SUPERSEDED       0
-OUT_OF_SCOPE     0
-```
-
-Por match:
-
-```text
-VERY_HIGH
-  NEW      2
-  KNOWN   12
-
-HIGH
-  NEW     32
-  KNOWN   36
-
-MEDIUM
-  NEW     25
-  KNOWN  120
-
-LOW
-  NEW     68
-  KNOWN  825
-```
-
-Channels:
-
-```text
-DIRECT_APPLY_URL   606
-JOB_URL            514
-```
-
-El hecho de que:
-
-```text
-UPDATED = 0
-```
-
-es válido: los sync counters `updated` significan re-observación/escritura de rows existentes; `UPDATED` operacional sólo se activa por `JOB_CONTENT_V1 last_changed_at` posterior al watermark.
-
-### Shortlist post-refresh
-
-Workbook:
-
-```text
-output/chamba-shortlist.xlsx
-```
-
-Source priority run:
-
-```text
-99
-```
-
-Views:
-
-```text
-Focus          34
-High Value     82
-All Current  1120
-History         0
-```
-
-`Focus = 34` corresponde exactamente a:
-
-```text
-NEW/UPDATED
-+
-VERY_HIGH/HIGH
-```
-
-En esta corrida:
-
-```text
-2 NEW VERY_HIGH
-32 NEW HIGH
-0 UPDATED high-value
-```
-
-Applications:
+`--discover-broad-ats-limit` default:
 
 ```text
 0
 ```
 
-El refresh no modificó tracking manual.
+Por lo tanto routine refresh no hace broad ATS discovery salvo pedido explícito.
 
-### Acceptance
+### Refresh real del slice V2
+
+Runs:
 
 ```text
-refresh exit code      0
-runs before/after      84 → 99
-applications           0 → 0
-latest priority        Run 99 SUCCESS
-workbook source run    99
-result                 PASS
+100 acquire_broad_jobs
+101 sync_greenhouse_jobs
+102 sync_lever_jobs
+103 sync_ashby_jobs
+104 sync_workable_jobs
+105 sync_smartrecruiters_jobs
+106 sync_bamboohr_jobs
+107 sync_hiringroom_jobs
+108 canonicalize_job_leads
+109 classify_argentina_eligibility
+110 classify_job_occupations
+111 classify_job_skills
+112 classify_job_seniority
+113 match_jobs
+114 prioritize_jobs
 ```
+
+El export no crea run.
+
+Hubo un failure parcial dentro de SmartRecruiters:
+
+```text
+Privia Health
+Server disconnected without sending a response
+```
+
+Blend360 sí terminó correctamente y el command continuó; el refresh global llegó a Run 114 y exportó el report.
+
+No tratar ese fallo aislado como defecto del slice geo/recency.
 
 ---
 
-## 23. Workflow operativo actual
+## 19. Workflow operativo recomendado
 
-### Refresh rutinario
-
-Para ver plan:
-
-```powershell
-python -m chamba_hunter.commands.refresh_search
-```
-
-Para ejecutar:
-
-```powershell
-python -m chamba_hunter.commands.refresh_search --apply
-```
-
-El command finaliza regenerando:
+Routine:
 
 ```text
-output/chamba-shortlist.xlsx
-```
-
-### Review
-
-Abrir:
-
-```text
-output/chamba-shortlist.xlsx
-```
-
-Orden recomendado:
-
-```text
-Focus
+refresh_search --apply
+→ abrir output/chamba-shortlist.xlsx
+→ Focus
 → High Value
-→ All Current
+→ aplicar manualmente
+→ track_application en DB
+→ export_shortlist si se necesita reflejar tracking de inmediato
 ```
 
-`Focus` es la cola de oportunidades nuevas/actualizadas de alto valor.
+No modificar manualmente tracking dentro del XLSX.
 
-### Registrar una aplicación real
-
-Tomar desde XLSX:
-
-```text
-Record Kind
-Record ID
-```
-
-y ejecutar:
-
-```powershell
-python -m chamba_hunter.commands.track_application `
-    --record-kind <ATS|LEAD> `
-    --record-id <ID> `
-    --status APPLIED
-```
-
-Luego regenerar el XLSX:
-
-```powershell
-python -m chamba_hunter.commands.export_shortlist
-```
-
-El nuevo status aparece en:
+Al revisar Focus:
 
 ```text
 Tracked Status
-Application Type
-Applied At
 ```
 
-### Cambiar estado
+permite detectar oportunidades ya gestionadas.
 
-Ejemplo conceptual:
+`Focus` no excluye automáticamente las aplicadas.
+
+Razón:
 
 ```text
-APPLIED
-→ INTERVIEW
-→ REJECTED
+operational priority
+!=
+manual application state
 ```
-
-Se actualiza el mismo row de oportunidad.
-
-No se crea una fila histórica por cada transición en V1.
-
-### Principios preservados
-
-- no auto-apply;
-- no auto-email;
-- no inferir recruiter emails;
-- no web UI;
-- DB es source of truth;
-- XLSX es read-only;
-- application tracking no altera professional matching;
-- application tracking no altera operational priority;
-- refresh no modifica applications;
-- rediscovery ATS no corre automáticamente salvo flag explícito.
 
 ---
 
-## 24. Cierre del MVP operativo v1
+## 20. Estado del MVP
 
-### Publicación
-
-Commit confirmado en `main`:
+Chamba Hunter sigue siendo:
 
 ```text
-5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2
-tracking
+MVP local operativo = COMPLETE
 ```
 
-Incluye:
+El slice geo/recency corrige defectos observados durante uso real; no cambia esa conclusión.
 
-```text
-migrations/012_application_opportunity_identity.sql
-src/chamba_hunter/commands/refresh_search.py
-src/chamba_hunter/commands/track_application.py
-src/chamba_hunter/repositories/application_repository.py
-src/chamba_hunter/repositories/job_shortlist_report_repository.py
-src/chamba_hunter/services/application_tracking_service.py
-docs/PROJECT_CONTEXT.md
-```
+No existe una vertical obligatoria inmediata.
 
-No queda código de este slice pendiente de publicación.
+Próximos trabajos deben surgir de evidencia real.
 
-### Estado funcional
+Posibles líneas:
 
-El sistema ya cubre de punta a punta:
+### A. Operational usage / tuning
 
-```text
-wide acquisition
-→ ATS ingestion
-→ canonicalization
-→ geography
-→ occupation/backend
-→ skills
-→ seniority
-→ professional matching
-→ freshness / operational priority
-→ Focus / High Value XLSX
-→ manual application tracking
-→ repeatable end-to-end refresh
-```
-
-Por lo tanto:
-
-```text
-Chamba Hunter MVP local operativo = COMPLETE
-```
-
-No confundir esto con “producto sin posibilidades de mejora”.
-
-Significa que ya existe un workflow usable, persistente y repetible para la búsqueda backend actual.
-
-### Próximas líneas posibles
-
-No existe una única vertical obligatoria.
-
-Las siguientes líneas son independientes y deben elegirse por valor observado en uso real.
-
-#### A. Operational usage + tuning
-
-Usar realmente:
+Seguir usando:
 
 ```text
 Focus
@@ -4502,181 +1468,169 @@ High Value
 track_application
 ```
 
-y observar:
+y observar falsos positivos/negativos.
 
-- falsos positivos de matching;
-- falsos negativos;
-- calidad de las 34 oportunidades actuales de Focus;
-- si los duplicados son molestos en la práctica;
-- si falta información visible para decidir;
-- estados de aplicación realmente usados;
-- fricción del workflow manual.
+### B. Tracking semantics
 
-Regla:
+Decidir sólo si aparece fricción real:
 
 ```text
-no tuning sin evidencia de uso real
+SENT vs APPLIED
+applied_at semantics
+application history por transición
 ```
 
-Ésta es la continuación recomendada por defecto.
+No rediseñar preventivamente.
 
-#### B. ATS discovery coverage de nuevas compañías broad
+### C. ATS discovery coverage
 
-Run 85 creó muchas compañías nuevas desde broad acquisition.
+Medir costo/beneficio de nuevas companies broad sin ATS conocido.
 
-El refresh rutinario no ejecuta discovery ATS por default:
+No activar discovery indiscriminado en routine refresh.
+
+### D. Outreach fallback
+
+Sólo:
 
 ```text
---discover-broad-ats-limit 0
+public careers/recruiting email
+explicit general application URL
 ```
 
-Puede hacerse un vertical específico para medir:
+Nunca inferir emails personales.
 
-- cuántas nuevas companies no tienen ATS;
-- cuántas tienen entrypoint usable;
-- cuántas ya fueron scanned;
-- rendimiento marginal de nuevos scans;
-- si conviene una cadencia separada de discovery;
-- si vale incorporar discovery acotado al refresh habitual.
+### E. Search profiles adicionales
 
-No hacerlo automáticamente sin discovery de costo/beneficio.
-
-#### C. Manual outreach fallback
-
-Ya estaba definido como feature separada:
-
-```text
-company
-→ no matching job
-→ public careers/recruiting email
-   or explicit general application URL
-→ manual outreach candidate
-```
-
-No es necesario para el MVP de job matching.
-
-Si se implementa:
-
-- sólo contactos públicos;
-- nunca inferir emails personales;
-- nunca auto-enviar;
-- mantenerlo separado del ranking de postings.
-
-#### D. Search profiles adicionales
-
-Arquitectura futura permitida:
-
-```text
-shared corpus
-→ multiple search profiles
-```
-
-No empezar esto por anticipación.
-
-Sólo hacerlo si aparece un segundo caso de búsqueda real.
-
-### Qué NO hacer como siguiente paso automático
-
-- no agregar UI web por inercia;
-- no auto-apply;
-- no auto-email;
-- no inferir recruiter emails;
-- no refactorizar a un framework genérico de profesiones;
-- no ejecutar `refresh_search --apply` sólo para validar;
-- no cambiar thresholds sin revisar resultados reales;
-- no agregar nuevos providers sin evidencia de cobertura útil;
-- no convertir XLSX en source of truth.
+Sólo ante un segundo caso real.
 
 ---
 
-## 25. Prompt operativo para nueva conversación
+## 21. Qué NO hacer automáticamente
+
+- no UI web por inercia;
+- no auto-apply;
+- no auto-email;
+- no inferir recruiter emails;
+- no bypass anti-bot;
+- no refactor genérico de profesiones sin segundo caso;
+- no cambiar thresholds sin evidencia;
+- no modificar `MATCHING_V1` para meter recencia;
+- no convertir XLSX en source of truth;
+- no correr `refresh_search --apply` como simple test;
+- no asumir que `NEW` significa publicación reciente;
+- no asumir que `SENT` completa `applied_at`.
+
+---
+
+## 22. Prompt operativo para nueva conversación
 
 ```text
 Proyecto: Chamba Hunter
-Repositorio: Gtestino92/chamba-hunter
+Repo: Gtestino92/chamba-hunter
 Base: main
 
-Estado publicado confirmado al cerrar la conversación anterior:
-- HEAD de referencia: 5f8d0b3bf65fb9799c0811d5eb7d4ec57b3c45b2 (`tracking`).
-- Verificar HEAD real de main antes de asumir que sigue siendo ése.
-- Leer docs/PROJECT_CONTEXT.md completo.
-- Código/GitHub actual es source of truth.
+Fuente de verdad:
+- verificar GitHub HEAD real y worktree local antes de asumir estado;
+- leer docs/PROJECT_CONTEXT.md completo;
+- código/GitHub actual manda sobre el handoff;
+- DB local observada puede estar por delante de GitHub si hay cambios sin publicar.
 
-MVP operativo:
-- COMPLETE para la búsqueda local BACKEND_SOFTWARE_V1.
-- Pipeline publicado:
-  broad acquisition
-  → ATS ingestion
-  → canonicalization
-  → ARGENTINA_V1
-  → OCCUPATION_V1
-  → SKILLS_V1
-  → SENIORITY_V1
-  → MATCHING_V1
-  → JOB_CONTENT_V1
-  → OPERATIONAL_PRIORITY_V1
-  → SHORTLIST_REPORT_V1
-  → manual application tracking
-  → end-to-end refresh.
+GitHub publicado de referencia:
+- main confirmado al cierre: 0902b45a91eb612c1afc77e785a05f59c32658c7.
+- verificar si ya existe un commit posterior que publique geo/recency V2.
 
-DB local observada al cierre:
-- latest operational priority: Run 99 SUCCESS;
-- migration 012 applied;
-- applications rows: 0;
-- current shortlist:
-  Focus 34
-  High Value 82
-  All Current 1120
-  History 0.
-Estos conteos son estado local observado, no contratos permanentes.
+Slice local validado al cierre, pendiente de publicación si main sigue en 0902b45:
+- Get on Board geography enrichment;
+- src/chamba_hunter/domain/job_recency.py;
+- OPERATIONAL_PRIORITY_V2;
+- SHORTLIST_REPORT_V2;
+- no migration nueva;
+- ARGENTINA_V1 y MATCHING_V1 sin cambios.
+
+Archivos funcionales locales esperados:
+- src/chamba_hunter/repositories/job_operational_priority_repository.py
+- src/chamba_hunter/services/broad_job_acquisition_service.py
+- src/chamba_hunter/services/job_operational_priority_service.py
+- src/chamba_hunter/services/job_shortlist_report_service.py
+- src/chamba_hunter/sources/getonboard_jobs.py
+- src/chamba_hunter/domain/job_recency.py
+
+Último refresh real:
+- Runs 100-114;
+- Run 114 = OPERATIONAL_PRIORITY_V2 SUCCESS;
+- downstream current scope = 1079;
+- priority rows retained = 1120;
+- operational states:
+  UPDATED 127
+  KNOWN 952
+  OUT_OF_SCOPE 41
+  NEW 0.
+
+Shortlist actual:
+- Focus 11
+- High Value 68
+- All Current 1079
+- History 41
+- source priority run 114.
+
+Get on Board:
+- current 336;
+- UNKNOWN geography = 0;
+- MEDIUM+ current = 86;
+- MEDIUM+ eligible:
+  Argentina 18
+  Global 56
+  LATAM 12.
+- fully_remote normaliza a Worldwide;
+- remote_local usa residencia explícita de página pública.
+
+Recency:
+- exact <=7 VERY_RECENT
+- <=30 RECENT
+- <=60 AGING
+- >60 OLD
+- UNKNOWN sin evidence.
+- Hiring Room relative usa rangos conservadores.
+- "Hace 2 meses" = 56-62 = AGING, no OLD.
+- Focus V2 excluye sólo OLD demostrado.
+- High Value conserva OLD.
+- recency no modifica MATCHING_V1.
+
+2BRAINS acceptance:
+- LEAD 1003 Worldwide → ELIGIBLE REMOTE_GLOBAL → HIGH 76 → OLD.
+- LEAD 1004 Chile → INELIGIBLE REMOTE_FOREIGN_LOCATION → OUT_OF_SCOPE.
+- LEAD 1005 Chile → INELIGIBLE REMOTE_FOREIGN_LOCATION → OUT_OF_SCOPE.
 
 Application tracking:
-- identity: (record_kind, record_id);
-- supports ATS + LEAD;
-- ATS keeps job_id = record_id;
-- LEAD keeps job_id NULL;
-- command: chamba_hunter.commands.track_application;
-- no application history per transition in V1; one current row per opportunity.
+- DB es source of truth; XLSX es output regenerable.
+- 8 oportunidades registradas como SENT:
+  LEAD 828 Pomelo
+  LEAD 1004 2BRAINS
+  LEAD 168 Improving
+  ATS 8 Bitso
+  ATS 3516 Credencial Payments
+  ATS 3353 ITSM Consulting
+  LEAD 46 PlainTech Solutions
+  ATS 3359 Grupo ST.
+- SENT no completa applied_at con la semántica actual.
+- no cambiar a APPLIED automáticamente sin decisión explícita.
 
-Refresh:
-- command: chamba_hunter.commands.refresh_search;
-- without --apply = PLAN ONLY;
-- with --apply = real network/data refresh and advances operational watermark;
-- do NOT run --apply merely as a code validation;
-- routine refresh does not run broad ATS discovery unless --discover-broad-ats-limit > 0.
+Directivas de entrega:
+- diagnósticos Python: inline PowerShell con @' ... '@ | python -;
+- no pedir crear .py temporales manejables;
+- implementaciones: un ZIP con rutas repo-relative directas;
+- sin apply_*.py ni carpeta files/;
+- junto al ZIP dar un único bloque PowerShell que:
+  extrae en repo root,
+  ejecuta validación/acción necesaria,
+  borra ZIP sólo si todo salió bien,
+  muestra diff/status cuando aplique;
+- scripts .ps1 también dentro de ZIP;
+- output largo a .txt;
+- no project tests salvo pedido;
+- usar compileall + diff-check + checks focalizados;
+- usuario hace commit/push;
+- no commit/push/PR sin pedido explícito.
 
-Operational workflow:
-- review Focus first;
-- then High Value;
-- apply manually;
-- record real status with track_application;
-- regenerate XLSX with export_shortlist when needed.
-
-There is no mandatory next engineering vertical.
-Choose the next work from observed value:
-A) operational usage/tuning from real Focus/application experience — recommended default;
-B) ATS discovery coverage/cadence for newly discovered broad companies;
-C) separate manual outreach fallback using only public careers/recruiting contacts;
-D) another search profile only if a real second use case appears.
-
-Before implementing any of A-D:
-- perform read-only discovery against current GitHub/code/DB;
-- distinguish confirmed code, observed DB behavior, inference, and pending reproduction;
-- do not change stable rules without evidence;
-- preserve ARGENTINA_V1, OCCUPATION_V1, SKILLS_V1, SENIORITY_V1, MATCHING_V1, JOB_CONTENT_V1, OPERATIONAL_PRIORITY_V1 and SHORTLIST_REPORT_V1 unless a concrete defect is demonstrated.
-
-Operating constraints:
-- Windows PowerShell.
-- explanations Spanish; code/comments/prompts English.
-- complete files/scripts, never fragments.
-- multi-file changes preferably one ZIP with repo-relative paths.
-- when the only artifact is a .ps1, package it inside a ZIP.
-- large command output should go directly to .txt for upload.
-- no project tests unless explicitly requested; use focused compileall/diff/invariant/manual validations.
-- user commits/pushes manually.
-- do not commit/push/open PR unless explicitly requested.
-- no UI/web API unless deliberately chosen later.
-- no automated applications.
-- no anti-bot evasion.
-- never infer personal recruiter emails.
+No auto-apply, no auto-email, no anti-bot evasion, no emails personales inferidos.
 ```

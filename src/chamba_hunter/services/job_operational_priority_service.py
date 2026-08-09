@@ -7,6 +7,11 @@ from chamba_hunter.domain.common import (
     utc_now,
 )
 from chamba_hunter.domain.enums import RunStatus
+from chamba_hunter.domain.job_recency import (
+    RECENCY_RANK,
+    SourceRecency,
+    evaluate_source_recency,
+)
 from chamba_hunter.domain.tracing import (
     Run,
     RunStep,
@@ -25,7 +30,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OPERATIONAL_PRIORITY_V1"
+RULE_VERSION = "OPERATIONAL_PRIORITY_V2"
 PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 
 
@@ -94,6 +99,7 @@ class OperationalDecision:
     published_at: datetime | None
     last_changed_at: datetime | None
 
+    source_recency: SourceRecency
     reasons: JsonObject
 
     @property
@@ -303,6 +309,10 @@ def operational_sort_key(
             decision.professional_match_level,
             0,
         ),
+        -RECENCY_RANK.get(
+            decision.source_recency.bucket,
+            0,
+        ),
         -STATE_RANK.get(
             decision.operational_state,
             0,
@@ -435,6 +445,18 @@ class JobOperationalPriorityService:
             candidate
         )
 
+        source_recency = (
+            evaluate_source_recency(
+                now=now,
+                published_at=(
+                    candidate.published_at
+                ),
+                raw_payload_json=(
+                    candidate.raw_payload_json
+                ),
+            )
+        )
+
         reasons: JsonObject = {
             "rule_version": RULE_VERSION,
             "search_profile": PROFILE_NAME,
@@ -494,6 +516,9 @@ class JobOperationalPriorityService:
                     else None
                 ),
             },
+            "source_recency": (
+                source_recency.as_json()
+            ),
             "professional_match": {
                 "current": (
                     candidate
@@ -591,6 +616,9 @@ class JobOperationalPriorityService:
             ),
             last_changed_at=(
                 candidate.last_changed_at
+            ),
+            source_recency=(
+                source_recency
             ),
             reasons=reasons,
         )
@@ -729,6 +757,12 @@ class JobOperationalPriorityService:
                 in summary.decisions
             )
 
+            recency_counts = Counter(
+                decision.source_recency.bucket
+                for decision
+                in summary.decisions
+            )
+
             baseline = (
                 summary.freshness_baseline
             )
@@ -759,6 +793,11 @@ class JobOperationalPriorityService:
                 "channels": dict(
                     sorted(
                         channel_counts.items()
+                    )
+                ),
+                "source_recency": dict(
+                    sorted(
+                        recency_counts.items()
                     )
                 ),
                 "freshness_baseline": {

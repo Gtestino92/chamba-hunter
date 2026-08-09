@@ -22,6 +22,9 @@ from openpyxl.worksheet.table import (
     TableStyleInfo,
 )
 
+from chamba_hunter.domain.job_recency import (
+    RECENCY_RANK,
+)
 from chamba_hunter.repositories.job_shortlist_report_repository import (
     JobShortlistReportRepository,
     ShortlistReportRow,
@@ -35,7 +38,7 @@ from chamba_hunter.services.job_operational_priority_service import (
 )
 
 
-REPORT_VERSION = "SHORTLIST_REPORT_V1"
+REPORT_VERSION = "SHORTLIST_REPORT_V2"
 DEFAULT_PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 
 
@@ -54,6 +57,15 @@ _STATE_FILLS = {
     "INACTIVE": "E7E6E6",
     "SUPERSEDED": "E7E6E6",
     "OUT_OF_SCOPE": "E7E6E6",
+}
+
+
+_RECENCY_FILLS = {
+    "VERY_RECENT": "C6EFCE",
+    "RECENT": "E2F0D9",
+    "AGING": "FFF2CC",
+    "UNKNOWN": "E7E6E6",
+    "OLD": "F4CCCC",
 }
 
 
@@ -102,6 +114,9 @@ _HEADERS = (
     "Application Target",
     "Job URL",
     "Apply URL",
+    "Source Recency",
+    "Source Age (days)",
+    "Recency Evidence",
 )
 
 
@@ -143,6 +158,9 @@ _WIDTHS = {
     35: 42,
     36: 42,
     37: 42,
+    38: 16,
+    39: 18,
+    40: 34,
 }
 
 
@@ -161,6 +179,12 @@ class ShortlistReportItem:
     secondary_skills: tuple[str, ...]
     alternate_families: tuple[str, ...]
     ceiling_reasons: tuple[str, ...]
+
+    source_recency_bucket: str
+    source_recency_min_age_days: int | None
+    source_recency_max_age_days: int | None
+    source_recency_evidence_type: str | None
+    source_recency_evidence_value: str | None
 
     normalized_title: str
     same_title_count: int = 1
@@ -275,6 +299,23 @@ def _build_item(
     professional = _json_object(
         row.professional_reasons_json
     )
+
+    operational = _json_object(
+        row.operational_reasons_json
+    )
+
+    source_recency = (
+        operational.get(
+            "source_recency",
+            {},
+        )
+    )
+
+    if not isinstance(
+        source_recency,
+        dict,
+    ):
+        source_recency = {}
 
     candidate = professional.get(
         "candidate",
@@ -402,6 +443,52 @@ def _build_item(
                 "ceiling_reasons"
             )
         ),
+        source_recency_bucket=(
+            str(
+                source_recency.get(
+                    "bucket"
+                )
+                or "UNKNOWN"
+            )
+        ),
+        source_recency_min_age_days=(
+            _optional_int(
+                source_recency.get(
+                    "min_age_days"
+                )
+            )
+        ),
+        source_recency_max_age_days=(
+            _optional_int(
+                source_recency.get(
+                    "max_age_days"
+                )
+            )
+        ),
+        source_recency_evidence_type=(
+            str(
+                source_recency[
+                    "evidence_type"
+                ]
+            )
+            if source_recency.get(
+                "evidence_type"
+            )
+            is not None
+            else None
+        ),
+        source_recency_evidence_value=(
+            str(
+                source_recency[
+                    "evidence_value"
+                ]
+            )
+            if source_recency.get(
+                "evidence_value"
+            )
+            is not None
+            else None
+        ),
         normalized_title=(
             _normalize_title(
                 row.title
@@ -409,6 +496,22 @@ def _build_item(
         ),
     )
 
+
+def _optional_int(
+    value,
+) -> int | None:
+    if value is None:
+        return None
+
+    try:
+        return int(
+            value
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
 
 def _sort_key(
     item: ShortlistReportItem,
@@ -421,6 +524,10 @@ def _sort_key(
         ),
         -MATCH_LEVEL_RANK.get(
             source.professional_match_level,
+            0,
+        ),
+        -RECENCY_RANK.get(
+            item.source_recency_bucket,
             0,
         ),
         -STATE_RANK.get(
@@ -438,7 +545,6 @@ def _sort_key(
         source.record_kind,
         source.record_id,
     )
-
 
 def _with_duplicate_counts(
     items: list[
@@ -488,6 +594,21 @@ def _with_duplicate_counts(
             ),
             ceiling_reasons=(
                 item.ceiling_reasons
+            ),
+            source_recency_bucket=(
+                item.source_recency_bucket
+            ),
+            source_recency_min_age_days=(
+                item.source_recency_min_age_days
+            ),
+            source_recency_max_age_days=(
+                item.source_recency_max_age_days
+            ),
+            source_recency_evidence_type=(
+                item.source_recency_evidence_type
+            ),
+            source_recency_evidence_value=(
+                item.source_recency_evidence_value
             ),
             normalized_title=(
                 item.normalized_title
@@ -551,6 +672,8 @@ def build_summary(
                 "VERY_HIGH",
                 "HIGH",
             }
+            and item.source_recency_bucket
+            != "OLD"
         )
     )
 
@@ -638,6 +761,63 @@ def _join(
     )
 
 
+def _source_age_display(
+    item: ShortlistReportItem,
+) -> str:
+    minimum = (
+        item.source_recency_min_age_days
+    )
+    maximum = (
+        item.source_recency_max_age_days
+    )
+
+    if (
+        minimum is None
+        or maximum is None
+    ):
+        return ""
+
+    if minimum == maximum:
+        return str(
+            minimum
+        )
+
+    return (
+        f"{minimum}-{maximum}"
+    )
+
+
+def _recency_evidence_display(
+    item: ShortlistReportItem,
+) -> str:
+    evidence_type = (
+        item.source_recency_evidence_type
+    )
+    evidence_value = (
+        item.source_recency_evidence_value
+    )
+
+    if (
+        evidence_type is None
+        and evidence_value is None
+    ):
+        return ""
+
+    if evidence_type is None:
+        return (
+            evidence_value
+            or ""
+        )
+
+    if evidence_value is None:
+        return evidence_type
+
+    return (
+        f"{evidence_type}: "
+        f"{evidence_value}"
+    )
+
+
 def _item_values(
     rank: int,
     item: ShortlistReportItem,
@@ -706,6 +886,13 @@ def _item_values(
         source.application_target,
         source.job_url,
         source.apply_url,
+        item.source_recency_bucket,
+        _source_age_display(
+            item
+        ),
+        _recency_evidence_display(
+            item
+        ),
     )
 
 
@@ -971,7 +1158,7 @@ def _create_overview(
     view_rows = (
         (
             "Focus",
-            "NEW/UPDATED + VERY_HIGH/HIGH",
+            "NEW/UPDATED + VERY_HIGH/HIGH; excludes definitely OLD",
         ),
         (
             "High Value",
@@ -1043,9 +1230,15 @@ def _create_overview(
 
     sheet["D23"] = (
         "Application status is read from the latest "
-        "tracked ATS application when present. "
-        "LEAD tracking remains blank until its schema "
-        "is explicitly extended."
+        "tracked JOB application by Record Kind and "
+        "Record ID when present."
+    )
+
+    sheet["D24"] = (
+        "NEW/UPDATED describes Chamba discovery state. "
+        "Source Recency describes market age when "
+        "publication evidence exists. Focus excludes "
+        "only opportunities that are definitely OLD."
     )
 
     for column, width in {
@@ -1062,7 +1255,7 @@ def _create_overview(
 
     for row in range(
         1,
-        25,
+        26,
     ):
         sheet.row_dimensions[
             row
@@ -1077,6 +1270,10 @@ def _create_overview(
         vertical="top",
     )
     sheet["D23"].alignment = Alignment(
+        wrap_text=True,
+        vertical="top",
+    )
+    sheet["D24"].alignment = Alignment(
         wrap_text=True,
         vertical="top",
     )
@@ -1264,6 +1461,7 @@ def _create_data_sheet(
                         35,
                         36,
                         37,
+                        40,
                     }
                 ),
             )
@@ -1293,6 +1491,19 @@ def _create_data_sheet(
             fgColor=_LEVEL_FILLS.get(
                 source
                 .professional_match_level,
+                "FFFFFF",
+            ),
+        )
+
+        recency_cell = sheet.cell(
+            row=row_index,
+            column=38,
+        )
+
+        recency_cell.fill = PatternFill(
+            "solid",
+            fgColor=_RECENCY_FILLS.get(
+                item.source_recency_bucket,
                 "FFFFFF",
             ),
         )
@@ -1445,11 +1656,14 @@ def export_shortlist(
     _create_data_sheet(
         workbook,
         name="Focus",
-        title="Focus — New / Updated High Value",
+        title=(
+            "Focus — New / Updated High Value"
+        ),
         subtitle=(
-            "Primary queue after refresh: "
-            "NEW or UPDATED opportunities that are "
-            "VERY_HIGH or HIGH professionally."
+            "Primary queue after refresh: NEW or "
+            "UPDATED VERY_HIGH/HIGH opportunities, "
+            "excluding only those with evidence that "
+            "they are definitely OLD."
         ),
         items=summary.focus,
         table_name="FocusTable",

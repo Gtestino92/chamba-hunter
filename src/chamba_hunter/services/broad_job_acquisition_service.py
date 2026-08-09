@@ -42,6 +42,7 @@ from chamba_hunter.sources.getonboard import (
     GetOnBoardJobResource,
 )
 from chamba_hunter.sources.getonboard_jobs import (
+    GetOnBoardJobEnrichment,
     GetOnBoardJobsClient,
 )
 from chamba_hunter.sources.himalayas_jobs import (
@@ -517,6 +518,11 @@ class BroadJobAcquisitionService:
                             source_job=(
                                 source_job
                             ),
+                            enrichment=(
+                                fetch.enrichments.get(
+                                    source_job.id.strip()
+                                )
+                            ),
                             seen_at=seen_at,
                         )
                     )
@@ -817,6 +823,10 @@ def _himalayas_to_lead(
 def _getonboard_to_lead(
     company_id: int,
     source_job: GetOnBoardJobResource,
+    enrichment: (
+        GetOnBoardJobEnrichment
+        | None
+    ),
     seen_at: datetime,
 ) -> JobLead:
     attributes = source_job.attributes
@@ -841,6 +851,16 @@ def _getonboard_to_lead(
 
     locations: list[str] = []
 
+    if (
+        enrichment is not None
+        and enrichment.location_text
+        is not None
+    ):
+        _append_location(
+            locations,
+            enrichment.location_text,
+        )
+
     countries = _countries(
         attributes.countries
     )
@@ -849,13 +869,28 @@ def _getonboard_to_lead(
         *countries,
         attributes.remote_zone,
     ):
-        cleaned = _clean_text(value)
+        cleaned = _clean_text(
+            value
+        )
+
+        if cleaned is None:
+            continue
 
         if (
-            cleaned is not None
-            and cleaned not in locations
+            attributes.remote
+            and cleaned.casefold()
+            in {
+                "remote",
+                "remoto",
+            }
+            and locations
         ):
-            locations.append(cleaned)
+            continue
+
+        _append_location(
+            locations,
+            cleaned,
+        )
 
     workplace_type = (
         WorkplaceType.REMOTE
@@ -900,12 +935,61 @@ def _getonboard_to_lead(
         last_seen_at=seen_at,
         is_active=True,
         raw_payload=(
-            source_job.model_dump(
-                mode="json"
+            _getonboard_raw_payload(
+                source_job,
+                enrichment,
             )
         ),
     )
 
+
+def _append_location(
+    locations: list[str],
+    value: str,
+) -> None:
+    cleaned = _clean_text(
+        value
+    )
+
+    if (
+        cleaned is not None
+        and cleaned not in locations
+    ):
+        locations.append(
+            cleaned
+        )
+
+
+def _getonboard_raw_payload(
+    source_job: GetOnBoardJobResource,
+    enrichment: (
+        GetOnBoardJobEnrichment
+        | None
+    ),
+) -> dict:
+    payload = source_job.model_dump(
+        mode="json"
+    )
+
+    if enrichment is None:
+        return payload
+
+    payload[
+        "_chamba_source_enrichment"
+    ] = {
+        "location_text": (
+            enrichment.location_text
+        ),
+        "published_date": (
+            enrichment.published_date
+        ),
+        "remote_policy_text": (
+            enrichment.remote_policy_text
+        ),
+        "source": enrichment.source,
+    }
+
+    return payload
 
 def _ats_hint_from_url(
     job_lead_id: int,
