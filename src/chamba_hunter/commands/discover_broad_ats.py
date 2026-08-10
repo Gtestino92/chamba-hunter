@@ -1,6 +1,8 @@
 import argparse
 from collections import Counter
 from dataclasses import dataclass
+import json
+from urllib.parse import urlsplit
 
 from chamba_hunter.db.connection import (
     Database,
@@ -9,6 +11,7 @@ from chamba_hunter.db.migrations import (
     migrate,
 )
 from chamba_hunter.domain.enums import (
+    AtsProvider,
     AtsScanStatus,
     CompanyStatus,
     SourceType,
@@ -28,6 +31,10 @@ from chamba_hunter.repositories.tracing_repository import (
 from chamba_hunter.services.careers_ats_detection_service import (
     CareersAtsDetectionService,
 )
+from chamba_hunter.services.provider_hint_ats_detection_service import (
+    ProviderHintAtsDetectionService,
+    ProviderHintTarget,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +44,9 @@ class BroadAtsTarget:
 
     source_types: tuple[str, ...]
     lead_count: int
+
+    provider_hints: tuple[AtsProvider, ...] = ()
+    provider_hint_sources: tuple[str, ...] = ()
 
 
 def main() -> None:
@@ -64,6 +74,7 @@ def main() -> None:
             "ALL",
             SourceType.HIMALAYAS.value,
             SourceType.GETONBOARD.value,
+            SourceType.JOOBLE.value,
         ],
         default="ALL",
         help=(
@@ -126,6 +137,7 @@ def main() -> None:
         companies_without_ats,
         skipped_no_entrypoint,
         previously_scanned,
+        provider_hint_conflicts,
     ) = _build_targets(
         database=database,
         company_repository=(
@@ -162,6 +174,10 @@ def main() -> None:
         f"{skipped_no_entrypoint}"
     )
     print(
+        f"Provider hint conflicts:"
+        f" {provider_hint_conflicts}"
+    )
+    print(
         f"Scanned current site:    "
         f"{previously_scanned}"
     )
@@ -176,6 +192,10 @@ def main() -> None:
     print(
         f"{'HOMEPAGE':<18} "
         f"{strategy_counts.get('HOMEPAGE', 0)}"
+    )
+    print(
+        f"{'PROVIDER_HINT':<18} "
+        f"{strategy_counts.get('PROVIDER_HINT', 0)}"
     )
     print()
 
@@ -209,24 +229,92 @@ def main() -> None:
         )
     )
 
-    service = CareersAtsDetectionService(
-        company_repository=(
-            company_repository
-        ),
-        tracing_repository=(
-            tracing_repository
-        ),
-        company_ats_repository=(
-            company_ats_repository
-        ),
-    )
+    entrypoint_targets = [
+        target
+        for target in selected
+        if target.strategy
+        != "PROVIDER_HINT"
+    ]
 
-    summary = service.run(
-        [
-            target.company
-            for target in selected
-        ]
-    )
+    provider_hint_targets = [
+        target
+        for target in selected
+        if target.strategy
+        == "PROVIDER_HINT"
+    ]
+
+    summaries = []
+
+    if entrypoint_targets:
+        service = CareersAtsDetectionService(
+            company_repository=(
+                company_repository
+            ),
+            tracing_repository=(
+                tracing_repository
+            ),
+            company_ats_repository=(
+                company_ats_repository
+            ),
+        )
+
+        summaries.append(
+            service.run(
+                [
+                    target.company
+                    for target
+                    in entrypoint_targets
+                ]
+            )
+        )
+
+    if provider_hint_targets:
+        hint_service = (
+            ProviderHintAtsDetectionService(
+                tracing_repository=(
+                    tracing_repository
+                ),
+                company_ats_repository=(
+                    company_ats_repository
+                ),
+            )
+        )
+
+        hint_inputs = []
+
+        for target in provider_hint_targets:
+            if len(target.provider_hints) != 1:
+                raise RuntimeError(
+                    "PROVIDER_HINT target must "
+                    "have exactly one provider."
+                )
+
+            hint_inputs.append(
+                ProviderHintTarget(
+                    company=target.company,
+                    provider=(
+                        target.provider_hints[0]
+                    ),
+                    source_evidence=(
+                        ", ".join(
+                            target
+                            .provider_hint_sources
+                        )
+                    ),
+                )
+            )
+
+        summaries.append(
+            hint_service.run(
+                hint_inputs
+            )
+        )
+
+    results = [
+        result
+        for summary in summaries
+        for result in summary.results
+    ]
 
     provider_counts: Counter[str] = (
         Counter()
@@ -238,7 +326,7 @@ def main() -> None:
 
     detected_lines = 0
 
-    for result in summary.results:
+    for result in results:
         if (
             result.ats_status
             != AtsScanStatus.DETECTED
@@ -300,7 +388,7 @@ def main() -> None:
 
     problem_results = [
         result
-        for result in summary.results
+        for result in results
         if result.ats_status
         in {
             AtsScanStatus.BLOCKED,
@@ -345,35 +433,63 @@ def main() -> None:
         )
     )
 
+    processed = sum(
+        summary.processed
+        for summary in summaries
+    )
+    detected = sum(
+        summary.detected
+        for summary in summaries
+    )
+    not_detected = sum(
+        summary.not_detected
+        for summary in summaries
+    )
+    blocked = sum(
+        summary.blocked
+        for summary in summaries
+    )
+    failed = sum(
+        summary.failed
+        for summary in summaries
+    )
+    skipped = sum(
+        summary.skipped
+        for summary in summaries
+    )
+
     print("Discovery finished")
     print("------------------")
     print(
-        f"Run id:               "
-        f"{summary.run_id}"
+        "Run ids:              "
+        + ", ".join(
+            str(summary.run_id)
+            for summary in summaries
+        )
     )
     print(
         f"Processed:            "
-        f"{summary.processed}"
+        f"{processed}"
     )
     print(
         f"Detected:             "
-        f"{summary.detected}"
+        f"{detected}"
     )
     print(
         f"Not detected:         "
-        f"{summary.not_detected}"
+        f"{not_detected}"
     )
     print(
         f"Blocked:              "
-        f"{summary.blocked}"
+        f"{blocked}"
     )
     print(
         f"Failed:               "
-        f"{summary.failed}"
+        f"{failed}"
     )
     print(
         f"Skipped:              "
-        f"{summary.skipped}"
+        f"{skipped}"
     )
     print(
         f"Active ATS companies: "
@@ -406,6 +522,7 @@ def _build_targets(
     include_scanned: bool,
 ) -> tuple[
     list[BroadAtsTarget],
+    int,
     int,
     int,
     int,
@@ -485,6 +602,12 @@ def _build_targets(
             ),
         ).fetchall()
 
+    provider_evidence = (
+        _load_jooble_provider_evidence(
+            database
+        )
+    )
+
     companies = {
         company.id: company
         for company
@@ -498,6 +621,7 @@ def _build_targets(
 
     skipped_no_entrypoint = 0
     previously_scanned = 0
+    provider_hint_conflicts = 0
 
     for row in rows:
         if bool(
@@ -523,13 +647,45 @@ def _build_targets(
                 f"{company_id}"
             )
 
+        evidence_by_provider = (
+            provider_evidence.get(
+                company_id,
+                {},
+            )
+        )
+
+        provider_hints = tuple(
+            sorted(
+                evidence_by_provider,
+                key=lambda item: item.value,
+            )
+        )
+
+        provider_hint_sources: tuple[
+            str,
+            ...,
+        ] = ()
+
         if company.careers_url is not None:
             strategy = "KNOWN_CAREERS"
 
         elif company.website_url is not None:
             strategy = "HOMEPAGE"
 
+        elif len(provider_hints) == 1:
+            strategy = "PROVIDER_HINT"
+            provider_hint_sources = tuple(
+                sorted(
+                    evidence_by_provider[
+                        provider_hints[0]
+                    ]
+                )
+            )
+
         else:
+            if len(provider_hints) > 1:
+                provider_hint_conflicts += 1
+
             skipped_no_entrypoint += 1
             continue
 
@@ -559,6 +715,10 @@ def _build_targets(
                 lead_count=int(
                     row["lead_count"]
                 ),
+                provider_hints=provider_hints,
+                provider_hint_sources=(
+                    provider_hint_sources
+                ),
             )
         )
 
@@ -567,7 +727,154 @@ def _build_targets(
         len(rows),
         skipped_no_entrypoint,
         previously_scanned,
+        provider_hint_conflicts,
     )
+
+
+def _load_jooble_provider_evidence(
+    database: Database,
+) -> dict[
+    int,
+    dict[AtsProvider, set[str]],
+]:
+    with database.connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                company_id,
+                raw_payload_json
+            FROM job_leads
+            WHERE source_type = ?
+              AND is_active = 1
+              AND canonical_job_id IS NULL
+              AND raw_payload_json IS NOT NULL
+            """,
+            (
+                SourceType.JOOBLE.value,
+            ),
+        ).fetchall()
+
+    evidence: dict[
+        int,
+        dict[AtsProvider, set[str]],
+    ] = {}
+
+    for row in rows:
+        raw_payload = row[
+            "raw_payload_json"
+        ]
+
+        if not raw_payload:
+            continue
+
+        try:
+            payload = json.loads(
+                raw_payload
+            )
+        except (
+            json.JSONDecodeError,
+            TypeError,
+        ):
+            continue
+
+        job = payload.get("job")
+
+        if not isinstance(job, dict):
+            continue
+
+        source = job.get("source")
+
+        if not isinstance(source, str):
+            continue
+
+        cleaned_source = source.strip()
+
+        if not cleaned_source:
+            continue
+
+        provider = (
+            _provider_from_jooble_source(
+                cleaned_source
+            )
+        )
+
+        if provider is None:
+            continue
+
+        company_id = int(
+            row["company_id"]
+        )
+
+        (
+            evidence
+            .setdefault(
+                company_id,
+                {},
+            )
+            .setdefault(
+                provider,
+                set(),
+            )
+            .add(cleaned_source)
+        )
+
+    return evidence
+
+
+def _provider_from_jooble_source(
+    source: str,
+) -> AtsProvider | None:
+    cleaned = source.strip().casefold()
+
+    if not cleaned:
+        return None
+
+    if "://" in cleaned:
+        try:
+            host = (
+                urlsplit(cleaned)
+                .hostname
+                or ""
+            ).casefold()
+        except ValueError:
+            return None
+    else:
+        host = cleaned.split("/", 1)[0]
+
+    host = host.removeprefix("www.")
+
+    if host in {
+        "boards.greenhouse.io",
+        "job-boards.greenhouse.io",
+    }:
+        return AtsProvider.GREENHOUSE
+
+    if host == "jobs.lever.co":
+        return AtsProvider.LEVER
+
+    if host in {
+        "workable.com",
+        "apply.workable.com",
+        "jobs.workable.com",
+    }:
+        return AtsProvider.WORKABLE
+
+    if host in {
+        "smartrecruiters.com",
+        "jobs.smartrecruiters.com",
+        "careers.smartrecruiters.com",
+    }:
+        return AtsProvider.SMARTRECRUITERS
+
+    if (
+        host == "hiringroom.com"
+        or host.endswith(
+            ".hiringroom.com"
+        )
+    ):
+        return AtsProvider.HIRINGROOM
+
+    return None
 
 
 def _count_active_ats_companies(

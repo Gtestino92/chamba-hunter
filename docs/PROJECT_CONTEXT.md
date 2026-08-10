@@ -9,14 +9,14 @@
 
 ## 0. Fuente de verdad y estado actual
 
-Código, GitHub actual y la DB local observada son siempre fuente de verdad frente a este documento.
+Código/GitHub actual y la DB local observada son siempre fuente de verdad frente a este documento.
 
-Antes de recomendar o implementar:
+Antes de recomendar, diseñar o implementar:
 
 1. verificar HEAD real de `main`;
 2. verificar `git status --short`;
 3. leer este archivo completo;
-4. inspeccionar directamente los archivos del vertical a tocar;
+4. inspeccionar directamente los archivos reales del vertical a tocar;
 5. reconciliar este handoff contra GitHub;
 6. cuando el estado de DB sea relevante, usar una consulta read-only focalizada en vez de asumir conteos históricos;
 7. distinguir explícitamente:
@@ -25,84 +25,91 @@ Antes de recomendar o implementar:
    - inferido;
    - pendiente de verificar.
 
-### GitHub publicado al cierre de este handoff
+### GitHub publicado antes del slice C1 local
+
+HEAD verificado antes de implementar C1:
+
+```text
+807a0eb7b90c329a204eb17550c22cf881268502
+context
+```
+
+Parent funcional relevante:
 
 ```text
 c7d82ef37193d3d3367f2e9b072751ddad08e6d5
 add Jooble Argentina acquisition
 ```
 
-Parent:
+El commit `807a0...` es documental respecto de Jooble; el último cambio funcional publicado antes de C1 sigue siendo `c7d82...`.
+
+Si `main` avanzó después de este documento, verificar HEAD real y usar código/GitHub actual.
+
+### Worktree local esperado al cerrar C1
+
+Antes de agregar esta actualización documental, el estado local confirmado era:
 
 ```text
-c716e739c6af1bb21efc676a2bb5ac9170348cb8
-add Jobicy and We Work Remotely acquisition
+ M src/chamba_hunter/commands/discover_broad_ats.py
+?? src/chamba_hunter/services/provider_hint_ats_detection_service.py
 ```
 
-Slice OpenOffice anterior:
+Después de aplicar este documento, el set intencional para commit debería ser:
 
 ```text
-7618f3238b303575fe828d5dc2b903e39d817873
-application for xlsx
+ M docs/PROJECT_CONTEXT.md
+ M src/chamba_hunter/commands/discover_broad_ats.py
+?? src/chamba_hunter/services/provider_hint_ats_detection_service.py
 ```
 
-Contexto compacto previo a estos slices:
-
-```text
-ad4af3576c947d2ca12b212862184f798a4f39e8
-context
-```
-
-Geo/recency V2:
-
-```text
-034fcf34b92c3cfe6e6a75cb7cff2033815b3921
-final and fixes
-```
-
-Simplificación de application tracking:
-
-```text
-9760d76eceb755ce58ebc4bcdec56470bb3ef61c
-simplify application tracking
-```
-
-Si `main` avanzó después de este documento, verificar el HEAD real y usar código/GitHub actual.
-
-### Contexto histórico
-
-El handoff histórico detallado pre-V2 sigue recuperable en:
-
-```text
-0902b45a91eb612c1afc77e785a05f59c32658c7
-docs/PROJECT_CONTEXT.md
-```
-
-Usar este archivo como contexto operativo actual. Consultar el histórico sólo si hace falta reconstruir razonamiento detallado de slices viejos.
+No hubo migration para C1.
 
 ### Último estado operativo observado
 
-Último operational priority observado después de incorporar Jooble:
+Último matching persistido:
 
 ```text
-Run 131
+Run 141
+MATCHING_V1
+Candidates: 1605
+
+VERY_HIGH   18
+HIGH       182
+MEDIUM     231
+LOW       1174
+```
+
+Último operational priority:
+
+```text
+Run 142
 OPERATIONAL_PRIORITY_V2
+Candidates: 1682
 ```
 
-Último XLSX exportado observado:
+Estados observados:
 
 ```text
-Report version:  SHORTLIST_REPORT_V2
-OpenOffice:      OPENOFFICE_ACTIONS_V1
-Priority run:    131
-
-Focus:           121
-High Value:      198
-All Current:     1447
-History:         41
+NEW             194
+UPDATED           1
+KNOWN          1410
+INACTIVE         23
+SUPERSEDED       13
+OUT_OF_SCOPE     41
 ```
 
-Estos números son una foto de DB/corrida manual, no contratos permanentes.
+Último XLSX exportado:
+
+```text
+SHORTLIST_REPORT_V2
+OPENOFFICE_ACTIONS_V1
+Priority run: 142
+
+Focus:        7
+High Value: 200
+All Current: 1605
+History:     77
+```
 
 Output local normal:
 
@@ -141,7 +148,7 @@ Antes de dar comandos de staging/commit:
 
 - Explicaciones: español.
 - Código, comentarios de código y prompts para agentes: inglés.
-- Entorno operativo habitual: Windows + PowerShell.
+- Windows + PowerShell es el entorno operativo habitual.
 
 ### Diagnósticos / consultas Python
 
@@ -159,7 +166,7 @@ Para output largo:
 
 ```text
 → escribir directamente a .txt
-→ usuario sube el .txt
+→ el usuario sube el .txt
 ```
 
 ### Implementaciones / archivos
@@ -173,14 +180,6 @@ Cuando se entregue una implementación:
 - sin `apply_*.py`;
 - no pedir copiar fragmentos manualmente.
 
-Ejemplo:
-
-```text
-src/chamba_hunter/...
-docs/...
-migrations/...
-```
-
 Junto con el ZIP, entregar un único bloque PowerShell que:
 
 1. use `$ErrorActionPreference = "Stop"`;
@@ -191,8 +190,6 @@ Junto con el ZIP, entregar un único bloque PowerShell que:
 6. borre el ZIP sólo después de éxito;
 7. muestre `git diff --stat`;
 8. muestre `git status --short`.
-
-Si el único artefacto fuera un `.ps1`, empaquetarlo también en ZIP.
 
 ### Validación
 
@@ -343,7 +340,7 @@ No mezclar source recency dentro de `MATCHING_V1`.
 
 ## 5. Schema / migrations
 
-Migraciones publicadas conocidas:
+Migraciones publicadas:
 
 ```text
 001_initial_schema.sql
@@ -368,6 +365,9 @@ batch application tracking
 OpenOffice actions
 A1 Jobicy/WWR
 A2 Jooble
+B Recruitee value test
+C0 audit
+C1 Jooble supported ATS discovery
 ```
 
 Tablas/vistas centrales:
@@ -402,8 +402,6 @@ ats_syncs
 
 ### Broad
 
-Código publicado al cierre incluye:
-
 ```text
 HIMALAYAS
 GETONBOARD
@@ -418,7 +416,7 @@ No filtrar Argentina/backend dentro de adapters sólo para reducir volumen; esas
 
 La ausencia de una vacante en un snapshot broad limitado no prueba cierre y no debe desactivar automáticamente leads por ausencia.
 
-### ATS ingestion actual
+### ATS ingestion
 
 Providers con sync implementado:
 
@@ -438,53 +436,20 @@ Hiring Room es ATS, no broad.
 
 Bumeran/ZonaJobs directos no se fuerzan con bypass.
 
-### Candidate nuevo de Parte B
+### Providers observados pero no soportados
+
+Evidencia Jooble de C0 mostró, entre otros:
 
 ```text
-RECRUITEE
+teamtailor.com   23 postings observados
+breezy.hr         6 postings observados
 ```
 
-Al cierre de este handoff no está implementado como `AtsProvider` ni como sync adapter.
-
-No implementarlo por intuición: primero medir cobertura/valor marginal.
+Esto es evidencia para un value test futuro, no autorización para implementar providers por inercia.
 
 ---
 
-## 7. Broad acquisition previa — Himalayas / Get on Board
-
-### Himalayas
-
-Decisiones estables:
-
-- `applicationLink` es página del job en Himalayas, no apply URL externo;
-- guardar como `job_url`;
-- `apply_url = None`;
-- un incidente upstream con `companyName = "name"` fue reparado localmente;
-- el código evita volver a fusionar esas identidades usando slug seguro;
-- HTML directo de company profiles dio 403; no bypass;
-- enrichment de websites usa el MCP público de Himalayas cuando corresponde.
-
-No reintroducir one-shot repair/backfill utilities salvo necesidad explícita.
-
-### Get on Board geography V2
-
-La normalización preserva mejor la semántica de remote scope:
-
-```text
-fully_remote
-→ location_text = Worldwide
-
-remote_local
-→ residencia explícita recuperada desde evidencia pública
-```
-
-Publication date sólo con evidencia segura.
-
-No tomar cualquier fecha de description.
-
----
-
-## 8. A1 — Jobicy + We Work Remotely
+## 7. A1 — Jobicy + We Work Remotely
 
 Estado:
 
@@ -503,7 +468,7 @@ add Jobicy and We Work Remotely acquisition
 
 API pública, sin key.
 
-Configuración implementada:
+Configuración:
 
 ```text
 industry = engineering
@@ -517,20 +482,6 @@ Primera adquisición observada:
 66 created
 ```
 
-Downstream observado:
-
-```text
-ELIGIBLE     60
-UNKNOWN       0
-INELIGIBLE    6
-
-VERY_HIGH     0
-HIGH          3
-MEDIUM       20
-LOW          37
-NO_MATCH      6
-```
-
 ### We Work Remotely
 
 RSS público:
@@ -542,29 +493,13 @@ DevOps / Sysadmin
 
 No detail-page scraping.
 
-Dedupe entre feeds.
-
 Primera adquisición observada:
 
 ```text
 76 created
 ```
 
-Downstream observado:
-
-```text
-ELIGIBLE     66
-UNKNOWN       7
-INELIGIBLE    3
-
-VERY_HIGH      1
-HIGH           5
-MEDIUM         8
-LOW           59
-NO_MATCH       3
-```
-
-### A1 combinado
+A1 combinado inicial:
 
 ```text
 142 acquired
@@ -579,17 +514,11 @@ NO_MATCH       3
 9 NO_MATCH
 ```
 
-High Value inicial observado:
-
-```text
-9
-```
-
 No modificar A1 salvo evidencia nueva.
 
 ---
 
-## 9. A2 — Jooble Argentina
+## 8. A2 — Jooble Argentina
 
 Estado:
 
@@ -604,43 +533,23 @@ c7d82ef37193d3d3367f2e9b072751ddad08e6d5
 add Jooble Argentina acquisition
 ```
 
-### API / secreto
-
 Usa API oficial de Jooble Argentina.
 
-La key se maneja sólo mediante:
+Secreto:
 
 ```text
 JOOBLE_API_KEY
 ```
 
-Nunca pedir pegar la key en chat.
+Nunca pedir pegar la key en chat ni imprimir endpoints que la contengan.
 
-No imprimir endpoint completo porque contiene la key.
-
-Portal/API usado:
-
-```text
-ar.jooble.org
-```
-
-### Query set aprobado
+Query set:
 
 ```text
 backend
 java developer
 spring boot
 ```
-
-Excluidas deliberadamente:
-
-```text
-developer
-software engineer
-kotlin developer
-```
-
-`kotlin developer` mostró alto solapamiento con Java y más ruido visible.
 
 Default:
 
@@ -651,9 +560,7 @@ Default:
 6 requests
 ```
 
-Dedupe global por Jooble `id`.
-
-### Normalización
+Normalización relevante:
 
 ```text
 id       → external_id
@@ -669,123 +576,27 @@ expires_at     = None
 apply_url      = None
 ```
 
-El campo Jooble `updated` indica última actualización, no publication date.
-
-Decisión estable:
-
-```text
-updated stays in raw_payload_json
-published_at stays None
-```
-
-No fabricar source recency desde `updated`.
-
-### Primera adquisición real
-
-```text
-Run id:             123
-Requests made:        6
-Received unique:    251
-Normalized:         247
-Skipped:              4
-Companies created:   95
-Companies existing:  21
-Jobs created:        247
-Jobs updated:          0
-```
-
-Los 4 skipped no fueron diagnosticados individualmente; el porcentaje fue bajo y no bloqueó A2.
-
-### Canonicalization
-
-Dry-run observado después de adquisición:
-
-```text
-Total leads: 1394
-Resolved:       11
-Ambiguous:       3
-Unmatched:    1380
-```
-
-Los 11 proposed links de Jooble parecían correctos, principalmente HiringRoom y un caso Lever.
-
-Las 3 ambigüedades eran preexistentes, no introducidas por Jooble.
-
-Después de aplicar canonicalization quedaron aproximadamente:
-
-```text
-236 Jooble unresolved
-235 dentro del downstream current scope observado
-```
-
-### Downstream Jooble observado
-
-Active Jooble leads:
-
-```text
-247
-```
-
-Eligibility:
-
-```text
-ELIGIBLE      186
-UNKNOWN        49
-INELIGIBLE      1
-```
-
-Matching:
-
-```text
-VERY_HIGH       3
-HIGH          118
-MEDIUM         78
-LOW            36
-NO_MATCH       12
-```
-
-High Value:
-
-```text
-121
-```
-
-Sobre los ~235 candidatos efectivos no canonicalizados, High/Very High fue aproximadamente 51.5%.
-
-### Auditoría geográfica Jooble
-
-Entre 186 `ELIGIBLE` unresolved se encontró un solo título con contradicción geográfica explícita:
-
-```text
-Senior Java Engineer - remote, within EU
-location_text = Buenos Aires
-ARGENTINA_V1 = ELIGIBLE / ARGENTINA_LOCATION
-```
-
-Decisión:
-
-```text
-no modificar ARGENTINA_V1
-no agregar regla Jooble especial por 1 caso aislado
-```
-
-### Recency Jooble
-
-Los candidatos Jooble quedaron:
-
-```text
-source_recency = UNKNOWN
-```
-
-Esto es deliberado.
-
-`UNKNOWN` es un estado válido y neutral; no significa reciente.
+`updated` se preserva sólo en `raw_payload_json`.
 
 No mapear `updated` a publication date.
 
+El payload persistido conserva además `job.source`, que C1 explota sólo como provider hint.
+
+Primera adquisición real:
+
+```text
+Run 123
+Requests made:       6
+Received unique:   251
+Normalized:        247
+Skipped:             4
+```
+
+No usar el redirect Jooble para recuperar first-party URL: el test C0 produjo `403` en los 12 casos inspeccionados y no se hace bypass.
+
 ---
 
-## 10. Canonicalization
+## 9. Canonicalization
 
 Cross-source identity:
 
@@ -811,13 +622,13 @@ destructive merge
 
 Broad provenance se preserva.
 
-Jooble mostró valor de canonicalization real contra ATS existentes, por lo que debe seguir ejecutándose después de broad acquisition y ATS sync.
+Canonicalization debe seguir ejecutándose después de broad acquisition y ATS sync.
 
 ---
 
-## 11. Argentina eligibility V1
+## 10. Argentina / occupation / skills / seniority / matching
 
-Principio:
+### ARGENTINA_V1
 
 ```text
 REMOTE
@@ -833,31 +644,13 @@ INELIGIBLE
 UNKNOWN
 ```
 
-Evidence principal:
-
-```text
-location_text
-```
-
-`workplace_type` es complementario.
-
-`title` funciona sólo como fallback fuerte cuando location no resolvió scope.
-
-`description` no decide geography.
-
 Remote sin scope:
 
 ```text
 UNKNOWN / REMOTE_SCOPE_UNKNOWN
 ```
 
-No forzar `UNKNOWN = 0` globalmente.
-
 No cambiar `ARGENTINA_V1` por peculiaridades aisladas de una fuente sin evidencia suficiente.
-
----
-
-## 12. Occupation / skills / seniority
 
 ### OCCUPATION_V1
 
@@ -881,23 +674,13 @@ UNKNOWN
 NOT_APPLICABLE
 ```
 
-No mezclar skills/seniority/matching/recency en esta capa.
-
 ### SKILLS_V1
 
-Una skill row significa:
-
-```text
-explicit skill mention in title and/or description
-```
+Una skill row significa una mención explícita en title/description.
 
 No significa required/preferred/hard requirement.
 
-Transferibilidad pertenece a matching.
-
 ### SENIORITY_V1
-
-Seniority:
 
 ```text
 INTERN
@@ -911,35 +694,9 @@ LEAD
 UNKNOWN
 ```
 
-Leadership separada:
+Leadership es una dimensión separada.
 
-```text
-NONE
-UNKNOWN
-MANAGER
-DIRECTOR
-HEAD
-VP
-C_LEVEL
-```
-
-No cambiar semántica sin versionar.
-
----
-
-## 13. MATCHING_V1
-
-Profile:
-
-```text
-BACKEND_SOFTWARE_V1
-```
-
-Score máximo:
-
-```text
-100
-```
+### MATCHING_V1
 
 Thresholds:
 
@@ -948,16 +705,6 @@ VERY_HIGH >= 80
 HIGH      >= 65
 MEDIUM    >= 45
 LOW        < 45
-```
-
-Componentes:
-
-```text
-role / backend fit      max 45
-skills / transfer      max 30
-seniority fit           max 15
-leadership fit          max 10
-technology penalty      min -5
 ```
 
 No participan:
@@ -970,614 +717,637 @@ application channel
 manual application status
 ```
 
-No cambiar thresholds por una fuente nueva sin evidencia de falsos positivos/negativos del modelo de matching.
+No cambiar thresholds por una fuente nueva sin evidencia suficiente.
+
+### Estado observado después de C1
+
+Runs:
+
+```text
+137 ARGENTINA_V1
+138 OCCUPATION_V1
+139 SKILLS_V1
+140 SENIORITY_V1
+141 MATCHING_V1
+```
+
+Matching run 141:
+
+```text
+Candidates: 1605
+
+ATS   1063
+LEAD   542
+
+VERY_HIGH    18
+HIGH        182
+MEDIUM      231
+LOW        1174
+```
 
 ---
 
-## 14. JOB_CONTENT_V1 / content freshness
+## 11. JOB_CONTENT_V1 / operational priority
 
-Persiste:
-
-```text
-content_hash
-content_hash_version
-last_changed_at
-```
-
-en `jobs` y `job_leads`.
-
-Material hash incluye contenido material del posting, no `last_seen_at`, `is_active` ni raw payload.
-
-Semántica:
+Mantener separado:
 
 ```text
-new
-→ current hash
-→ last_changed_at NULL
-
-same material content
-→ preserve last_changed_at
-
-material content changes
-→ last_changed_at = seen_at
+professional fit
+vs
+freshness / source state
+vs
+application channel
 ```
 
-`jobs_updated` o `last_seen_at` no prueban cambio material.
+`OPERATIONAL_PRIORITY_V2` usa el estado actual de las fuentes, canonicalization, freshness y canales de aplicación.
+
+Último run observado:
+
+```text
+Run 142
+Candidates: 1682
+
+NEW             194
+UPDATED           1
+KNOWN          1410
+INACTIVE         23
+SUPERSEDED       13
+OUT_OF_SCOPE     41
+```
+
+Application channels observados:
+
+```text
+DIRECT_APPLY_URL           767
+JOB_URL                    915
+GENERAL_APPLICATION_URL      0
+PUBLIC_CONTACT               0
+NONE                         0
+```
+
+Los 13 `SUPERSEDED` de run 142 corresponden exactamente a los broad leads canonicalizados por C1.
 
 ---
 
-## 15. Source recency
+## 12. Shortlist / OpenOffice / application tracking
 
-Helper:
+Export:
 
-```text
-src/chamba_hunter/domain/job_recency.py
+```powershell
+python -m chamba_hunter.commands.export_shortlist
 ```
 
-Buckets:
-
-```text
-VERY_RECENT
-RECENT
-AGING
-UNKNOWN
-OLD
-```
-
-Rank:
-
-```text
-VERY_RECENT > RECENT > AGING > UNKNOWN > OLD
-```
-
-Evidence precedence actual:
-
-```text
-1. published_at
-2. Get on Board published_date enrichment
-3. Hiring Room published_relative
-4. UNKNOWN
-```
-
-Exact age:
-
-```text
-<= 7 days    VERY_RECENT
-<= 30        RECENT
-<= 60        AGING
-> 60         OLD
-```
-
-Hiring Room relative usa rangos conservadores.
-
-No fabricar fecha exacta.
-
-`UNKNOWN` es neutral, no reciente.
-
-Jooble permanece `UNKNOWN` porque no ofrece publication date confiable en la integración actual.
-
----
-
-## 16. OPERATIONAL_PRIORITY_V2
-
-Estados:
-
-```text
-NEW
-UPDATED
-KNOWN
-INACTIVE
-SUPERSEDED
-OUT_OF_SCOPE
-```
-
-Watermark:
-
-```text
-finished_at of previous prioritize_jobs SUCCESS
-```
-
-`NEW` depende de `first_seen_at > previous watermark`.
-
-`UPDATED` depende de cambio material/reentrada según reglas vigentes.
-
-Orden conceptual:
-
-```text
-1 actionable
-2 professional match level
-3 source recency
-4 operational state
-5 professional score
-6 application channel
-7 first_seen_at
-8 deterministic identity
-```
-
-Recency no modifica `MATCHING_V1`.
-
-No correr `prioritize_jobs --apply` o full refresh sólo para validar código porque avanza el estado operativo.
-
-### Snapshot más reciente observado
-
-```text
-Priority run 131
-Focus        121
-High Value   198
-All Current 1447
-History       41
-```
-
-No asumir estos conteos en sesiones futuras sin consultar DB si son relevantes.
-
----
-
-## 17. SHORTLIST_REPORT_V2
-
-Output default:
+Default:
 
 ```text
 output/chamba-shortlist.xlsx
 ```
 
-Sheets:
+Último export observado:
 
 ```text
-Overview
-Focus
-High Value
-All Current
-History
-```
-
-### Focus
-
-```text
-NEW or UPDATED
-+
-VERY_HIGH or HIGH
-+
-source_recency != OLD
-```
-
-Sólo excluye `OLD` demostrado.
-
-`UNKNOWN` permanece viable.
-
-### High Value
-
-```text
-all current VERY_HIGH/HIGH
-```
-
-No excluye `OLD`.
-
-El XLSX es regenerable y no es source of truth.
-
----
-
-## 18. OpenOffice actions
-
-Version:
-
-```text
+SHORTLIST_REPORT_V2
 OPENOFFICE_ACTIONS_V1
+Priority run: 142
+APPLY links: 1796
+
+Focus:        7
+High Value: 200
+All Current: 1605
+History:     77
 ```
 
-Commit de introducción:
+Manual application tracking usa identidad polimórfica:
 
 ```text
-7618f3238b303575fe828d5dc2b903e39d817873
-application for xlsx
+record_kind = ATS | LEAD
+record_id
 ```
 
-Installer:
+Una job application es `APPLIED`.
+
+Outreach/general application futuro, si existe, debe permanecer semánticamente separado.
+
+Auditoría C1:
 
 ```text
-openoffice/chamba-openoffice-actions-installer.ods
+13 canonical pairs
+Tracked LEADs: 0
+Tracked ATS:   0
+Transfer risks: 0
 ```
 
-Macro global:
-
-```text
-My Macros -> Standard -> ChambaHunterActions
-```
-
-El XLSX generado agrega links `APPLY` que invocan `MarkApplied` y delegan el write a Python usando canonical `record_kind` + `record_id`.
-
-La acción persiste `APPLIED` en DB y actualiza visualmente la fila.
-
-No convertir OpenOffice en source of truth.
-
-### Workbook lock
-
-Antes de exportar/regenerar:
-
-```text
-cerrar output/chamba-shortlist.xlsx en OpenOffice/Excel
-```
-
-Si `openpyxl` falla con:
-
-```text
-PermissionError: [Errno 13] Permission denied: output\chamba-shortlist.xlsx
-```
-
-no repetir todo el refresh.
-
-Cerrar workbook y ejecutar sólo:
-
-```powershell
-python -m chamba_hunter.commands.export_shortlist `
-    --output output\chamba-shortlist.xlsx
-```
+No hubo que migrar application tracking durante C1.
 
 ---
 
-## 19. Manual application tracking
+## 13. Routine refresh actual
 
-DB = source of truth.
-
-XLSX = review/action surface regenerable.
-
-Para una postulación real a job:
-
-```text
-APPLIED
-```
-
-es el default.
-
-`SENT` queda disponible para outreach/general application futuro, no como default de job applications.
-
-### Single opportunity
-
-Por identity:
-
-```powershell
-python -m chamba_hunter.commands.track_application `
-    --record-kind <ATS|LEAD> `
-    --record-id <ID>
-```
-
-También soporta exact company + title cuando resuelve de forma única.
-
-### Batch normal
-
-Input clipboard:
-
-```text
-Company<TAB>Title
-Company<TAB>Title
-...
-```
-
-Uso:
-
-```powershell
-Get-Clipboard | python -m chamba_hunter.commands.track_applications
-```
-
-Semántica:
-
-```text
-parse all
-→ dedupe repeated company/title
-→ resolve every row
-→ abort before writes if any resolution is 0 or >1
-→ track APPLIED
-→ regenerate shortlist by default
-```
-
-Dry-run:
-
-```powershell
-Get-Clipboard |
-    python -m chamba_hunter.commands.track_applications --dry-run
-```
-
-No hace falta correr `refresh_search` después de cada postulación.
-
-Tracking y ranking permanecen separados.
-
----
-
-## 20. Routine refresh actual
-
-Command:
+Plan manual:
 
 ```powershell
 python -m chamba_hunter.commands.refresh_search
 ```
 
-Sin `--apply`:
-
-```text
-PLAN ONLY
-```
-
-Con ejecución real:
+Real:
 
 ```powershell
 python -m chamba_hunter.commands.refresh_search --apply
 ```
 
-### Broad blocks publicados
-
-El plan actual contiene tres bloques broad antes de canonicalization:
+Pipeline:
 
 ```text
-1. acquire_broad_jobs
-   - Himalayas
-   - Get on Board
-
-2. acquire_public_jobs
-   - Jobicy
-   - We Work Remotely
-
-3. acquire_jooble_jobs
-   - Jooble Argentina
+acquire Himalayas / Get on Board
+acquire Jobicy / We Work Remotely
+acquire Jooble
+optional broad ATS discovery
+sync all supported ATS providers
+canonicalize --apply
+geo --apply
+occupation --apply
+skills --apply
+seniority --apply
+matching --apply
+priority --apply
+XLSX export
 ```
 
-Luego, salvo flags de skip:
-
-```text
-optional discover_broad_ats
-ATS syncs
-canonicalize_job_leads --apply
-classify_argentina_eligibility --apply
-classify_job_occupations --apply
-classify_job_skills --apply
-classify_job_seniority --apply
-match_jobs --apply --top 0
-prioritize_jobs --apply --top 0
-export_shortlist
-```
-
-ATS syncs actuales:
-
-```text
-Greenhouse
-Lever
-Ashby
-Workable
-SmartRecruiters
-BambooHR
-HiringRoom
-```
-
-### Flags relevantes
-
-Verificar firma actual antes de usar, pero al cierre existen:
-
-```text
---skip-broad
---skip-ats
---skip-export
---discover-broad-ats-limit
---himalayas-max-jobs
---getonboard-max-pages
---jobicy-max-jobs
---wwr-max-jobs
---jooble-max-pages-per-query
-```
-
-Jooble default:
-
-```text
---jooble-max-pages-per-query 2
-```
-
-Deshabilitar sólo Jooble:
-
-```text
---jooble-max-pages-per-query 0
-```
-
-`--skip-broad` debe saltar las cinco broad sources.
-
-Broad ATS discovery sigue deshabilitado por default:
+Broad ATS discovery permanece deshabilitado por default:
 
 ```text
 --discover-broad-ats-limit 0
 ```
 
-### Precondiciones operativas para refresh real
+Jooble puede deshabilitarse específicamente con:
+
+```text
+--jooble-max-pages-per-query 0
+```
+
+`--skip-broad` salta las cinco broad sources.
 
 Antes de un refresh real:
 
-1. confirmar que se quiere nueva adquisición/repriorización;
+1. confirmar que se quiere adquisición/repriorización real;
 2. cerrar `output/chamba-shortlist.xlsx`;
-3. cargar `JOOBLE_API_KEY` en la sesión PowerShell;
-4. ejecutar plan-only si se quiere inspeccionar secuencia;
-5. recién entonces usar `--apply`.
+3. cargar `JOOBLE_API_KEY`;
+4. usar plan-only si hace falta;
+5. recién entonces `--apply`.
 
 No usar full refresh como validación de código.
 
 ---
 
-## 21. Broad ATS discovery existente
-
-Existe:
-
-```text
-src/chamba_hunter/commands/discover_broad_ats.py
-```
-
-Usa entry points legítimos:
-
-```text
-KNOWN_CAREERS
-HOMEPAGE
-```
-
-No reintroducir por defecto:
-
-```text
-LEAD_APPLY_URL
-LEAD_JOB_URL
-```
-
-No reescanea automáticamente una company ya escaneada contra su website actual salvo opción explícita.
-
-`401/403/429` no se evaden.
-
-Un bug previo por URLs HTML malformadas fue hardeneado para ignorar targets inválidos en vez de tumbar todo el scan.
-
-Routine refresh no ejecuta broad ATS discovery salvo `--discover-broad-ats-limit > 0`.
-
----
-
-## 22. Taxonomía de expansión acordada
-
-Candidatos de expansión acordados para esta fase:
-
-```text
-1. Jobicy
-2. We Work Remotely
-3. Jooble
-4. Recruitee
-```
-
-No agregar otras fuentes por inercia salvo pedido explícito o nueva evidencia que justifique revisar la decisión.
-
-Ejes:
-
-```text
-A. nuevas broad sources
-B. nuevo ATS
-C. mejor explotación de empresas ya conocidas
-```
+## 14. Parte B — Recruitee
 
 Estado:
 
 ```text
-A1 Jobicy + WWR   COMPLETE
-A2 Jooble         COMPLETE
-B  Recruitee      NEXT: RECON / VALUE TEST
-C  first-party / outreach fallback  AFTER B
+CLOSED / NO IMPLEMENTATION
 ```
 
----
+Recruitee fue tratado como posible ATS nuevo y value-tested antes de construir adapter.
 
-## 23. Próximo foco — Parte B: Recruitee
-
-Recruitee debe tratarse como **nuevo ATS**, no broad aggregator.
-
-### Regla principal de B
-
-No implementar inmediatamente.
-
-Primero comprobar que aporta suficiente cobertura marginal.
-
-### Discovery inicial
-
-Al arrancar una nueva conversación:
-
-1. verificar HEAD real de `main` y worktree;
-2. leer este `PROJECT_CONTEXT.md` completo;
-3. confirmar que Recruitee sigue sin provider/adapter actual;
-4. inspeccionar:
-   - `AtsProvider`;
-   - `company_ats` / repositories relevantes;
-   - detection actual;
-   - uno o dos adapters comparables;
-   - sync commands;
-   - `refresh_search`;
-5. investigar interfaces públicas/oficiales de Recruitee;
-6. determinar identidad estable de board/company;
-7. medir evidencia real en el universo actual;
-8. estimar cuántas companies/boards nuevos aportaría;
-9. decidir recién entonces si construir adapter.
-
-### Criterio de salida válido
-
-Si la cobertura marginal es baja:
+Conclusión:
 
 ```text
-close B without implementation
+insufficient marginal value to justify implementation now
 ```
 
-es una conclusión válida.
-
-No construir un adapter sólo porque técnicamente sea posible.
-
-### Si Recruitee vale la pena
-
-Slice esperado, manteniendo arquitectura existente:
+No se agregaron:
 
 ```text
-provider enum/detection if needed
-source client
-ingestion service
+AtsProvider.RECRUITEE
+client
+sync service
 sync command
 refresh integration
+migration
 ```
 
-No tocar salvo evidencia:
-
-```text
-matching
-ranking
-Argentina rules
-skills
-seniority
-OpenOffice
-application tracking
-```
-
-No migration salvo necesidad real del schema.
-
-Validar con checks focalizados, no full refresh.
+Reabrir sólo con evidencia nueva de cobertura marginal suficiente.
 
 ---
 
-## 24. Después de B — Parte C
+## 15. Parte C — objetivo general
 
-Objetivo: explotar mejor empresas ya conocidas sin ATS soportado.
+Objetivo original:
 
-Evaluar conservadoramente:
+```text
+explotar mejor empresas conocidas sin un ATS soportado
+```
+
+Canales considerados:
 
 ```text
 custom first-party careers pages
 explicit public recruiting/careers emails
 explicit general application forms
+supported ATS evidence hidden behind broad aggregators
 ```
 
-Sólo evidencia pública explícita.
-
-Nunca:
+Reglas:
 
 ```text
-infer personal recruiter emails
-auto-email
-auto-submit
-anti-bot bypass
+only explicit public evidence
+never infer recruiter emails
+no auto-email
+no auto-submit
+no anti-bot bypass
 ```
 
-Para outreach/general application futuro puede usarse `SENT`, separado de job applications `APPLIED`.
+C0 mostró que el subproblema de mayor valor inmediato no era outreach genérico sino recuperar ATS first-party a partir de evidencia ya persistida en Jooble.
 
 ---
 
-## 25. Operación recurrente objetivo
+## 16. C0 — audit / value test
 
-Una vez estabilizados A/B/C:
+Estado:
 
 ```text
-manual refresh
-→ revisar Focus / High Value
-→ postular manualmente
-→ registrar APPLIED
-→ repetir
+COMPLETE / POSITIVE
 ```
 
-No seguir agregando infraestructura si el cuello de botella pasa a ser revisión/postulación humana.
+### C0a — application channels
 
-La herramienta debe reducir fricción de búsqueda, no convertirse en un sistema de auto-apply.
+Sobre el target High Value auditado:
+
+```text
+169 opportunities
+89 companies
+15 companies with known entry point
+74 without known entry point
+```
+
+Todos tenían un job-specific `JOB_URL`.
+
+Resultado:
+
+```text
+no strict NONE gap
+generic application/contact discovery deferred
+```
+
+No priorizar email/general application mientras la oportunidad concreta ya tenga job URL.
+
+### C0b — identity gap
+
+Entre las 74 companies sin entry point:
+
+```text
+domain evidence: 0
+source URL evidence: 8
+```
+
+La mayor parte provenía de Jooble.
+
+No se justificó enrichment genérico por nombre.
+
+### C0c — Jooble upstream provider evidence
+
+`raw_payload_json.job.source` mostró evidencia de ATS/public job systems.
+
+Supported provider evidence en la muestra C0:
+
+```text
+HIRINGROOM        5
+GREENHOUSE        2
+WORKABLE          2
+SMARTRECRUITERS   2
+LEVER             1
+```
+
+12 postings / 11 unique companies.
+
+También se observó evidencia futura:
+
+```text
+TEAMTAILOR 23
+BREEZY      6
+```
+
+No se implementaron esos providers.
+
+### C0d — Jooble redirect resolution
+
+12/12 requests a links Jooble soportados devolvieron `403`.
+
+Decisión:
+
+```text
+do not resolve/bypass Jooble redirects
+```
+
+### C0e — marginality
+
+Los 11 boards soportados auditados no estaban presentes en `company_ats`.
+
+Esto confirmó valor marginal real para un discovery específico.
+
+`job_ats_hints` no se usó para persistir source-only guesses porque requiere identidad concreta; C1 valida públicamente antes de escribir `company_ats`.
 
 ---
 
-## 26. Qué NO hacer automáticamente
+## 17. C1 — JOOBLE_SUPPORTED_ATS_DISCOVERY_V1
+
+Estado:
+
+```text
+COMPLETE / POSITIVE
+FUNCTIONALLY VALIDATED
+PENDING LOCAL COMMIT/PUSH
+```
+
+### Objetivo
+
+Transformar:
+
+```text
+Jooble raw_payload.job.source
+→ supported provider hint
+→ tenant candidates derived from company identity
+→ public provider probe
+→ tracing / ats_detections / company_ats
+→ existing ATS sync
+→ existing canonicalization
+```
+
+### Implementación
+
+Archivos:
+
+```text
+src/chamba_hunter/commands/discover_broad_ats.py
+src/chamba_hunter/services/provider_hint_ats_detection_service.py
+```
+
+No migration.
+
+No cambio necesario en `refresh_search.py`.
+
+`discover_broad_ats` agrega:
+
+```text
+--source JOOBLE
+strategy PROVIDER_HINT
+```
+
+Provider mappings V1:
+
+```text
+boards.greenhouse.io
+job-boards.greenhouse.io
+→ GREENHOUSE
+
+jobs.lever.co
+→ LEVER
+
+workable.com
+apply.workable.com
+jobs.workable.com
+→ WORKABLE
+
+smartrecruiters.com
+jobs.smartrecruiters.com
+careers.smartrecruiters.com
+→ SMARTRECRUITERS
+
+hiringroom.com / subdomains
+→ HIRINGROOM
+```
+
+Unknown providers se ignoran.
+
+No se hace HTTP contra Jooble durante provider-hint detection.
+
+El Jooble source es **hint only**.
+
+`company_ats` se escribe únicamente si el probe público del provider valida un board/tenant concreto.
+
+### Identidad / aliases
+
+C1 reutiliza derivación existente de identificadores desde identidad de company.
+
+No se agregaron aliases hardcoded.
+
+En particular, no se hardcodeó:
+
+```text
+PedidosYa → DeliveryHero
+MindIT HR Agency → mindithr
+```
+
+Mantener esta restricción salvo evidencia y diseño explícito.
+
+### Discovery real
+
+Dry-run previo:
+
+```text
+Companies without ATS: 106
+Usable scan targets:    27
+PROVIDER_HINT:          27
+Provider hint conflicts: 0
+```
+
+Primera corrida real:
+
+```text
+Run 132
+Selected:     25
+Detected:     12
+Not detected: 13
+Blocked:       0
+Failed:        0
+
+Active ATS companies:
+68 → 80
+```
+
+Detectados:
+
+```text
+Frávega              HIRINGROOM   fravega
+Grupo Petersen       HIRINGROOM   grupopetersen
+Alianza Estrategica  HIRINGROOM   alianzaestrategica
+AppDirect            GREENHOUSE   appdirect
+Megatlon             HIRINGROOM   megatlon
+getsquire            LEVER        getsquire
+ThinkBig HR          HIRINGROOM   thinkbighr
+CL Select            HIRINGROOM   clselect
+La Caja              HIRINGROOM   lacaja
+Making Sense         HIRINGROOM   makingsense
+Grupo Myth           HIRINGROOM   grupomyth
+GoFundMe             GREENHOUSE   gofundme
+```
+
+Provider totals:
+
+```text
+HIRINGROOM  9
+GREENHOUSE  2
+LEVER       1
+```
+
+False positives observados:
+
+```text
+0
+```
+
+### ATS sync validation
+
+Focused sync runs:
+
+```text
+Run 133 GREENHOUSE
+Run 134 LEVER
+Run 135 HIRINGROOM
+```
+
+Todos los boards nuevos sincronizaron con éxito.
+
+Jobs creados por los 12 boards C1:
+
+```text
+AppDirect             64
+GoFundMe              41
+getsquire              6
+Frávega                14
+Megatlon               14
+ThinkBig HR            16
+CL Select               9
+La Caja                19
+Grupo Petersen         28
+Alianza Estrategica    10
+Making Sense            3
+Grupo Myth             32
+```
+
+Total first-party jobs creados desde los 12 boards:
+
+```text
+256
+```
+
+### Canonicalization validation
+
+Dry-run:
+
+```text
+Total:      1383
+Resolved:     13
+Ambiguous:     2
+Unmatched:  1368
+```
+
+Las 2 ambigüedades eran preexistentes y ajenas a C1.
+
+Apply:
+
+```text
+Run 136
+Applied: 13
+```
+
+Verificación DB de esos 13 links:
+
+```text
+Rows found:      13
+Linked:          13
+Wrong provider:   0
+Inactive jobs:    0
+```
+
+### Downstream impact
+
+Runs:
+
+```text
+137 eligibility
+138 occupation
+139 skills
+140 seniority
+141 matching
+```
+
+Auditoría de los 13 pares broad → ATS:
+
+```text
+Missing current ATS: 0
+High Value before:   6
+High Value after:    6
+Score improved:      7
+Score unchanged:     6
+Score decreased:     0
+```
+
+Mejoras destacadas:
+
+```text
+AppDirect
+77.00 HIGH
+→ 81.75 VERY_HIGH
+
+ThinkBig HR
+72.00 HIGH
+→ 82.75 VERY_HIGH
+```
+
+C1 no sólo mejora provenance/URLs: el contenido first-party puede mejorar la calidad del matching.
+
+### Priority impact
+
+Run 142 marcó exactamente los 13 broad leads como:
+
+```text
+SUPERSEDED
+```
+
+y retuvo los ATS first-party como oportunidades actuales.
+
+Entre las oportunidades `NEW` High/Very High del run aparecieron, entre otras:
+
+```text
+ThinkBig HR | Desarrollador Backend Java - Referente técnico
+AppDirect | Senior Backend Developer (Java)
+AppDirect | Senior Backend Engineer (Java)
+Alianza Estrategica | Backend Developer
+Frávega | Backend Developer SR
+GoFundMe | Senior Software Engineer (Payments)
+getsquire | Backend Engineer, Payments Team
+Grupo Petersen | Full stack developers / Java / React
+```
+
+### Application tracking safety
+
+Auditoría:
+
+```text
+Pairs:          13
+Tracked LEADs:   0
+Tracked ATS:     0
+Transfer risks:  0
+```
+
+No hubo tracking manual que migrar.
+
+### Shortlist final C1
+
+```text
+Priority run: 142
+Focus:          7
+High Value:   200
+All Current: 1605
+History:       77
+```
+
+C1 queda cerrado funcionalmente.
+
+---
+
+## 18. Qué NO hacer automáticamente
 
 - no UI web por inercia;
 - no auto-apply;
@@ -1592,12 +1362,78 @@ La herramienta debe reducir fricción de búsqueda, no convertirse en un sistema
 - no asumir que `NEW` significa recently published;
 - no usar `SENT` como default de job application;
 - no project tests salvo pedido explícito;
-- no nuevas broad sources fuera del set acordado sin pedido/evidencia;
-- no Recruitee implementation antes de medir valor marginal.
+- no nuevas broad sources por inercia;
+- no Recruitee implementation sin evidencia nueva;
+- no Teamtailor/Breezy implementation sólo porque C0 mostró sources;
+- no hardcoded tenant aliases sin diseño/evidencia explícitos;
+- no usar Jooble redirects para evadir 403.
 
 ---
 
-## 27. Método operativo para próximas conversaciones
+## 19. Próximo foco después de publicar C1
+
+Primero:
+
+```text
+commit/push manual del usuario
+```
+
+con sólo:
+
+```text
+docs/PROJECT_CONTEXT.md
+src/chamba_hunter/commands/discover_broad_ats.py
+src/chamba_hunter/services/provider_hint_ats_detection_service.py
+```
+
+Después, antes de implementar más:
+
+1. verificar HEAD publicado y worktree limpio;
+2. leer este documento completo;
+3. inspeccionar el C1 ya publicado;
+4. decidir C2 por **valor marginal medido**, no por completitud técnica.
+
+Candidatos razonables para value test C2:
+
+```text
+Teamtailor
+Breezy
+```
+
+porque C0 observó evidencia Jooble real.
+
+Pero primero medir:
+
+```text
+unique companies
+current supported ATS overlap
+high-value relevance
+public interface stability
+tenant identity derivability
+expected first-party job gain
+```
+
+La salida válida puede seguir siendo:
+
+```text
+do not implement
+```
+
+También queda disponible el fallback original de Parte C:
+
+```text
+explicit first-party custom careers
+explicit general application forms
+explicit public recruiting/careers contacts
+```
+
+pero C0 mostró que no es prioritario mientras las oportunidades High Value ya tengan job-specific URLs.
+
+No ejecutar otra discovery Jooble `--limit 25` sólo para intentar alcanzar los 2 targets que quedaron fuera de la primera corrida: primero inspeccionar semántica de re-scan/revisit para evitar reprobar innecesariamente los 13 `NOT_DETECTED`.
+
+---
+
+## 20. Método operativo para próximas conversaciones
 
 Trabajar de a un paso importante por vez:
 
@@ -1610,16 +1446,21 @@ inspección
 → siguiente paso
 ```
 
-No saltar directamente de discovery a implementación.
+Para outputs largos:
+
+```text
+command *> diagnostic.txt
+→ usuario sube diagnostic.txt
+```
+
+No saltar de discovery a implementación.
 
 No correr full refresh salvo finalidad operacional real.
 
 No alterar capas estables sólo para acomodar una fuente nueva.
 
-En Parte B, empezar por responder:
+Al retomar después de C1, la pregunta inicial es:
 
 ```text
-¿Recruitee aporta suficiente cobertura nueva para justificar un adapter?
+¿Existe suficiente valor marginal para construir C2, y en qué provider/canal?
 ```
-
-Sólo después decidir implementación.
