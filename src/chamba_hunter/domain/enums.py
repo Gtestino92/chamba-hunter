@@ -27,8 +27,20 @@ class SourceType(StrEnum):
     YC = "YC"
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
+    JOBICY = "JOBICY"
+    WEWORKREMOTELY = "WEWORKREMOTELY"
     WELLFOUND = "WELLFOUND"
     OTHER = "OTHER"
+
+
+BROAD_JOB_SOURCE_TYPES = frozenset(
+    {
+        SourceType.GETONBOARD,
+        SourceType.HIMALAYAS,
+        SourceType.JOBICY,
+        SourceType.WEWORKREMOTELY,
+    }
+)
 
 
 class AtsProvider(StrEnum):

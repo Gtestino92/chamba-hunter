@@ -31,27 +31,63 @@ def build_plan(
     discover_broad_ats_limit: int,
     himalayas_max_jobs: int,
     getonboard_max_pages: int,
+    jobicy_max_jobs: int,
+    wwr_max_jobs: int,
     output: Path,
 ) -> list[RefreshStep]:
     steps: list[RefreshStep] = []
 
     if not skip_broad:
-        steps.append(
-            RefreshStep(
-                name="Acquire broad job leads",
-                module="acquire_broad_jobs",
-                arguments=(
-                    "--himalayas-max-jobs",
-                    str(
-                        himalayas_max_jobs
+        if (
+            himalayas_max_jobs > 0
+            or getonboard_max_pages > 0
+        ):
+            steps.append(
+                RefreshStep(
+                    name=(
+                        "Acquire broad job leads"
                     ),
-                    "--getonboard-max-pages",
-                    str(
-                        getonboard_max_pages
+                    module=(
+                        "acquire_broad_jobs"
                     ),
-                ),
+                    arguments=(
+                        "--himalayas-max-jobs",
+                        str(
+                            himalayas_max_jobs
+                        ),
+                        "--getonboard-max-pages",
+                        str(
+                            getonboard_max_pages
+                        ),
+                    ),
+                )
             )
-        )
+
+        if (
+            jobicy_max_jobs > 0
+            or wwr_max_jobs > 0
+        ):
+            steps.append(
+                RefreshStep(
+                    name=(
+                        "Acquire additional "
+                        "public job leads"
+                    ),
+                    module=(
+                        "acquire_public_jobs"
+                    ),
+                    arguments=(
+                        "--jobicy-max-jobs",
+                        str(
+                            jobicy_max_jobs
+                        ),
+                        "--wwr-max-jobs",
+                        str(
+                            wwr_max_jobs
+                        ),
+                    ),
+                )
+            )
 
     if discover_broad_ats_limit > 0:
         steps.append(
@@ -223,8 +259,9 @@ def main() -> None:
         "--skip-broad",
         action="store_true",
         help=(
-            "Skip broad Himalayas/Get on Board "
-            "acquisition."
+            "Skip all broad acquisition "
+            "(Himalayas, Get on Board, "
+            "Jobicy, We Work Remotely)."
         ),
     )
 
@@ -262,7 +299,7 @@ def main() -> None:
         default=500,
         help=(
             "Broad acquisition Himalayas limit. "
-            "Defaults to 500."
+            "Use 0 to disable. Defaults to 500."
         ),
     )
 
@@ -272,7 +309,31 @@ def main() -> None:
         default=5,
         help=(
             "Broad acquisition Get on Board page "
-            "limit. Defaults to 5."
+            "limit. Use 0 to disable. "
+            "Defaults to 5."
+        ),
+    )
+
+    parser.add_argument(
+        "--jobicy-max-jobs",
+        type=int,
+        default=100,
+        help=(
+            "Maximum Jobicy Software Engineering "
+            "jobs requested for LATAM. "
+            "Range 1-100; use 0 to disable. "
+            "Defaults to 100."
+        ),
+    )
+
+    parser.add_argument(
+        "--wwr-max-jobs",
+        type=int,
+        default=300,
+        help=(
+            "Maximum unique We Work Remotely jobs "
+            "kept from Programming + DevOps RSS. "
+            "Use 0 to disable. Defaults to 300."
         ),
     )
 
@@ -308,6 +369,40 @@ def main() -> None:
             "cannot be negative"
         )
 
+    if (
+        args.jobicy_max_jobs
+        < 0
+        or args.jobicy_max_jobs
+        > 100
+    ):
+        parser.error(
+            "--jobicy-max-jobs must "
+            "be between 0 and 100"
+        )
+
+    if args.wwr_max_jobs < 0:
+        parser.error(
+            "--wwr-max-jobs cannot "
+            "be negative"
+        )
+
+    if (
+        not args.skip_broad
+        and args.himalayas_max_jobs
+        == 0
+        and args.getonboard_max_pages
+        == 0
+        and args.jobicy_max_jobs
+        == 0
+        and args.wwr_max_jobs
+        == 0
+    ):
+        parser.error(
+            "At least one broad source must "
+            "be enabled unless --skip-broad "
+            "is used."
+        )
+
     plan = build_plan(
         skip_broad=args.skip_broad,
         skip_ats=args.skip_ats,
@@ -320,6 +415,12 @@ def main() -> None:
         ),
         getonboard_max_pages=(
             args.getonboard_max_pages
+        ),
+        jobicy_max_jobs=(
+            args.jobicy_max_jobs
+        ),
+        wwr_max_jobs=(
+            args.wwr_max_jobs
         ),
         output=args.output,
     )

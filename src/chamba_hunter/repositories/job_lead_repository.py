@@ -7,7 +7,10 @@ from chamba_hunter.db.converters import (
     datetime_to_db,
     json_to_db,
 )
-from chamba_hunter.domain.enums import SourceType
+from chamba_hunter.domain.enums import (
+    BROAD_JOB_SOURCE_TYPES,
+    SourceType,
+)
 from chamba_hunter.domain.job_content import (
     JOB_CONTENT_HASH_VERSION,
     build_job_content_hash,
@@ -34,14 +37,17 @@ class JobLeadRepository:
         jobs: list[JobLead],
         seen_at: datetime,
     ) -> JobLeadUpsertCounts:
-        if source_type not in {
-            SourceType.HIMALAYAS,
-            SourceType.GETONBOARD,
-        }:
+        if source_type not in BROAD_JOB_SOURCE_TYPES:
+            accepted = ", ".join(
+                sorted(
+                    source.value
+                    for source in BROAD_JOB_SOURCE_TYPES
+                )
+            )
             raise ValueError(
                 "Broad job acquisition only "
-                "accepts HIMALAYAS or "
-                "GETONBOARD sources."
+                "accepts configured broad sources: "
+                f"{accepted}."
             )
 
         incoming: dict[str, JobLead] = {}
