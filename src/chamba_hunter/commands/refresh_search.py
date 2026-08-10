@@ -33,6 +33,7 @@ def build_plan(
     getonboard_max_pages: int,
     jobicy_max_jobs: int,
     wwr_max_jobs: int,
+    jooble_max_pages_per_query: int,
     output: Path,
 ) -> list[RefreshStep]:
     steps: list[RefreshStep] = []
@@ -84,6 +85,25 @@ def build_plan(
                         "--wwr-max-jobs",
                         str(
                             wwr_max_jobs
+                        ),
+                    ),
+                )
+            )
+
+        if jooble_max_pages_per_query > 0:
+            steps.append(
+                RefreshStep(
+                    name=(
+                        "Acquire Jooble Argentina "
+                        "job leads"
+                    ),
+                    module=(
+                        "acquire_jooble_jobs"
+                    ),
+                    arguments=(
+                        "--max-pages-per-query",
+                        str(
+                            jooble_max_pages_per_query
                         ),
                     ),
                 )
@@ -261,7 +281,7 @@ def main() -> None:
         help=(
             "Skip all broad acquisition "
             "(Himalayas, Get on Board, "
-            "Jobicy, We Work Remotely)."
+            "Jobicy, We Work Remotely, Jooble)."
         ),
     )
 
@@ -338,6 +358,17 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--jooble-max-pages-per-query",
+        type=int,
+        default=2,
+        help=(
+            "Maximum Jooble Argentina pages fetched "
+            "for each configured backend query. "
+            "Use 0 to disable. Defaults to 2."
+        ),
+    )
+
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path(
@@ -386,6 +417,12 @@ def main() -> None:
             "be negative"
         )
 
+    if args.jooble_max_pages_per_query < 0:
+        parser.error(
+            "--jooble-max-pages-per-query "
+            "cannot be negative"
+        )
+
     if (
         not args.skip_broad
         and args.himalayas_max_jobs
@@ -395,6 +432,8 @@ def main() -> None:
         and args.jobicy_max_jobs
         == 0
         and args.wwr_max_jobs
+        == 0
+        and args.jooble_max_pages_per_query
         == 0
     ):
         parser.error(
@@ -421,6 +460,9 @@ def main() -> None:
         ),
         wwr_max_jobs=(
             args.wwr_max_jobs
+        ),
+        jooble_max_pages_per_query=(
+            args.jooble_max_pages_per_query
         ),
         output=args.output,
     )

@@ -28,6 +28,7 @@ class SourceType(StrEnum):
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"
+    JOOBLE = "JOOBLE"
     WEWORKREMOTELY = "WEWORKREMOTELY"
     WELLFOUND = "WELLFOUND"
     OTHER = "OTHER"
@@ -38,6 +39,7 @@ BROAD_JOB_SOURCE_TYPES = frozenset(
         SourceType.GETONBOARD,
         SourceType.HIMALAYAS,
         SourceType.JOBICY,
+        SourceType.JOOBLE,
         SourceType.WEWORKREMOTELY,
     }
 )
