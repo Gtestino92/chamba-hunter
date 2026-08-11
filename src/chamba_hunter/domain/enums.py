@@ -53,6 +53,7 @@ class AtsProvider(StrEnum):
     WORKABLE = "WORKABLE"
     BAMBOOHR = "BAMBOOHR"
     HIRINGROOM = "HIRINGROOM"
+    TEAMTAILOR = "TEAMTAILOR"
     CUSTOM = "CUSTOM"
 
 

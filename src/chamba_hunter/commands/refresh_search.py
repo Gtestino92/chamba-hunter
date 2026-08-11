@@ -20,6 +20,7 @@ ATS_SYNC_MODULES = (
     "sync_smartrecruiters_jobs",
     "sync_bamboohr_jobs",
     "sync_hiringroom_jobs",
+    "sync_teamtailor_jobs",
 )
 
 

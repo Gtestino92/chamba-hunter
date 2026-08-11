@@ -85,6 +85,21 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--provider-hint",
+        choices=[
+            provider.value
+            for provider in AtsProvider
+            if provider
+            != AtsProvider.CUSTOM
+        ],
+        default=None,
+        help=(
+            "Restrict targets to one ATS provider "
+            "present in Jooble source evidence."
+        ),
+    )
+
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
@@ -132,6 +147,13 @@ def main() -> None:
         else SourceType(args.source)
     )
 
+    provider_hint_filter = (
+        AtsProvider(args.provider_hint)
+        if args.provider_hint
+        is not None
+        else None
+    )
+
     (
         targets,
         companies_without_ats,
@@ -144,6 +166,9 @@ def main() -> None:
             company_repository
         ),
         source_type=source_type,
+        provider_hint_filter=(
+            provider_hint_filter
+        ),
         include_scanned=(
             args.include_scanned
         ),
@@ -160,6 +185,10 @@ def main() -> None:
     print(
         f"Source filter:           "
         f"{args.source}"
+    )
+    print(
+        f"Provider hint filter:    "
+        f"{args.provider_hint or 'ALL'}"
     )
     print(
         f"Companies without ATS:  "
@@ -519,6 +548,7 @@ def _build_targets(
     database: Database,
     company_repository: CompanyRepository,
     source_type: SourceType | None,
+    provider_hint_filter: AtsProvider | None,
     include_scanned: bool,
 ) -> tuple[
     list[BroadAtsTarget],
@@ -660,6 +690,14 @@ def _build_targets(
                 key=lambda item: item.value,
             )
         )
+
+        if (
+            provider_hint_filter
+            is not None
+            and provider_hint_filter
+            not in provider_hints
+        ):
+            continue
 
         provider_hint_sources: tuple[
             str,
@@ -873,6 +911,14 @@ def _provider_from_jooble_source(
         )
     ):
         return AtsProvider.HIRINGROOM
+
+    if (
+        host == "teamtailor.com"
+        or host.endswith(
+            ".teamtailor.com"
+        )
+    ):
+        return AtsProvider.TEAMTAILOR
 
     return None
 

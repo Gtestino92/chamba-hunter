@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from chamba_hunter.db.connection import (
     Database,
@@ -18,6 +19,15 @@ from chamba_hunter.services.job_lead_canonicalization_service import (
 
 
 def main() -> None:
+    if hasattr(
+        sys.stdout,
+        "reconfigure",
+    ):
+        sys.stdout.reconfigure(
+            encoding="utf-8",
+            errors="replace",
+        )
+
     parser = argparse.ArgumentParser(
         description=(
             "Conservatively canonicalize broad "

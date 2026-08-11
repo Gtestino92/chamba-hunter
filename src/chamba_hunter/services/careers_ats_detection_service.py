@@ -775,6 +775,15 @@ class CareersAtsDetectionService:
                 )
             )
 
+            candidates = (
+                _filter_teamtailor_candidates_by_probe(
+                    candidates=candidates,
+                    probed_candidates=(
+                        probed_candidates
+                    ),
+                )
+            )
+
         return _ScanOutcome(
             careers_url=careers_url,
             careers_discovery_method=(
@@ -1201,6 +1210,34 @@ def _detect_from_page(
             )
         )
 
+    if (
+        "teamtailor-cdn.com"
+        in lower_html
+    ):
+        candidates.append(
+            AtsCandidate(
+                provider=(
+                    AtsProvider
+                    .TEAMTAILOR
+                ),
+                method=(
+                    AtsDetectionMethod
+                    .OTHER
+                ),
+                confidence=0.80,
+                source_url=(
+                    page.final_url
+                ),
+                evidence=(
+                    "HTML references "
+                    "Teamtailor CDN"
+                ),
+                board_url=(
+                    page.final_url
+                ),
+            )
+        )
+
     return candidates
 
 
@@ -1550,6 +1587,43 @@ def _detect_from_url(
             ),
         )
 
+    teamtailor_identifier = (
+        _teamtailor_identifier(
+            host
+        )
+    )
+
+    if teamtailor_identifier is not None:
+        return AtsCandidate(
+            provider=(
+                AtsProvider.TEAMTAILOR
+            ),
+            method=method,
+            confidence=min(
+                confidence,
+                0.90,
+            ),
+            source_url=url,
+            evidence=(
+                "Teamtailor career-site host"
+            ),
+            external_identifier=(
+                teamtailor_identifier
+            ),
+            board_url=(
+                _canonical_board_url(
+                    provider=(
+                        AtsProvider
+                        .TEAMTAILOR
+                    ),
+                    identifier=(
+                        teamtailor_identifier
+                    ),
+                    fallback=url,
+                )
+            ),
+        )
+
     return None
 
 
@@ -1711,6 +1785,16 @@ def _probe_provider_identifier(
         == AtsProvider.HIRINGROOM
     ):
         return _probe_hiringroom(
+            client=client,
+            company=company,
+            identifier=identifier,
+        )
+
+    if (
+        provider
+        == AtsProvider.TEAMTAILOR
+    ):
+        return _probe_teamtailor(
             client=client,
             company=company,
             identifier=identifier,
@@ -2373,6 +2457,104 @@ def _probe_hiringroom(
     )
 
 
+def _probe_teamtailor(
+    client: httpx.Client,
+    company: Company,
+    identifier: str,
+) -> AtsCandidate | None:
+    board_urls = (
+        (
+            f"https://{identifier}"
+            ".teamtailor.com/jobs"
+        ),
+        (
+            f"https://{identifier}"
+            ".na.teamtailor.com/jobs"
+        ),
+    )
+
+    for board_url in board_urls:
+        response = _safe_get(
+            client,
+            board_url,
+        )
+
+        if (
+            response is None
+            or response.status_code
+            != 200
+        ):
+            continue
+
+        final_url = str(
+            response.url
+        )
+
+        lower_html = (
+            response.text.casefold()
+        )
+
+        if (
+            "teamtailor-cdn.com"
+            not in lower_html
+            and "teamtailor"
+            not in lower_html
+        ):
+            continue
+
+        if not _names_compatible(
+            company.name,
+            response.text,
+        ):
+            continue
+
+        job_links = re.findall(
+            r'href=["\'][^"\']*'
+            r'/jobs/(\d+)'
+            r'(?:-[^"\']*)?["\']',
+            response.text,
+            flags=re.IGNORECASE,
+        )
+
+        if not job_links:
+            continue
+
+        return AtsCandidate(
+            provider=(
+                AtsProvider.TEAMTAILOR
+            ),
+            method=(
+                AtsDetectionMethod
+                .BOARD_PROBE
+            ),
+            confidence=0.97,
+            source_url=final_url,
+            evidence=(
+                "Teamtailor public board "
+                "probe returned "
+                f"{len(set(job_links))} "
+                "visible posting(s) for "
+                "derived identifier "
+                f"'{identifier}'"
+            ),
+            external_identifier=(
+                identifier
+            ),
+            board_url=(
+                _canonical_board_url(
+                    provider=(
+                        AtsProvider
+                        .TEAMTAILOR
+                    ),
+                    identifier=identifier,
+                    fallback=final_url,
+                )
+            ),
+        )
+
+    return None
+
+
 def _safe_get(
     client: httpx.Client,
     url: str,
@@ -2531,6 +2713,43 @@ def _is_greenhouse_host(
     )
 
 
+def _teamtailor_identifier(
+    host: str,
+) -> str | None:
+    labels = host.casefold().split(".")
+
+    if (
+        len(labels) == 3
+        and labels[1:] == [
+            "teamtailor",
+            "com",
+        ]
+    ):
+        identifier = labels[0]
+
+    elif (
+        len(labels) == 4
+        and labels[1:] == [
+            "na",
+            "teamtailor",
+            "com",
+        ]
+    ):
+        identifier = labels[0]
+
+    else:
+        return None
+
+    if identifier in {
+        "www",
+        "app",
+        "assets",
+    }:
+        return None
+
+    return identifier or None
+
+
 def _greenhouse_identifier(
     host: str,
     path_parts: list[str],
@@ -2636,6 +2855,29 @@ def _canonical_board_url(
             ".hiringroom.com/jobs"
         )
 
+    if (
+        provider
+        == AtsProvider.TEAMTAILOR
+    ):
+        try:
+            parsed = urlsplit(
+                fallback
+            )
+        except ValueError:
+            return fallback
+
+        if (
+            parsed.scheme
+            in {"http", "https"}
+            and parsed.netloc
+        ):
+            return (
+                f"{parsed.scheme}://"
+                f"{parsed.netloc}/jobs"
+            )
+
+        return fallback
+
     return fallback
 
 
@@ -2677,6 +2919,44 @@ def _filter_smartrecruiters_candidates_by_probe(
         if (
             candidate.provider
             != AtsProvider.SMARTRECRUITERS
+            or candidate.external_identifier
+            in validated_identifiers
+        )
+    ]
+
+
+def _filter_teamtailor_candidates_by_probe(
+    candidates: list[AtsCandidate],
+    probed_candidates: list[AtsCandidate],
+) -> list[AtsCandidate]:
+    has_teamtailor_hint = any(
+        candidate.provider
+        == AtsProvider.TEAMTAILOR
+        for candidate in candidates
+    )
+
+    if not has_teamtailor_hint:
+        return candidates
+
+    validated_identifiers = {
+        candidate.external_identifier
+        for candidate in probed_candidates
+        if (
+            candidate.provider
+            == AtsProvider.TEAMTAILOR
+            and candidate.method
+            == AtsDetectionMethod.BOARD_PROBE
+            and candidate.external_identifier
+            is not None
+        )
+    }
+
+    return [
+        candidate
+        for candidate in candidates
+        if (
+            candidate.provider
+            != AtsProvider.TEAMTAILOR
             or candidate.external_identifier
             in validated_identifiers
         )

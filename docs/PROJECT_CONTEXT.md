@@ -1,6 +1,6 @@
 # Chamba Hunter — Project Context / Handoff operativo
 
-**Fecha de actualización:** 2026-08-10
+**Fecha de actualización:** 2026-08-11
 **Repositorio:** `Gtestino92/chamba-hunter`
 **Rama operativa:** `main`
 **Entorno habitual:** Windows + PowerShell + `.venv`
@@ -25,76 +25,68 @@ Antes de recomendar, diseñar o implementar:
    - inferido;
    - pendiente de verificar.
 
-### GitHub publicado antes del slice C1 local
+### GitHub publicado antes del slice C2 local
 
-HEAD verificado antes de implementar C1:
+HEAD remoto verificado antes del commit de C2:
 
 ```text
-807a0eb7b90c329a204eb17550c22cf881268502
+4a1ed5cb2e83844db7c1eb8811223bdc6616129d
 context
 ```
 
-Parent funcional relevante:
-
-```text
-c7d82ef37193d3d3367f2e9b072751ddad08e6d5
-add Jooble Argentina acquisition
-```
-
-El commit `807a0...` es documental respecto de Jooble; el último cambio funcional publicado antes de C1 sigue siendo `c7d82...`.
+Ese HEAD ya contiene C1 publicado.
 
 Si `main` avanzó después de este documento, verificar HEAD real y usar código/GitHub actual.
 
-### Worktree local esperado al cerrar C1
+### Worktree local esperado al cerrar C2
 
-Antes de agregar esta actualización documental, el estado local confirmado era:
-
-```text
- M src/chamba_hunter/commands/discover_broad_ats.py
-?? src/chamba_hunter/services/provider_hint_ats_detection_service.py
-```
-
-Después de aplicar este documento, el set intencional para commit debería ser:
+Set intencional para el commit de C2:
 
 ```text
  M docs/PROJECT_CONTEXT.md
+ M src/chamba_hunter/commands/canonicalize_job_leads.py
  M src/chamba_hunter/commands/discover_broad_ats.py
-?? src/chamba_hunter/services/provider_hint_ats_detection_service.py
+ M src/chamba_hunter/commands/refresh_search.py
+ M src/chamba_hunter/domain/enums.py
+ M src/chamba_hunter/services/careers_ats_detection_service.py
+?? src/chamba_hunter/commands/sync_teamtailor_jobs.py
+?? src/chamba_hunter/services/teamtailor_job_ingestion_service.py
+?? src/chamba_hunter/sources/teamtailor.py
 ```
 
-No hubo migration para C1.
+No hubo migration para C2.
 
 ### Último estado operativo observado
 
 Último matching persistido:
 
 ```text
-Run 141
+Run 154
 MATCHING_V1
-Candidates: 1605
+Candidates: 1856
 
-VERY_HIGH   18
-HIGH       182
-MEDIUM     231
-LOW       1174
+VERY_HIGH    26
+HIGH        201
+MEDIUM      269
+LOW        1360
 ```
 
 Último operational priority:
 
 ```text
-Run 142
+Run 155
 OPERATIONAL_PRIORITY_V2
-Candidates: 1682
+Candidates: 1942
 ```
 
 Estados observados:
 
 ```text
-NEW             194
-UPDATED           1
-KNOWN          1410
+NEW             260
+UPDATED           0
+KNOWN          1596
 INACTIVE         23
-SUPERSEDED       13
+SUPERSEDED       22
 OUT_OF_SCOPE     41
 ```
 
@@ -103,12 +95,12 @@ OUT_OF_SCOPE     41
 ```text
 SHORTLIST_REPORT_V2
 OPENOFFICE_ACTIONS_V1
-Priority run: 142
+Priority run: 155
 
-Focus:        7
-High Value: 200
-All Current: 1605
-History:     77
+Focus:       18
+High Value: 227
+All Current: 1856
+History:     86
 ```
 
 Output local normal:
@@ -368,6 +360,7 @@ A2 Jooble
 B Recruitee value test
 C0 audit
 C1 Jooble supported ATS discovery
+C2 Teamtailor V1
 ```
 
 Tablas/vistas centrales:
@@ -428,6 +421,7 @@ WORKABLE
 SMARTRECRUITERS
 BAMBOOHR
 HIRINGROOM
+TEAMTAILOR
 ```
 
 `CUSTOM` existe como provider de detection, no como sync genérico equivalente.
@@ -438,14 +432,19 @@ Bumeran/ZonaJobs directos no se fuerzan con bypass.
 
 ### Providers observados pero no soportados
 
-Evidencia Jooble de C0 mostró, entre otros:
+Después del value test C2, Teamtailor está soportado.
+
+Breezy queda diferido:
 
 ```text
-teamtailor.com   23 postings observados
-breezy.hr         6 postings observados
+breezy.hr
+8 active unresolved leads
+2 unique companies
+6 High/Very High leads
+1 High Value company
 ```
 
-Esto es evidencia para un value test futuro, no autorización para implementar providers por inercia.
+No implementar Breezy por inercia; reabrir sólo si aumenta el valor marginal.
 
 ---
 
@@ -719,30 +718,30 @@ manual application status
 
 No cambiar thresholds por una fuente nueva sin evidencia suficiente.
 
-### Estado observado después de C1
+### Estado observado después de C2
 
-Runs:
+Runs finales del downstream C2:
 
 ```text
-137 ARGENTINA_V1
-138 OCCUPATION_V1
-139 SKILLS_V1
-140 SENIORITY_V1
-141 MATCHING_V1
+150 ARGENTINA_V1
+151 OCCUPATION_V1
+152 SKILLS_V1
+153 SENIORITY_V1
+154 MATCHING_V1
 ```
 
-Matching run 141:
+Matching run 154:
 
 ```text
-Candidates: 1605
+Candidates: 1856
 
-ATS   1063
-LEAD   542
+ATS   1323
+LEAD   533
 
-VERY_HIGH    18
-HIGH        182
-MEDIUM      231
-LOW        1174
+VERY_HIGH    26
+HIGH        201
+MEDIUM      269
+LOW        1360
 ```
 
 ---
@@ -764,28 +763,28 @@ application channel
 Último run observado:
 
 ```text
-Run 142
-Candidates: 1682
+Run 155
+Candidates: 1942
 
-NEW             194
-UPDATED           1
-KNOWN          1410
+NEW             260
+UPDATED           0
+KNOWN          1596
 INACTIVE         23
-SUPERSEDED       13
+SUPERSEDED       22
 OUT_OF_SCOPE     41
 ```
 
 Application channels observados:
 
 ```text
-DIRECT_APPLY_URL           767
+DIRECT_APPLY_URL          1027
 JOB_URL                    915
 GENERAL_APPLICATION_URL      0
 PUBLIC_CONTACT               0
 NONE                         0
 ```
 
-Los 13 `SUPERSEDED` de run 142 corresponden exactamente a los broad leads canonicalizados por C1.
+C2 agrega first-party Teamtailor con `DIRECT_APPLY_URL` derivado del job canónico.
 
 ---
 
@@ -808,13 +807,13 @@ output/chamba-shortlist.xlsx
 ```text
 SHORTLIST_REPORT_V2
 OPENOFFICE_ACTIONS_V1
-Priority run: 142
-APPLY links: 1796
+Priority run: 155
+APPLY links: 2085
 
-Focus:        7
-High Value: 200
-All Current: 1605
-History:     77
+Focus:       18
+High Value: 227
+All Current: 1856
+History:     86
 ```
 
 Manual application tracking usa identidad polimórfica:
@@ -1020,14 +1019,14 @@ LEVER             1
 
 12 postings / 11 unique companies.
 
-También se observó evidencia futura:
+También se observó evidencia para providers entonces no soportados:
 
 ```text
 TEAMTAILOR 23
 BREEZY      6
 ```
 
-No se implementaron esos providers.
+C0 no los implementó. Teamtailor fue value-tested e implementado después en C2; Breezy permanece diferido.
 
 ### C0d — Jooble redirect resolution
 
@@ -1054,9 +1053,14 @@ Esto confirmó valor marginal real para un discovery específico.
 Estado:
 
 ```text
-COMPLETE / POSITIVE
-FUNCTIONALLY VALIDATED
-PENDING LOCAL COMMIT/PUSH
+COMPLETE / PUBLISHED
+```
+
+Commit publicado de referencia:
+
+```text
+4a1ed5cb2e83844db7c1eb8811223bdc6616129d
+context
 ```
 
 ### Objetivo
@@ -1364,76 +1368,235 @@ C1 queda cerrado funcionalmente.
 - no project tests salvo pedido explícito;
 - no nuevas broad sources por inercia;
 - no Recruitee implementation sin evidencia nueva;
-- no Teamtailor/Breezy implementation sólo porque C0 mostró sources;
+- no nuevos ATS sólo porque una source externa los menciona;
 - no hardcoded tenant aliases sin diseño/evidencia explícitos;
 - no usar Jooble redirects para evadir 403.
 
 ---
 
-## 19. Próximo foco después de publicar C1
+## 19. C2 — TEAMTAILOR_V1
 
-Primero:
-
-```text
-commit/push manual del usuario
-```
-
-con sólo:
+Estado:
 
 ```text
-docs/PROJECT_CONTEXT.md
-src/chamba_hunter/commands/discover_broad_ats.py
-src/chamba_hunter/services/provider_hint_ats_detection_service.py
+COMPLETE / FUNCTIONALLY VALIDATED
 ```
 
-Después, antes de implementar más:
+Esta actualización documental está destinada a publicarse en el mismo commit que la implementación C2.
 
-1. verificar HEAD publicado y worktree limpio;
-2. leer este documento completo;
-3. inspeccionar el C1 ya publicado;
-4. decidir C2 por **valor marginal medido**, no por completitud técnica.
+### Value test
 
-Candidatos razonables para value test C2:
+Sobre priority run 142:
 
 ```text
-Teamtailor
-Breezy
+TEAMTAILOR
+Active unresolved leads:       28
+Unique companies:              16
+Companies without active ATS:  16
+High/Very High leads:          23
+High-value companies:          15
+
+BREEZY
+Active unresolved leads:        8
+Unique companies:               2
+High/Very High leads:           6
+High-value companies:           1
 ```
 
-porque C0 observó evidencia Jooble real.
-
-Pero primero medir:
+Decisión:
 
 ```text
-unique companies
-current supported ATS overlap
-high-value relevance
-public interface stability
-tenant identity derivability
-expected first-party job gain
+C2 = TEAMTAILOR
+BREEZY = DEFER / BACKLOG
 ```
 
-La salida válida puede seguir siendo:
+### Implementación
+
+C2 agrega:
 
 ```text
-do not implement
+AtsProvider.TEAMTAILOR
+Jooble Teamtailor source mapping
+--provider-hint filter in discover_broad_ats
+Teamtailor public board probe
+Teamtailor source client
+Teamtailor ingestion service
+sync_teamtailor_jobs command
+refresh_search ATS integration
+UTF-8-safe canonicalization output
 ```
 
-También queda disponible el fallback original de Parte C:
+No migration.
+
+No aliases hardcoded.
+
+La detección deriva tenant candidates desde identidad de company, prueba stacks EU/NA y conserva el custom domain final cuando Teamtailor redirige.
+
+Contrato de ingestión V1 observado y adoptado:
 
 ```text
-explicit first-party custom careers
-explicit general application forms
-explicit public recruiting/careers contacts
+/jobs
+→ /jobs/show_more?page=N
+→ detail HTML
 ```
 
-pero C0 mostró que no es prioritario mientras las oportunidades High Value ya tengan job-specific URLs.
+No usar sitemap/llms/Markdown como contrato de enumeración: fueron incompletos o no uniformes en probes reales.
 
-No ejecutar otra discovery Jooble `--limit 25` sólo para intentar alcanzar los 2 targets que quedaron fuera de la primera corrida: primero inspeccionar semántica de re-scan/revisit para evitar reprobar innecesariamente los 13 `NOT_DETECTED`.
+JSON-LD `JobPosting` se usa cuando está disponible; HTML visible es fallback obligatorio.
+
+El sync obtiene el snapshot completo antes de escribir DB. Un fallo de paginación o detail aborta el board para evitar desactivaciones desde snapshots parciales.
+
+`apply_url`:
+
+```text
+<job_url>/applications/new
+```
+
+### Discovery
+
+Run 143:
+
+```text
+Processed:    16
+Detected:     11
+Not detected:  5
+Blocked:       0
+Failed:        0
+
+Active ATS companies:
+80 → 91
+```
+
+Tenants detectados:
+
+```text
+Talent Connect
+Nonconformist
+Shalion
+Cashea
+Aliancers
+Wakapi
+Crunchloop
+Humand
+Promtior
+Avenga
+Naranja X
+```
+
+Todos fueron `BOARD_PROBE` con confidence `0.97`; false positives observados: `0`.
+
+Los cinco misses se dejan sin aliases/fuzzy fallback en V1.
+
+### Sync / parser validation
+
+Primera ingestión, Run 144:
+
+```text
+11/11 boards SUCCESS
+396 jobs received
+396 jobs created
+0 deactivated
+```
+
+Durante acceptance se detectó un fallback HTML defectuoso en páginas sin JSON-LD: títulos duplicados y ubicaciones tomadas desde navegación. Se corrigió en origen, sin tocar `ARGENTINA_V1`.
+
+Resync final, Run 148:
+
+```text
+11/11 boards SUCCESS
+396 jobs received
+396 jobs updated
+0 deactivated
+```
+
+Quality audit final:
+
+```text
+Active Teamtailor jobs: 396
+Suspicious jobs:          0
+DUPLICATED_TITLE:         0
+NAVIGATION_LOCATION:      0
+NO_LOCATION:              0
+```
+
+### Canonicalization / downstream
+
+Antes del parser fix se habían aplicado 8 links Teamtailor. Tras corregir title/location, Run 149 encontró y aplicó un noveno link:
+
+```text
+Aliancers
+LEAD 1245
+→ JOB 4469
+Sr. Backend Developer
+```
+
+Avenga `Senior Java Engineer` permanece correctamente `AMBIGUOUS`; no se fuerza manualmente.
+
+Downstream final:
+
+```text
+Run 150 eligibility
+Run 151 occupation
+Run 152 skills
+Run 153 seniority
+Run 154 matching
+Run 155 operational priority
+```
+
+Matching final:
+
+```text
+Candidates: 1856
+VERY_HIGH:     26
+HIGH:         201
+MEDIUM:       269
+LOW:         1360
+```
+
+Priority final:
+
+```text
+Candidates: 1942
+NEW:          260
+UPDATED:        0
+KNOWN:       1596
+INACTIVE:      23
+SUPERSEDED:    22
+OUT_OF_SCOPE:  41
+```
+
+Shortlist final:
+
+```text
+Priority run: 155
+Focus:          18
+High Value:    227
+All Current:  1856
+History:        86
+```
+
+C2 queda funcionalmente cerrado.
 
 ---
 
-## 20. Método operativo para próximas conversaciones
+## 20. Próximo foco después de C2
+
+Una vez publicado C2, el foco por defecto debe ser operacional:
+
+```text
+revisar Focus / High Value
+→ postular manualmente
+→ registrar APPLIED
+→ repetir refresh cuando tenga finalidad real
+```
+
+Breezy queda en backlog. Reabrir otro ATS/canal sólo con un nuevo value test que demuestre valor marginal suficiente.
+
+No agregar más infraestructura si el cuello de botella pasa a ser revisión/postulación humana.
+
+---
+
+## 21. Método operativo para próximas conversaciones
 
 Trabajar de a un paso importante por vez:
 
@@ -1459,8 +1622,9 @@ No correr full refresh salvo finalidad operacional real.
 
 No alterar capas estables sólo para acomodar una fuente nueva.
 
-Al retomar después de C1, la pregunta inicial es:
+Al retomar después de C2, la pregunta inicial es:
 
 ```text
-¿Existe suficiente valor marginal para construir C2, y en qué provider/canal?
+¿El siguiente cuello de botella requiere más adquisición/ATS,
+o ya es revisión y postulación manual sobre Focus / High Value?
 ```
