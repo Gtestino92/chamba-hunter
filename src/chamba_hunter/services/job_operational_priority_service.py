@@ -1,6 +1,7 @@
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
+import json
 
 from chamba_hunter.domain.common import (
     JsonObject,
@@ -30,7 +31,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OPERATIONAL_PRIORITY_V2"
+RULE_VERSION = "OPERATIONAL_PRIORITY_V3"
 PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 
 
@@ -136,19 +137,105 @@ class OperationalPrioritySummary:
     ] = field(default_factory=list)
 
 
+DEGRADED_JOOBLE_RAW_SOURCE_HOSTS = {
+    "jobleads.com",
+    "www.jobleads.com",
+}
+
+
+def _jooble_raw_source_host(
+    candidate: OperationalCandidateRow,
+) -> str | None:
+    if (
+        candidate.record_kind != "LEAD"
+        or candidate.source_type != "JOOBLE"
+        or not candidate.raw_payload_json
+    ):
+        return None
+
+    try:
+        payload = json.loads(
+            candidate.raw_payload_json
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
+
+    if not isinstance(
+        payload,
+        dict,
+    ):
+        return None
+
+    job = payload.get(
+        "job"
+    )
+
+    if not isinstance(
+        job,
+        dict,
+    ):
+        return None
+
+    value = job.get(
+        "source"
+    )
+
+    if not isinstance(
+        value,
+        str,
+    ):
+        return None
+
+    host = value.strip().lower()
+
+    for prefix in (
+        "https://",
+        "http://",
+    ):
+        if host.startswith(
+            prefix
+        ):
+            host = host[
+                len(prefix):
+            ]
+            break
+
+    host = (
+        host
+        .split("/", 1)[0]
+        .split(":", 1)[0]
+    )
+
+    return (
+        host
+        or None
+    )
+
+
 def _application_channel(
     candidate: OperationalCandidateRow,
+    *,
+    allow_source_urls: bool = True,
 ) -> tuple[
     str,
     str | None,
 ]:
-    if candidate.apply_url:
+    if (
+        allow_source_urls
+        and candidate.apply_url
+    ):
         return (
             "DIRECT_APPLY_URL",
             candidate.apply_url,
         )
 
-    if candidate.job_url:
+    if (
+        allow_source_urls
+        and candidate.job_url
+    ):
         return (
             "JOB_URL",
             candidate.job_url,
@@ -438,11 +525,25 @@ class JobOperationalPriorityService:
             now=now,
         )
 
+        raw_source_host = (
+            _jooble_raw_source_host(
+                candidate
+            )
+        )
+
+        source_resolution_required = (
+            raw_source_host
+            in DEGRADED_JOOBLE_RAW_SOURCE_HOSTS
+        )
+
         (
             application_channel,
             application_target,
         ) = _application_channel(
-            candidate
+            candidate,
+            allow_source_urls=(
+                not source_resolution_required
+            ),
         )
 
         source_recency = (
@@ -552,6 +653,17 @@ class JobOperationalPriorityService:
                 ),
                 "target": (
                     application_target
+                ),
+                "source_resolution_required": (
+                    source_resolution_required
+                ),
+                "raw_source_host": (
+                    raw_source_host
+                ),
+                "source_resolution_reason": (
+                    "JOOBLE_JOBLEADS_PAYWALL"
+                    if source_resolution_required
+                    else None
                 ),
             },
         }
