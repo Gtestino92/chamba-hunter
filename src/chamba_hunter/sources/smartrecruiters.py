@@ -1,3 +1,7 @@
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+)
 from dataclasses import dataclass
 
 import httpx
@@ -171,6 +175,7 @@ class SmartRecruitersClient:
         self,
         timeout_seconds: float = 20.0,
         page_size: int = DEFAULT_PAGE_SIZE,
+        max_detail_workers: int = 6,
     ) -> None:
         if not 1 <= page_size <= 100:
             raise ValueError(
@@ -178,10 +183,19 @@ class SmartRecruitersClient:
                 "be between 1 and 100."
             )
 
+        if max_detail_workers < 1:
+            raise ValueError(
+                "max_detail_workers must "
+                "be at least 1."
+            )
+
         self.timeout_seconds = (
             timeout_seconds
         )
         self.page_size = page_size
+        self.max_detail_workers = (
+            max_detail_workers
+        )
 
     def fetch_jobs(
         self,
@@ -214,6 +228,14 @@ class SmartRecruitersClient:
         with httpx.Client(
             timeout=self.timeout_seconds,
             follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=(
+                    self.max_detail_workers
+                ),
+                max_keepalive_connections=(
+                    self.max_detail_workers
+                ),
+            ),
             headers={
                 "User-Agent": (
                     "chamba-hunter/0.1"
@@ -318,20 +340,98 @@ class SmartRecruitersClient:
                     f"postings={len(summaries)}."
                 )
 
-            jobs = [
-                self._fetch_detail(
-                    client=client,
-                    postings_url=postings_url,
-                    posting_id=posting.id,
-                )
-                for posting in summaries
-            ]
+            jobs = self._fetch_details(
+                client=client,
+                postings_url=postings_url,
+                summaries=summaries,
+            )
 
         return SmartRecruitersJobsFetch(
             http_status=http_status,
             total=total,
             jobs=jobs,
         )
+
+    def _fetch_details(
+        self,
+        client: httpx.Client,
+        postings_url: str,
+        summaries: list[
+            SmartRecruitersPostingSummary
+        ],
+    ) -> list[
+        SmartRecruitersPostingDetail
+    ]:
+        if not summaries:
+            return []
+
+        worker_count = min(
+            self.max_detail_workers,
+            len(summaries),
+        )
+
+        details: list[
+            SmartRecruitersPostingDetail
+            | None
+        ] = [
+            None
+            for _ in summaries
+        ]
+
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix=(
+                "smartrecruiters-detail"
+            ),
+        ) as executor:
+            future_indexes = {
+                executor.submit(
+                    self._fetch_detail,
+                    client=client,
+                    postings_url=postings_url,
+                    posting_id=posting.id,
+                ): index
+                for index, posting
+                in enumerate(summaries)
+            }
+
+            try:
+                for future in as_completed(
+                    future_indexes
+                ):
+                    index = (
+                        future_indexes[
+                            future
+                        ]
+                    )
+
+                    details[index] = (
+                        future.result()
+                    )
+
+            except Exception:
+                for pending in (
+                    future_indexes
+                ):
+                    pending.cancel()
+
+                raise
+
+        if any(
+            detail is None
+            for detail in details
+        ):
+            raise RuntimeError(
+                "SmartRecruiters detail fetch "
+                "completed without a full "
+                "snapshot."
+            )
+
+        return [
+            detail
+            for detail in details
+            if detail is not None
+        ]
 
     @staticmethod
     def _fetch_detail(
