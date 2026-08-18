@@ -186,10 +186,10 @@ def _exact_bucket(
     if age_days <= 7:
         return "VERY_RECENT"
 
-    if age_days <= 30:
+    if age_days <= 14:
         return "RECENT"
 
-    if age_days <= 60:
+    if age_days <= 30:
         return "AGING"
 
     return "OLD"
@@ -199,10 +199,10 @@ def _range_bucket(
     min_age_days: int,
     max_age_days: int,
 ) -> str:
-    if min_age_days > 60:
+    if min_age_days > 30:
         return "OLD"
 
-    if max_age_days > 30:
+    if max_age_days > 14:
         return "AGING"
 
     if max_age_days > 7:

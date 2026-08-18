@@ -31,8 +31,9 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OPERATIONAL_PRIORITY_V3"
+RULE_VERSION = "OPERATIONAL_PRIORITY_V4"
 PROFILE_NAME = "BACKEND_SOFTWARE_V1"
+MAX_ACTIONABLE_AGE_DAYS = 30
 
 
 ACTIVE_STATES = {
@@ -558,6 +559,45 @@ class JobOperationalPriorityService:
             )
         )
 
+        first_seen_age_days = max(
+            0,
+            (
+                now.date()
+                - candidate.first_seen_at.date()
+            ).days,
+        )
+
+        staleness_reason = None
+
+        if (
+            source_recency.min_age_days
+            is not None
+            and source_recency.min_age_days
+            > MAX_ACTIONABLE_AGE_DAYS
+        ):
+            staleness_reason = (
+                "SOURCE_AGE_EXCEEDED_30_DAYS"
+            )
+        elif (
+            source_recency.bucket == "UNKNOWN"
+            and first_seen_age_days
+            > MAX_ACTIONABLE_AGE_DAYS
+        ):
+            staleness_reason = (
+                "UNKNOWN_RECENCY_FIRST_SEEN_"
+                "AGE_EXCEEDED_30_DAYS"
+            )
+
+        if (
+            staleness_reason is not None
+            and operational_state
+            in ACTIVE_STATES
+        ):
+            operational_state = "INACTIVE"
+            state_reasons = [
+                staleness_reason
+            ]
+
         reasons: JsonObject = {
             "rule_version": RULE_VERSION,
             "search_profile": PROFILE_NAME,
@@ -620,6 +660,17 @@ class JobOperationalPriorityService:
             "source_recency": (
                 source_recency.as_json()
             ),
+            "operational_staleness": {
+                "max_actionable_age_days": (
+                    MAX_ACTIONABLE_AGE_DAYS
+                ),
+                "first_seen_age_days": (
+                    first_seen_age_days
+                ),
+                "reason": (
+                    staleness_reason
+                ),
+            },
             "professional_match": {
                 "current": (
                     candidate
