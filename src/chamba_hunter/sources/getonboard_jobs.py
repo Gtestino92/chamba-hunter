@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
 from html.parser import HTMLParser
@@ -15,6 +16,7 @@ from chamba_hunter.sources.getonboard import (
 
 
 MAX_DETAIL_FETCHES = 250
+DEFAULT_DETAIL_WORKERS = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +35,13 @@ class GetOnBoardJobsFetch:
         str,
         GetOnBoardJobEnrichment,
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class _RemoteEnrichmentFetch:
+    job_id: str
+    enrichment: GetOnBoardJobEnrichment | None
+    rate_limited: bool = False
 
 
 class _VisibleTextParser(HTMLParser):
@@ -137,9 +146,21 @@ class GetOnBoardJobsClient:
     def __init__(
         self,
         timeout_seconds: float = 20.0,
+        max_detail_workers: int = (
+            DEFAULT_DETAIL_WORKERS
+        ),
     ) -> None:
+        if max_detail_workers < 1:
+            raise ValueError(
+                "max_detail_workers must "
+                "be at least 1."
+            )
+
         self.timeout_seconds = (
             timeout_seconds
+        )
+        self.max_detail_workers = (
+            max_detail_workers
         )
 
     def fetch_programming_jobs(
@@ -161,6 +182,14 @@ class GetOnBoardJobsClient:
         with httpx.Client(
             timeout=self.timeout_seconds,
             follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=(
+                    self.max_detail_workers
+                ),
+                max_keepalive_connections=(
+                    self.max_detail_workers
+                ),
+            ),
             headers={
                 "User-Agent": (
                     "chamba-hunter/0.1"
@@ -290,85 +319,161 @@ class GetOnBoardJobsClient:
                     )
                 )
 
-        attempts = 0
+        detail_jobs: list[
+            GetOnBoardJobResource
+        ] = []
 
         for job in jobs:
-            attributes = job.attributes
-
-            if not attributes.remote:
+            if not job.attributes.remote:
                 continue
 
-            if attempts >= MAX_DETAIL_FETCHES:
+            if not job.links.public_url:
+                continue
+
+            detail_jobs.append(job)
+
+            if (
+                len(detail_jobs)
+                >= MAX_DETAIL_FETCHES
+            ):
                 break
 
-            public_url = (
-                job.links.public_url
+        with ThreadPoolExecutor(
+            max_workers=self.max_detail_workers,
+            thread_name_prefix=(
+                "getonboard-detail"
+            ),
+        ) as executor:
+            for start in range(
+                0,
+                len(detail_jobs),
+                self.max_detail_workers,
+            ):
+                batch = detail_jobs[
+                    start:
+                    start + self.max_detail_workers
+                ]
+
+                futures = [
+                    executor.submit(
+                        self._fetch_remote_enrichment,
+                        client=client,
+                        job=job,
+                    )
+                    for job in batch
+                ]
+
+                rate_limited = False
+
+                for future in futures:
+                    result = future.result()
+
+                    if result.rate_limited:
+                        rate_limited = True
+                        break
+
+                    if result.enrichment is None:
+                        continue
+
+                    existing = (
+                        enrichments.get(
+                            result.job_id
+                        )
+                    )
+
+                    enrichments[
+                        result.job_id
+                    ] = _merge_enrichment(
+                        existing,
+                        result.enrichment,
+                    )
+
+                if rate_limited:
+                    for future in futures:
+                        future.cancel()
+
+                    break
+
+        return enrichments
+
+    @staticmethod
+    def _fetch_remote_enrichment(
+        *,
+        client: httpx.Client,
+        job: GetOnBoardJobResource,
+    ) -> _RemoteEnrichmentFetch:
+        job_id = job.id.strip()
+        public_url = job.links.public_url
+
+        if not public_url:
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
             )
 
-            if not public_url:
-                continue
+        try:
+            response = client.get(
+                public_url,
+                headers={
+                    "Accept": (
+                        "text/html,"
+                        "application/xhtml+xml,"
+                        "*/*;q=0.8"
+                    ),
+                },
+            )
+        except httpx.RequestError:
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
+            )
 
-            attempts += 1
+        if response.status_code == 429:
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
+                rate_limited=True,
+            )
 
-            try:
-                response = client.get(
-                    public_url,
-                    headers={
-                        "Accept": (
-                            "text/html,"
-                            "application/xhtml+xml,"
-                            "*/*;q=0.8"
-                        ),
-                    },
-                )
-            except httpx.RequestError:
-                continue
+        if response.status_code in {
+            401,
+            403,
+        }:
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
+            )
 
-            if response.status_code == 429:
-                break
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
+            )
 
-            if response.status_code in {
-                401,
-                403,
-            }:
-                continue
+        if not _is_getonboard_url(
+            str(
+                response.url
+            )
+        ):
+            return _RemoteEnrichmentFetch(
+                job_id=job_id,
+                enrichment=None,
+            )
 
-            try:
-                response.raise_for_status()
-            except httpx.HTTPStatusError:
-                continue
-
-            if not _is_getonboard_url(
-                str(
-                    response.url
-                )
-            ):
-                continue
-
-            page_enrichment = (
+        return _RemoteEnrichmentFetch(
+            job_id=job_id,
+            enrichment=(
                 _enrichment_from_html(
                     response.text,
                     remote_modality=(
-                        attributes
+                        job.attributes
                         .remote_modality
                     ),
                 )
-            )
-
-            existing = (
-                enrichments.get(
-                    job.id.strip()
-                )
-            )
-
-            enrichments[
-                job.id.strip()
-            ] = _merge_enrichment(
-                existing,
-                page_enrichment,
-            )
-
-        return enrichments
+            ),
+        )
 
 
 def _merge_enrichment(
