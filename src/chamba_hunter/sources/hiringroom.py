@@ -1,3 +1,7 @@
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+)
 from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
@@ -482,9 +486,19 @@ class HiringRoomClient:
     def __init__(
         self,
         timeout_seconds: float = 20.0,
+        max_detail_workers: int = 6,
     ) -> None:
+        if max_detail_workers < 1:
+            raise ValueError(
+                "max_detail_workers must "
+                "be at least 1."
+            )
+
         self.timeout_seconds = (
             timeout_seconds
+        )
+        self.max_detail_workers = (
+            max_detail_workers
         )
 
     def fetch_jobs(
@@ -503,6 +517,14 @@ class HiringRoomClient:
         with httpx.Client(
             timeout=self.timeout_seconds,
             follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=(
+                    self.max_detail_workers
+                ),
+                max_keepalive_connections=(
+                    self.max_detail_workers
+                ),
+            ),
             headers={
                 "User-Agent": (
                     "chamba-hunter/0.1"
@@ -671,15 +693,12 @@ class HiringRoomClient:
                     f"postings={len(cards)}."
                 )
 
-            jobs = [
-                self._fetch_detail(
-                    client=client,
-                    base_url=base_url,
-                    tenant=tenant,
-                    card=card,
-                )
-                for card in cards
-            ]
+            jobs = self._fetch_details(
+                client=client,
+                base_url=base_url,
+                tenant=tenant,
+                cards=cards,
+            )
 
         return HiringRoomJobsFetch(
             http_status=(
@@ -688,6 +707,86 @@ class HiringRoomClient:
             total=total,
             jobs=jobs,
         )
+
+    def _fetch_details(
+        self,
+        client: httpx.Client,
+        base_url: str,
+        tenant: str,
+        cards: list[
+            HiringRoomJobCard
+        ],
+    ) -> list[HiringRoomJobDetail]:
+        if not cards:
+            return []
+
+        worker_count = min(
+            self.max_detail_workers,
+            len(cards),
+        )
+
+        details: list[
+            HiringRoomJobDetail | None
+        ] = [
+            None
+            for _ in cards
+        ]
+
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix=(
+                "hiringroom-detail"
+            ),
+        ) as executor:
+            future_indexes = {
+                executor.submit(
+                    self._fetch_detail,
+                    client=client,
+                    base_url=base_url,
+                    tenant=tenant,
+                    card=card,
+                ): index
+                for index, card
+                in enumerate(cards)
+            }
+
+            try:
+                for future in as_completed(
+                    future_indexes
+                ):
+                    index = (
+                        future_indexes[
+                            future
+                        ]
+                    )
+
+                    details[index] = (
+                        future.result()
+                    )
+
+            except Exception:
+                for pending in (
+                    future_indexes
+                ):
+                    pending.cancel()
+
+                raise
+
+        if any(
+            detail is None
+            for detail in details
+        ):
+            raise RuntimeError(
+                "Hiring Room detail fetch "
+                "completed without a full "
+                "snapshot."
+            )
+
+        return [
+            detail
+            for detail in details
+            if detail is not None
+        ]
 
     @staticmethod
     def _fetch_page(
