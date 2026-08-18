@@ -38,7 +38,7 @@ from chamba_hunter.services.job_operational_priority_service import (
 )
 
 
-REPORT_VERSION = "SHORTLIST_REPORT_V2"
+REPORT_VERSION = "SHORTLIST_REPORT_V3"
 DEFAULT_PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 
 
@@ -198,6 +198,24 @@ class ShortlistReportItem:
             in ACTIVE_STATES
         )
 
+    @property
+    def already_applied(
+        self,
+    ) -> bool:
+        return (
+            self.source.application_applied_at
+            is not None
+        )
+
+    @property
+    def needs_attention(
+        self,
+    ) -> bool:
+        return (
+            self.actionable
+            and not self.already_applied
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ShortlistReportSummary:
@@ -226,6 +244,7 @@ class ShortlistReportSummary:
     state_counts: dict[str, int]
     level_counts: dict[str, int]
     channel_counts: dict[str, int]
+    applied_count: int
 
     generated_at: datetime
 
@@ -520,6 +539,9 @@ def _sort_key(
 
     return (
         -int(
+            item.needs_attention
+        ),
+        -int(
             item.actionable
         ),
         -MATCH_LEVEL_RANK.get(
@@ -559,7 +581,7 @@ def _with_duplicate_counts(
             item.normalized_title,
         )
         for item in items
-        if item.actionable
+        if item.needs_attention
     )
 
     return [
@@ -623,7 +645,7 @@ def _with_duplicate_counts(
                     ),
                     1,
                 )
-                if item.actionable
+                if item.needs_attention
                 else 1
             ),
         )
@@ -650,15 +672,15 @@ def build_summary(
         key=_sort_key,
     )
 
-    current = tuple(
+    needs_attention = tuple(
         item
         for item in ranked
-        if item.actionable
+        if item.needs_attention
     )
 
     focus = tuple(
         item
-        for item in current
+        for item in needs_attention
         if (
             item.source
             .operational_state
@@ -679,7 +701,7 @@ def build_summary(
 
     high_value = tuple(
         item
-        for item in current
+        for item in needs_attention
         if item.source
         .professional_match_level
         in {
@@ -691,7 +713,7 @@ def build_summary(
     history = tuple(
         item
         for item in ranked
-        if not item.actionable
+        if not item.needs_attention
     )
 
     state_counts = Counter(
@@ -712,11 +734,17 @@ def build_summary(
         for item in ranked
     )
 
+    applied_count = sum(
+        1
+        for item in ranked
+        if item.already_applied
+    )
+
     return ShortlistReportSummary(
         source=source,
         focus=focus,
         high_value=high_value,
-        all_current=current,
+        all_current=needs_attention,
         history=history,
         state_counts=dict(
             state_counts
@@ -727,6 +755,7 @@ def build_summary(
         channel_counts=dict(
             channel_counts
         ),
+        applied_count=applied_count,
         generated_at=datetime.now(
             timezone.utc
         ),
@@ -1025,7 +1054,7 @@ def _create_overview(
     sheet.cell(
         row=start,
         column=1,
-        value="Current counts",
+        value="Report counts",
     ).font = Font(
         bold=True,
         color="FFFFFF",
@@ -1053,10 +1082,14 @@ def _create_overview(
             ),
         ),
         (
-            "All current",
+            "All current / needs attention",
             len(
                 summary.all_current
             ),
+        ),
+        (
+            "Applied",
+            summary.applied_count,
         ),
         (
             "History",
@@ -1158,19 +1191,23 @@ def _create_overview(
     view_rows = (
         (
             "Focus",
-            "NEW/UPDATED + VERY_HIGH/HIGH; excludes definitely OLD",
+            (
+                "NEW/UPDATED + VERY_HIGH/HIGH needing "
+                "attention; excludes applied and "
+                "definitely OLD"
+            ),
         ),
         (
             "High Value",
-            "All current VERY_HIGH/HIGH",
+            "Current VERY_HIGH/HIGH opportunities not yet applied",
         ),
         (
             "All Current",
-            "All actionable rows",
+            "Operationally current opportunities not yet applied",
         ),
         (
             "History",
-            "Inactive/superseded/out-of-scope",
+            "Applied or operationally non-current opportunities",
         ),
     )
 
@@ -1231,7 +1268,8 @@ def _create_overview(
     sheet["D23"] = (
         "Application status is read from the latest "
         "tracked JOB application by Record Kind and "
-        "Record ID when present."
+        "Record ID. Rows with Applied At are retained "
+        "in History and excluded from action views."
     )
 
     sheet["D24"] = (
@@ -1644,8 +1682,8 @@ def export_shortlist(
         "Chamba Hunter"
     )
     workbook.properties.description = (
-        "Read-only shortlist generated from "
-        "persisted operational priority state."
+        "Read-only shortlist generated from persisted "
+        "operational priority and application tracking state."
     )
 
     _create_overview(
@@ -1660,10 +1698,10 @@ def export_shortlist(
             "Focus — New / Updated High Value"
         ),
         subtitle=(
-            "Primary queue after refresh: NEW or "
-            "UPDATED VERY_HIGH/HIGH opportunities, "
-            "excluding only those with evidence that "
-            "they are definitely OLD."
+            "Primary queue after refresh: NEW or UPDATED "
+            "VERY_HIGH/HIGH opportunities that have not "
+            "already been applied to, excluding those with "
+            "evidence that they are definitely OLD."
         ),
         items=summary.focus,
         table_name="FocusTable",
@@ -1674,8 +1712,9 @@ def export_shortlist(
         name="High Value",
         title="High Value — Current VERY_HIGH / HIGH",
         subtitle=(
-            "All current actionable VERY_HIGH and HIGH "
-            "opportunities, ordered by operational priority."
+            "All operationally current VERY_HIGH and HIGH "
+            "opportunities not yet applied to, ordered by "
+            "operational priority."
         ),
         items=summary.high_value,
         table_name="HighValueTable",
@@ -1684,10 +1723,11 @@ def export_shortlist(
     _create_data_sheet(
         workbook,
         name="All Current",
-        title="All Current — Actionable Opportunities",
+        title="All Current — Needs Application Attention",
         subtitle=(
-            "All current NEW / UPDATED / KNOWN opportunities. "
-            "No rows are deduplicated automatically."
+            "All operationally current NEW / UPDATED / KNOWN "
+            "opportunities not yet applied to. No rows are "
+            "deduplicated automatically."
         ),
         items=summary.all_current,
         table_name="AllCurrentTable",
@@ -1696,10 +1736,11 @@ def export_shortlist(
     _create_data_sheet(
         workbook,
         name="History",
-        title="History — Retained Non-actionable State",
+        title="History — Applied / Non-actionable",
         subtitle=(
-            "INACTIVE, SUPERSEDED, and OUT_OF_SCOPE rows "
-            "retained by operational priority."
+            "Previously applied opportunities plus INACTIVE, "
+            "SUPERSEDED, and OUT_OF_SCOPE rows retained for "
+            "reference. Operational State remains unchanged."
         ),
         items=summary.history,
         table_name="HistoryTable",
