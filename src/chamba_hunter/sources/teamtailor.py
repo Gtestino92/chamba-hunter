@@ -1,3 +1,7 @@
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+)
 from dataclasses import dataclass
 from datetime import datetime
 from html import unescape
@@ -262,9 +266,19 @@ class TeamtailorClient:
         self,
         timeout_seconds: float = 20.0,
         max_pages: int = 100,
+        max_detail_workers: int = 6,
     ) -> None:
+        if max_detail_workers < 1:
+            raise ValueError(
+                "max_detail_workers must "
+                "be at least 1."
+            )
+
         self.timeout_seconds = timeout_seconds
         self.max_pages = max_pages
+        self.max_detail_workers = (
+            max_detail_workers
+        )
 
     def fetch_jobs(
         self,
@@ -277,6 +291,14 @@ class TeamtailorClient:
         with httpx.Client(
             timeout=self.timeout_seconds,
             follow_redirects=True,
+            limits=httpx.Limits(
+                max_connections=(
+                    self.max_detail_workers
+                ),
+                max_keepalive_connections=(
+                    self.max_detail_workers
+                ),
+            ),
             headers={
                 "User-Agent": "chamba-hunter/0.1"
             },
@@ -289,13 +311,10 @@ class TeamtailorClient:
                 board_url=normalized_board_url,
             )
 
-            jobs = [
-                self._fetch_job_detail(
-                    client=client,
-                    source_job=job_link,
-                )
-                for job_link in job_links
-            ]
+            jobs = self._fetch_job_details(
+                client=client,
+                job_links=job_links,
+            )
 
         return TeamtailorJobsFetch(
             http_status=http_status,
@@ -402,6 +421,82 @@ class TeamtailorClient:
         )
 
         return first_status, jobs
+
+    def _fetch_job_details(
+        self,
+        client: httpx.Client,
+        job_links: list[
+            TeamtailorJobLink
+        ],
+    ) -> list[TeamtailorJobDetail]:
+        if not job_links:
+            return []
+
+        worker_count = min(
+            self.max_detail_workers,
+            len(job_links),
+        )
+
+        details: list[
+            TeamtailorJobDetail | None
+        ] = [
+            None
+            for _ in job_links
+        ]
+
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix=(
+                "teamtailor-detail"
+            ),
+        ) as executor:
+            future_indexes = {
+                executor.submit(
+                    self._fetch_job_detail,
+                    client=client,
+                    source_job=job_link,
+                ): index
+                for index, job_link
+                in enumerate(job_links)
+            }
+
+            try:
+                for future in as_completed(
+                    future_indexes
+                ):
+                    index = (
+                        future_indexes[
+                            future
+                        ]
+                    )
+
+                    details[index] = (
+                        future.result()
+                    )
+
+            except Exception:
+                for pending in (
+                    future_indexes
+                ):
+                    pending.cancel()
+
+                raise
+
+        if any(
+            detail is None
+            for detail in details
+        ):
+            raise RuntimeError(
+                "Teamtailor detail fetch "
+                "completed without a full "
+                "snapshot."
+            )
+
+        return [
+            detail
+            for detail in details
+            if detail is not None
+        ]
 
     def _fetch_job_detail(
         self,
