@@ -31,6 +31,8 @@ def build_plan(
     skip_export: bool,
     discover_broad_ats_limit: int,
     himalayas_max_jobs: int,
+    himalayas_backfill_days: int,
+    himalayas_overlap_hours: int,
     getonboard_max_pages: int,
     jobicy_max_jobs: int,
     wwr_max_jobs: int,
@@ -40,75 +42,53 @@ def build_plan(
     steps: list[RefreshStep] = []
 
     if not skip_broad:
-        if (
-            himalayas_max_jobs > 0
-            or getonboard_max_pages > 0
-        ):
-            steps.append(
-                RefreshStep(
-                    name=(
-                        "Acquire broad job leads"
-                    ),
-                    module=(
-                        "acquire_broad_jobs"
-                    ),
-                    arguments=(
-                        "--himalayas-max-jobs",
-                        str(
-                            himalayas_max_jobs
-                        ),
-                        "--getonboard-max-pages",
-                        str(
-                            getonboard_max_pages
-                        ),
-                    ),
-                )
+        broad_arguments: list[
+            str
+        ] = [
+            "--himalayas-backfill-days",
+            str(
+                himalayas_backfill_days
+            ),
+            "--himalayas-overlap-hours",
+            str(
+                himalayas_overlap_hours
+            ),
+            "--getonboard-max-pages",
+            str(
+                getonboard_max_pages
+            ),
+            "--jobicy-max-jobs",
+            str(
+                jobicy_max_jobs
+            ),
+            "--wwr-max-jobs",
+            str(
+                wwr_max_jobs
+            ),
+            "--jooble-max-pages-per-query",
+            str(
+                jooble_max_pages_per_query
+            ),
+        ]
+
+        if himalayas_max_jobs == 0:
+            broad_arguments.append(
+                "--skip-himalayas"
             )
 
-        if (
-            jobicy_max_jobs > 0
-            or wwr_max_jobs > 0
-        ):
-            steps.append(
-                RefreshStep(
-                    name=(
-                        "Acquire additional "
-                        "public job leads"
-                    ),
-                    module=(
-                        "acquire_public_jobs"
-                    ),
-                    arguments=(
-                        "--jobicy-max-jobs",
-                        str(
-                            jobicy_max_jobs
-                        ),
-                        "--wwr-max-jobs",
-                        str(
-                            wwr_max_jobs
-                        ),
-                    ),
-                )
+        steps.append(
+            RefreshStep(
+                name=(
+                    "Acquire broad sources V2"
+                ),
+                module=(
+                    "acquire_sources_v2"
+                ),
+                arguments=tuple(
+                    broad_arguments
+                ),
             )
-
-        if jooble_max_pages_per_query > 0:
-            steps.append(
-                RefreshStep(
-                    name=(
-                        "Acquire Jooble Argentina "
-                        "job leads"
-                    ),
-                    module=(
-                        "acquire_jooble_jobs"
-                    ),
-                    arguments=(
-                        "--max-pages-per-query",
-                        str(
-                            jooble_max_pages_per_query
-                        ),
-                    ),
-                )
-            )
+        )
 
     if discover_broad_ats_limit > 0:
         steps.append(
@@ -319,8 +299,31 @@ def main() -> None:
         type=int,
         default=500,
         help=(
-            "Broad acquisition Himalayas limit. "
-            "Use 0 to disable. Defaults to 500."
+            "Legacy Himalayas enable/disable gate. "
+            "Any positive value enables temporal "
+            "backfill/incremental acquisition; "
+            "0 disables Himalayas."
+        ),
+    )
+
+    parser.add_argument(
+        "--himalayas-backfill-days",
+        type=int,
+        default=30,
+        help=(
+            "Maximum Himalayas historical window. "
+            "Defaults to 30 days."
+        ),
+    )
+
+    parser.add_argument(
+        "--himalayas-overlap-hours",
+        type=int,
+        default=48,
+        help=(
+            "Himalayas overlap before the previous "
+            "successful source start. "
+            "Defaults to 48 hours."
         ),
     )
 
@@ -329,7 +332,7 @@ def main() -> None:
         type=int,
         default=5,
         help=(
-            "Broad acquisition Get on Board page "
+            "Get on Board Programming page "
             "limit. Use 0 to disable. "
             "Defaults to 5."
         ),
@@ -395,6 +398,18 @@ def main() -> None:
             "cannot be negative"
         )
 
+    if args.himalayas_backfill_days < 1:
+        parser.error(
+            "--himalayas-backfill-days "
+            "must be at least 1"
+        )
+
+    if args.himalayas_overlap_hours < 0:
+        parser.error(
+            "--himalayas-overlap-hours "
+            "cannot be negative"
+        )
+
     if args.getonboard_max_pages < 0:
         parser.error(
             "--getonboard-max-pages "
@@ -426,16 +441,14 @@ def main() -> None:
 
     if (
         not args.skip_broad
-        and args.himalayas_max_jobs
-        == 0
-        and args.getonboard_max_pages
-        == 0
-        and args.jobicy_max_jobs
-        == 0
-        and args.wwr_max_jobs
-        == 0
-        and args.jooble_max_pages_per_query
-        == 0
+        and args.himalayas_max_jobs == 0
+        and args.getonboard_max_pages == 0
+        and args.jobicy_max_jobs == 0
+        and args.wwr_max_jobs == 0
+        and (
+            args.jooble_max_pages_per_query
+            == 0
+        )
     ):
         parser.error(
             "At least one broad source must "
@@ -452,6 +465,12 @@ def main() -> None:
         ),
         himalayas_max_jobs=(
             args.himalayas_max_jobs
+        ),
+        himalayas_backfill_days=(
+            args.himalayas_backfill_days
+        ),
+        himalayas_overlap_hours=(
+            args.himalayas_overlap_hours
         ),
         getonboard_max_pages=(
             args.getonboard_max_pages
