@@ -12,6 +12,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 from chamba_hunter.services.job_matching_service import (
     JobMatchingService,
+    PROFESSIONAL_RELEVANCE_FLOOR,
     PROFILE_NAME,
     RULE_VERSION,
 )
@@ -253,6 +254,14 @@ def main() -> None:
     print(
         "Candidates:    ",
         summary.total,
+    )
+    print(
+        "Relevance floor:",
+        PROFESSIONAL_RELEVANCE_FLOOR,
+    )
+    print(
+        "Relevant:      ",
+        summary.relevant,
     )
 
     if args.apply:
@@ -537,6 +546,7 @@ def main() -> None:
     thresholds = [
         80.0,
         65.0,
+        PROFESSIONAL_RELEVANCE_FLOOR,
         45.0,
     ]
 

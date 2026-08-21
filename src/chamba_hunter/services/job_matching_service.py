@@ -18,7 +18,8 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "MATCHING_V1"
+RULE_VERSION = "MATCHING_V2"
+PROFESSIONAL_RELEVANCE_FLOOR = 50.0
 PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 PROFILE_DESCRIPTION = (
     "Backend Software Engineer search profile calibrated "
@@ -74,6 +75,7 @@ class MatchingSummary:
     apply: bool
 
     total: int = 0
+    relevant: int = 0
 
     created: int = 0
     updated: int = 0
@@ -732,6 +734,9 @@ def profile_rules() -> JsonObject:
             "MEDIUM": 45,
             "LOW": 0,
         },
+        "professional_relevance_floor": (
+            PROFESSIONAL_RELEVANCE_FLOOR
+        ),
         "seniority_target": (
             "semisenior / mid-level"
         ),
@@ -752,6 +757,7 @@ def profile_rules() -> JsonObject:
             "software backend UNKNOWN may receive a role boost only from strong profile-specific backend evidence",
             "UNKNOWN remains viable",
             "professional score excludes freshness and application priority",
+            "only scores at or above the professional relevance floor are persisted as current professional matches",
         ],
         "skill_groups": [
             {
@@ -797,6 +803,15 @@ class JobMatchingService:
             _match(candidate)
             for candidate in candidates
         ]
+
+        summary.relevant = sum(
+            1
+            for decision in summary.decisions
+            if (
+                decision.score
+                >= PROFESSIONAL_RELEVANCE_FLOOR
+            )
+        )
 
         if apply:
             self._apply(summary)
@@ -850,6 +865,15 @@ class JobMatchingService:
             )
 
         try:
+            relevant_decisions = [
+                decision
+                for decision in summary.decisions
+                if (
+                    decision.score
+                    >= PROFESSIONAL_RELEVANCE_FLOOR
+                )
+            ]
+
             writes = [
                 ProfessionalMatchWrite(
                     record_kind=decision.record_kind,
@@ -873,7 +897,7 @@ class JobMatchingService:
                     reasons=decision.reasons,
                     rule_version=RULE_VERSION,
                 )
-                for decision in summary.decisions
+                for decision in relevant_decisions
             ]
 
             counts = self.repository.upsert_matches(
@@ -904,6 +928,15 @@ class JobMatchingService:
                 ),
                 "scope": (
                     "ARGENTINA_ELIGIBLE_OR_UNKNOWN"
+                ),
+                "professional_relevance_floor": (
+                    PROFESSIONAL_RELEVANCE_FLOOR
+                ),
+                "evaluated": summary.total,
+                "relevant": summary.relevant,
+                "excluded_below_floor": (
+                    summary.total
+                    - summary.relevant
                 ),
                 "match_levels": dict(
                     sorted(
@@ -944,6 +977,9 @@ class JobMatchingService:
                 metadata={
                     "rule_version": RULE_VERSION,
                     "search_profile": PROFILE_NAME,
+                    "professional_relevance_floor": (
+                        PROFESSIONAL_RELEVANCE_FLOOR
+                    ),
                 },
                 error_message=str(error),
             )
