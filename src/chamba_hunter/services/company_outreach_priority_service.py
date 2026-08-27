@@ -21,7 +21,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 RULE_VERSION = (
-    "COMPANY_OUTREACH_V2_2"
+    "COMPANY_OUTREACH_V3_1"
 )
 
 DEFAULT_MIN_ACTIONABLE_SCORE = 45.0
@@ -309,6 +309,30 @@ def _evaluate(
             "manually referenced company"
         )
 
+    yc_score = min(
+        25.0,
+        max(
+            0.0,
+            candidate.yc_relevance_score,
+        ),
+    )
+
+    if yc_score:
+        category_text = ", ".join(
+            candidate.yc_categories[
+                :3
+            ]
+        )
+
+        reasons.append(
+            "YC technology directory"
+            + (
+                f": {category_text}"
+                if category_text
+                else ""
+            )
+        )
+
     if (
         candidate.remote_argentina
         is True
@@ -386,6 +410,7 @@ def _evaluate(
                 + contact_score
                 + activity_score
                 + manual_score
+                + yc_score
                 + geo_score
                 + targeting_score
                 + type_score,

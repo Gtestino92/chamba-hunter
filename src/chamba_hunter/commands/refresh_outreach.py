@@ -58,6 +58,15 @@ def main() -> None:
         action="store_true",
     )
     parser.add_argument(
+        "--skip-yc",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--yc-max-companies",
+        type=int,
+        default=150,
+    )
+    parser.add_argument(
         "--skip-contact-scan",
         action="store_true",
     )
@@ -94,6 +103,12 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+
+    if args.yc_max_companies < 1:
+        parser.error(
+            "--yc-max-companies must be "
+            "at least 1"
+        )
 
     if args.contact_limit < 1:
         parser.error(
@@ -145,6 +160,25 @@ def main() -> None:
                 ),
                 module=(
                     "acquire_cessi_companies"
+                ),
+            )
+        )
+
+    if not args.skip_yc:
+        plan.append(
+            OutreachStep(
+                name=(
+                    "Acquire YC technology "
+                    "companies"
+                ),
+                module=(
+                    "acquire_yc_companies"
+                ),
+                arguments=(
+                    "--max-companies",
+                    str(
+                        args.yc_max_companies
+                    ),
                 ),
             )
         )

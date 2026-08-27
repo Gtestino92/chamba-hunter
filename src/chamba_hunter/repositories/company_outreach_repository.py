@@ -40,6 +40,8 @@ class CompanyOutreachCandidate:
     contacts: tuple[PublicContact, ...]
     cessi_activities: tuple[str, ...]
     manual_reference: bool
+    yc_relevance_score: float
+    yc_categories: tuple[str, ...]
     current_max_match: float | None
     current_relevant_jobs: int
     historical_max_match: float | None
@@ -83,6 +85,8 @@ class OutreachReportRow:
     current_relevant_jobs: int
     manual_reference: bool
     cessi_source: bool
+    yc_source: bool
+    yc_categories: tuple[str, ...]
     reasons: tuple[str, ...]
     contacted: bool
     outreach_status: str | None
@@ -189,6 +193,7 @@ class CompanyOutreachRepository:
             ApplicationType.GENERAL_APPLICATION.value,
             SourceType.CESSI.value,
             SourceType.MANUAL.value,
+            SourceType.YC.value,
             search_profile_name,
             search_profile_name,
         ]
@@ -246,7 +251,7 @@ class CompanyOutreachRepository:
                         SELECT 1
                         FROM company_sources cs
                         WHERE cs.company_id = c.id
-                          AND cs.source_type IN (?, ?)
+                          AND cs.source_type IN (?, ?, ?)
                     )
                     OR c.target_priority IN (
                         'VERY_HIGH',
@@ -476,6 +481,17 @@ class CompanyOutreachRepository:
                 (SourceType.MANUAL.value,),
             ).fetchall()
 
+            yc_rows = connection.execute(
+                """
+                SELECT
+                    company_id,
+                    metadata_json
+                FROM company_sources
+                WHERE source_type = ?
+                """,
+                (SourceType.YC.value,),
+            ).fetchall()
+
             contacted_rows = connection.execute(
                 """
                 SELECT DISTINCT company_id
@@ -546,6 +562,78 @@ class CompanyOutreachRepository:
             int(row["company_id"])
             for row in manual_rows
         }
+
+        yc_relevance: dict[
+            int,
+            float,
+        ] = {}
+
+        yc_categories: dict[
+            int,
+            set[str],
+        ] = {}
+
+        for row in yc_rows:
+            company_id = int(
+                row["company_id"]
+            )
+
+            metadata = json_from_db(
+                row["metadata_json"]
+            )
+
+            if not isinstance(
+                metadata,
+                dict,
+            ):
+                continue
+
+            raw_score = metadata.get(
+                "outreach_relevance_score"
+            )
+
+            if isinstance(
+                raw_score,
+                (int, float),
+            ):
+                yc_relevance[
+                    company_id
+                ] = max(
+                    yc_relevance.get(
+                        company_id,
+                        0.0,
+                    ),
+                    float(raw_score),
+                )
+
+            raw_categories = metadata.get(
+                "matched_categories"
+            )
+
+            if isinstance(
+                raw_categories,
+                list,
+            ):
+                for category in (
+                    raw_categories
+                ):
+                    if not isinstance(
+                        category,
+                        str,
+                    ):
+                        continue
+
+                    cleaned = " ".join(
+                        category.split()
+                    ).strip()
+
+                    if cleaned:
+                        yc_categories.setdefault(
+                            company_id,
+                            set(),
+                        ).add(
+                            cleaned
+                        )
 
         contacted_ids = {
             int(row["company_id"])
@@ -672,6 +760,21 @@ class CompanyOutreachRepository:
                     manual_reference=(
                         company_id
                         in manual_company_ids
+                    ),
+                    yc_relevance_score=(
+                        yc_relevance.get(
+                            company_id,
+                            0.0,
+                        )
+                    ),
+                    yc_categories=tuple(
+                        sorted(
+                            yc_categories.get(
+                                company_id,
+                                set(),
+                            ),
+                            key=str.casefold,
+                        )
                     ),
                     current_max_match=current_max,
                     current_relevant_jobs=(
@@ -863,6 +966,22 @@ class CompanyOutreachRepository:
 
                     EXISTS (
                         SELECT 1
+                        FROM company_sources ycs
+                        WHERE ycs.company_id = c.id
+                          AND ycs.source_type = 'YC'
+                    ) AS yc_source,
+
+                    (
+                        SELECT ycs.metadata_json
+                        FROM company_sources ycs
+                        WHERE ycs.company_id = c.id
+                          AND ycs.source_type = 'YC'
+                        ORDER BY ycs.id
+                        LIMIT 1
+                    ) AS yc_metadata_json,
+
+                    EXISTS (
+                        SELECT 1
                         FROM applications a
                         WHERE a.company_id = c.id
                           AND a.application_type IN (?, ?)
@@ -931,6 +1050,38 @@ class CompanyOutreachRepository:
                 )
                 if isinstance(
                     raw_reasons,
+                    list,
+                )
+                else ()
+            )
+
+            yc_metadata = json_from_db(
+                row["yc_metadata_json"]
+            )
+
+            raw_yc_categories = (
+                yc_metadata.get(
+                    "matched_categories"
+                )
+                if isinstance(
+                    yc_metadata,
+                    dict,
+                )
+                else None
+            )
+
+            report_yc_categories = (
+                tuple(
+                    str(item)
+                    for item
+                    in raw_yc_categories
+                    if isinstance(
+                        item,
+                        str,
+                    )
+                )
+                if isinstance(
+                    raw_yc_categories,
                     list,
                 )
                 else ()
@@ -1026,6 +1177,14 @@ class CompanyOutreachRepository:
                         row[
                             "cessi_source"
                         ]
+                    ),
+                    yc_source=bool(
+                        row[
+                            "yc_source"
+                        ]
+                    ),
+                    yc_categories=(
+                        report_yc_categories
                     ),
                     reasons=reasons,
                     contacted=bool(
