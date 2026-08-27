@@ -4,10 +4,10 @@ from email.utils import parsedate_to_datetime
 from time import sleep
 
 import httpx
-
-from chamba_hunter.sources.himalayas_jobs import (
-    HimalayasJobPosting,
-    HimalayasJobsResponse,
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
 )
 
 
@@ -22,6 +22,96 @@ CONSECUTIVE_OLD_PAGES_TO_STOP = 2
 DEFAULT_REQUEST_DELAY_SECONDS = 0.75
 MAX_RATE_LIMIT_RETRIES = 5
 DEFAULT_RATE_LIMIT_BACKOFF_SECONDS = 2.0
+
+
+class HimalayasLocationRestriction(BaseModel):
+    model_config = ConfigDict(
+        extra="allow"
+    )
+
+    alpha2: str | None = None
+    name: str | None = None
+    slug: str | None = None
+
+
+class HimalayasJobPosting(BaseModel):
+    model_config = ConfigDict(
+        extra="allow"
+    )
+
+    guid: str
+    title: str
+
+    excerpt: str | None = None
+    description: str | None = None
+
+    company_name: str = Field(
+        alias="companyName"
+    )
+    company_slug: str = Field(
+        alias="companySlug"
+    )
+
+    employment_type: str | None = Field(
+        default=None,
+        alias="employmentType",
+    )
+
+    location_restrictions: list[
+        str | HimalayasLocationRestriction
+    ] = Field(
+        default_factory=list,
+        alias="locationRestrictions",
+    )
+
+    timezone_restrictions: list[
+        str | int | float
+    ] = Field(
+        default_factory=list,
+        alias="timezoneRestrictions",
+    )
+
+    categories: list[str] = Field(
+        default_factory=list
+    )
+
+    parent_categories: list[str] = Field(
+        default_factory=list,
+        alias="parentCategories",
+    )
+
+    seniority: list[str] = Field(
+        default_factory=list
+    )
+
+    pub_date: int | float | str | None = Field(
+        default=None,
+        alias="pubDate",
+    )
+
+    expiry_date: int | float | str | None = Field(
+        default=None,
+        alias="expiryDate",
+    )
+
+    application_link: str | None = Field(
+        default=None,
+        alias="applicationLink",
+    )
+
+
+class HimalayasJobsResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="allow"
+    )
+
+    total_count: int = Field(
+        alias="totalCount"
+    )
+
+    jobs: list[
+        HimalayasJobPosting
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,8 +133,17 @@ class HimalayasWindowFetch:
 def publication_datetime(
     job: HimalayasJobPosting,
 ) -> datetime | None:
-    value = job.pub_date
+    return _source_datetime(
+        job.pub_date,
+        field_name="pubDate",
+    )
 
+
+def _source_datetime(
+    value: int | float | str | None,
+    *,
+    field_name: str,
+) -> datetime | None:
     if value is None:
         return None
 
@@ -76,8 +175,9 @@ def publication_datetime(
 
             if parsed.tzinfo is None:
                 raise ValueError(
-                    "Himalayas pubDate must "
-                    "include timezone information: "
+                    "Himalayas "
+                    f"{field_name} must include "
+                    "timezone information: "
                     f"{value}"
                 )
 
@@ -99,6 +199,15 @@ def publication_datetime(
     return datetime.fromtimestamp(
         seconds,
         tz=UTC,
+    )
+
+
+def expiry_datetime(
+    job: HimalayasJobPosting,
+) -> datetime | None:
+    return _source_datetime(
+        job.expiry_date,
+        field_name="expiryDate",
     )
 
 

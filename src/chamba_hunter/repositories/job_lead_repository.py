@@ -122,6 +122,15 @@ class JobLeadRepository:
                     else None
                 )
 
+                source_updated_at_db = (
+                    datetime_to_db(
+                        job.source_updated_at
+                    )
+                    if job.source_updated_at
+                    is not None
+                    else None
+                )
+
                 content_hash = build_job_content_hash(
                     title=job.title,
                     description=job.description,
@@ -150,6 +159,7 @@ class JobLeadRepository:
                         apply_url,
                         published_at,
                         expires_at,
+                        source_updated_at,
                         first_seen_at,
                         last_seen_at,
                         is_active,
@@ -159,7 +169,7 @@ class JobLeadRepository:
                         last_changed_at
                     )
                     VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     ON CONFLICT (
@@ -177,6 +187,8 @@ class JobLeadRepository:
                         apply_url = excluded.apply_url,
                         published_at = excluded.published_at,
                         expires_at = excluded.expires_at,
+                        source_updated_at =
+                            excluded.source_updated_at,
                         last_seen_at = excluded.last_seen_at,
                         is_active = excluded.is_active,
                         raw_payload_json = excluded.raw_payload_json,
@@ -209,6 +221,7 @@ class JobLeadRepository:
                         job.apply_url,
                         published_at_db,
                         expires_at_db,
+                        source_updated_at_db,
                         seen_at_db,
                         seen_at_db,
                         bool_to_db(job.is_active),

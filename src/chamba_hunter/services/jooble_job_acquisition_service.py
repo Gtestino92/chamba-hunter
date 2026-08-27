@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 
 from pydantic import ValidationError
@@ -59,18 +59,29 @@ class JoobleJobAcquisitionService:
         tracing_repository: TracingRepository,
     ) -> None:
         self.jooble_client = jooble_client
-        self.company_import_service = company_import_service
-        self.job_lead_repository = job_lead_repository
-        self.tracing_repository = tracing_repository
+        self.company_import_service = (
+            company_import_service
+        )
+        self.job_lead_repository = (
+            job_lead_repository
+        )
+        self.tracing_repository = (
+            tracing_repository
+        )
 
     def run(
         self,
         *,
         max_pages_per_query: int,
     ) -> JoobleAcquisitionSummary:
-        run = self.tracing_repository.add_run(
-            Run(
-                command="acquire_jooble_jobs"
+        run = (
+            self.tracing_repository
+            .add_run(
+                Run(
+                    command=(
+                        "acquire_jooble_jobs"
+                    )
+                )
             )
         )
 
@@ -79,11 +90,16 @@ class JoobleJobAcquisitionService:
                 "Run must have an id."
             )
 
-        step = self.tracing_repository.add_run_step(
-            RunStep(
-                run_id=run.id,
-                step_name="jooble_job_acquisition",
-                items_total=1,
+        step = (
+            self.tracing_repository
+            .add_run_step(
+                RunStep(
+                    run_id=run.id,
+                    step_name=(
+                        "jooble_job_acquisition"
+                    ),
+                    items_total=1,
+                )
             )
         )
 
@@ -107,20 +123,33 @@ class JoobleJobAcquisitionService:
                 items_failed=0,
                 items_skipped=0,
                 metadata={
-                    "requests_made": summary.requests_made,
-                    "received": summary.received,
-                    "normalized": summary.normalized,
-                    "skipped": summary.skipped,
+                    "requests_made": (
+                        summary.requests_made
+                    ),
+                    "received": (
+                        summary.received
+                    ),
+                    "normalized": (
+                        summary.normalized
+                    ),
+                    "skipped": (
+                        summary.skipped
+                    ),
                     "companies_created": (
                         summary.companies_created
                     ),
                     "companies_existing": (
                         summary.companies_existing
                     ),
-                    "jobs_created": summary.jobs_created,
-                    "jobs_updated": summary.jobs_updated,
+                    "jobs_created": (
+                        summary.jobs_created
+                    ),
+                    "jobs_updated": (
+                        summary.jobs_updated
+                    ),
                 },
             )
+
             self.tracing_repository.finish_run(
                 run_id=run.id,
                 status=RunStatus.SUCCESS,
@@ -136,14 +165,20 @@ class JoobleJobAcquisitionService:
                 items_failed=1,
                 items_skipped=0,
                 metadata={
-                    "error_type": type(error).__name__,
-                    "error_message": str(error),
+                    "error_type": (
+                        type(error).__name__
+                    ),
+                    "error_message": str(
+                        error
+                    ),
                 },
             )
+
             self.tracing_repository.finish_run(
                 run_id=run.id,
                 status=RunStatus.FAILED,
             )
+
             raise
 
     def _acquire(
@@ -152,48 +187,79 @@ class JoobleJobAcquisitionService:
         run_id: int,
         max_pages_per_query: int,
     ) -> JoobleAcquisitionSummary:
-        fetch = self.jooble_client.fetch_jobs(
-            max_pages_per_query=(
-                max_pages_per_query
+        fetch = (
+            self.jooble_client
+            .fetch_jobs(
+                max_pages_per_query=(
+                    max_pages_per_query
+                )
             )
         )
 
-        source_type = SourceType.JOOBLE
+        source_type = (
+            SourceType.JOOBLE
+        )
+
         seen_at = utc_now()
-        leads: list[JobLead] = []
+
+        leads: list[
+            JobLead
+        ] = []
+
         skipped = 0
 
-        seen_company_ids: set[int] = set()
-        created_company_ids: set[int] = set()
+        seen_company_ids: set[
+            int
+        ] = set()
+
+        created_company_ids: set[
+            int
+        ] = set()
 
         for fetched_job in fetch.jobs:
             try:
-                posting = fetched_job.posting
+                posting = (
+                    fetched_job.posting
+                )
 
                 import_result = (
                     self.company_import_service
                     .import_seed(
                         CompanySeedInput(
-                            name=_required_text(
-                                posting.company,
-                                "company",
+                            name=(
+                                _required_text(
+                                    posting.company,
+                                    "company",
+                                )
                             ),
-                            source_type=source_type,
+                            source_type=(
+                                source_type
+                            ),
                         ),
                         source_metadata={
-                            "broad_job_acquisition": True,
+                            "broad_job_acquisition": (
+                                True
+                            ),
+                            "source_updated_at": (
+                                True
+                            ),
                         },
                     )
                 )
 
-                company = import_result.company
+                company = (
+                    import_result.company
+                )
 
                 if company.id is None:
                     raise RuntimeError(
-                        "Imported company must have an id."
+                        "Imported company must "
+                        "have an id."
                     )
 
-                seen_company_ids.add(company.id)
+                seen_company_ids.add(
+                    company.id
+                )
 
                 if import_result.created:
                     created_company_ids.add(
@@ -202,8 +268,12 @@ class JoobleJobAcquisitionService:
 
                 leads.append(
                     _jooble_to_lead(
-                        company_id=company.id,
-                        fetched_job=fetched_job,
+                        company_id=(
+                            company.id
+                        ),
+                        fetched_job=(
+                            fetched_job
+                        ),
                         seen_at=seen_at,
                     )
                 )
@@ -215,17 +285,26 @@ class JoobleJobAcquisitionService:
             ):
                 skipped += 1
 
-        counts = self.job_lead_repository.upsert_source_jobs(
-            source_type=source_type,
-            jobs=leads,
-            seen_at=seen_at,
+        counts = (
+            self.job_lead_repository
+            .upsert_source_jobs(
+                source_type=source_type,
+                jobs=leads,
+                seen_at=seen_at,
+            )
         )
 
         return JoobleAcquisitionSummary(
             run_id=run_id,
-            requests_made=fetch.requests_made,
-            received=len(fetch.jobs),
-            normalized=len(leads),
+            requests_made=(
+                fetch.requests_made
+            ),
+            received=len(
+                fetch.jobs
+            ),
+            normalized=len(
+                leads
+            ),
             skipped=skipped,
             companies_created=len(
                 created_company_ids
@@ -234,8 +313,12 @@ class JoobleJobAcquisitionService:
                 seen_company_ids
                 - created_company_ids
             ),
-            jobs_created=counts.created,
-            jobs_updated=counts.updated,
+            jobs_created=(
+                counts.created
+            ),
+            jobs_updated=(
+                counts.updated
+            ),
         )
 
 
@@ -245,13 +328,19 @@ def _jooble_to_lead(
     fetched_job: JoobleFetchedJob,
     seen_at: datetime,
 ) -> JobLead:
-    posting = fetched_job.posting
+    posting = (
+        fetched_job.posting
+    )
 
     return JobLead(
         company_id=company_id,
-        source_type=SourceType.JOOBLE,
+        source_type=(
+            SourceType.JOOBLE
+        ),
         external_id=_required_text(
-            str(posting.id),
+            str(
+                posting.id
+            ),
             "id",
         ),
         title=_required_text(
@@ -264,7 +353,9 @@ def _jooble_to_lead(
         location_text=_clean_text(
             posting.location
         ),
-        workplace_type=WorkplaceType.UNKNOWN,
+        workplace_type=(
+            WorkplaceType.UNKNOWN
+        ),
         employment_type=_clean_text(
             posting.job_type
         ),
@@ -274,18 +365,63 @@ def _jooble_to_lead(
         apply_url=None,
         published_at=None,
         expires_at=None,
+        source_updated_at=(
+            _parse_source_updated_at(
+                posting.updated
+            )
+        ),
         first_seen_at=seen_at,
         last_seen_at=seen_at,
         is_active=True,
         raw_payload={
             "matched_queries": list(
-                fetched_job.matched_queries
+                fetched_job
+                .matched_queries
             ),
-            "job": posting.model_dump(
-                mode="json",
-                by_alias=True,
+            "job": (
+                posting.model_dump(
+                    mode="json",
+                    by_alias=True,
+                )
             ),
         },
+    )
+
+
+def _parse_source_updated_at(
+    value: str | None,
+) -> datetime | None:
+    cleaned = _clean_text(
+        value
+    )
+
+    if cleaned is None:
+        return None
+
+    normalized = (
+        cleaned[:-1] + "+00:00"
+        if cleaned.endswith("Z")
+        else cleaned
+    )
+
+    try:
+        parsed = datetime.fromisoformat(
+            normalized
+        )
+    except ValueError:
+        return None
+
+    # Jooble's documented REST example does not include
+    # a timezone suffix. Preserve the original value in
+    # raw_payload and normalize naive values to UTC here so
+    # the dedicated temporal column remains comparable.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=UTC
+        )
+
+    return parsed.astimezone(
+        UTC
     )
 
 
@@ -293,7 +429,9 @@ def _required_text(
     value: str | None,
     field: str,
 ) -> str:
-    cleaned = _clean_text(value)
+    cleaned = _clean_text(
+        value
+    )
 
     if cleaned is None:
         raise ValueError(
@@ -313,7 +451,11 @@ def _clean_text(
         str(value).split()
     )
 
-    return cleaned if cleaned else None
+    return (
+        cleaned
+        if cleaned
+        else None
+    )
 
 
 class _TextExtractor(HTMLParser):
@@ -321,7 +463,9 @@ class _TextExtractor(HTMLParser):
         super().__init__(
             convert_charrefs=True
         )
-        self.parts: list[str] = []
+        self.parts: list[
+            str
+        ] = []
 
     def handle_data(
         self,
@@ -332,20 +476,32 @@ class _TextExtractor(HTMLParser):
         )
 
         if cleaned:
-            self.parts.append(cleaned)
+            self.parts.append(
+                cleaned
+            )
 
 
 def _html_to_text(
     value: str | None,
 ) -> str | None:
-    cleaned = _clean_text(value)
+    cleaned = _clean_text(
+        value
+    )
 
     if cleaned is None:
         return None
 
     parser = _TextExtractor()
-    parser.feed(value)
+    parser.feed(
+        value
+    )
 
-    text = " ".join(parser.parts)
+    text = " ".join(
+        parser.parts
+    )
 
-    return text if text else cleaned
+    return (
+        text
+        if text
+        else cleaned
+    )

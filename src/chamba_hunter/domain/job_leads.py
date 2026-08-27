@@ -36,6 +36,11 @@ class JobLead:
     published_at: datetime | None = None
     expires_at: datetime | None = None
 
+    # Source-native "last updated" timestamp. This is
+    # intentionally separate from original publication time
+    # and from Chamba's own last_changed_at/content hash.
+    source_updated_at: datetime | None = None
+
     first_seen_at: datetime = field(
         default_factory=utc_now
     )

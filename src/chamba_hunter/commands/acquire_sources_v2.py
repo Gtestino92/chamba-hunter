@@ -35,11 +35,11 @@ from chamba_hunter.repositories.source_acquisition_state_repository import (
 from chamba_hunter.repositories.tracing_repository import (
     TracingRepository,
 )
-from chamba_hunter.services.broad_job_acquisition_service import (
-    BroadJobAcquisitionService,
-)
 from chamba_hunter.services.company_import_service import (
     CompanyImportService,
+)
+from chamba_hunter.services.getonboard_job_acquisition_service import (
+    GetOnBoardJobAcquisitionService,
 )
 from chamba_hunter.services.himalayas_incremental_acquisition_service import (
     DEFAULT_BACKFILL_DAYS,
@@ -57,9 +57,6 @@ from chamba_hunter.sources.getonboard_jobs import (
 )
 from chamba_hunter.sources.himalayas_incremental_jobs import (
     HimalayasIncrementalJobsClient,
-)
-from chamba_hunter.sources.himalayas_jobs import (
-    HimalayasJobsClient,
 )
 from chamba_hunter.sources.jobicy_jobs import (
     JobicyJobsClient,
@@ -127,18 +124,67 @@ def _record_source_success(
         ]
     )
 
-    final_metadata = {
-        "strategy": strategy,
-        **metadata,
-    }
-
     repository.record_success(
         source_type=source_type,
         scope_key=scope_key,
         started_at=started_at,
         finished_at=finished_at,
         is_backfill=False,
-        metadata=final_metadata,
+        metadata={
+            "strategy": strategy,
+            **metadata,
+        },
+    )
+
+
+def _success(
+    *,
+    source_type: SourceType,
+    received: int,
+    normalized: int,
+    jobs_created: int,
+    jobs_updated: int,
+) -> SourceOutcome:
+    _, strategy = (
+        _STATE_SCOPES[
+            source_type
+        ]
+    )
+
+    return SourceOutcome(
+        source_type=source_type,
+        status=RunStatus.SUCCESS,
+        strategy=strategy,
+        received=received,
+        normalized=normalized,
+        jobs_created=jobs_created,
+        jobs_updated=jobs_updated,
+    )
+
+
+def _failure(
+    *,
+    source_type: SourceType,
+    error: Exception,
+    strategy: str | None = None,
+) -> SourceOutcome:
+    if strategy is None:
+        _, strategy = (
+            _STATE_SCOPES[
+                source_type
+            ]
+        )
+
+    return SourceOutcome(
+        source_type=source_type,
+        status=RunStatus.FAILED,
+        strategy=strategy,
+        error_type=(
+            type(error).__name__
+        ),
+        error_message=str(
+            error
+        ),
     )
 
 
@@ -150,7 +196,7 @@ def _print_outcome(
         f"{outcome.status.value}"
     )
     print(
-        f"  strategy:    "
+        f"  strategy:     "
         f"{outcome.strategy}"
     )
 
@@ -159,24 +205,24 @@ def _print_outcome(
         == RunStatus.SUCCESS
     ):
         print(
-            f"  received:    "
+            f"  received:     "
             f"{outcome.received}"
         )
         print(
-            f"  normalized:  "
+            f"  normalized:   "
             f"{outcome.normalized}"
         )
         print(
-            f"  jobs created:"
-            f" {outcome.jobs_created}"
+            f"  jobs created: "
+            f"{outcome.jobs_created}"
         )
         print(
-            f"  jobs updated:"
-            f" {outcome.jobs_updated}"
+            f"  jobs updated: "
+            f"{outcome.jobs_updated}"
         )
     else:
         print(
-            "  error:       "
+            "  error:        "
             f"{outcome.error_type}: "
             f"{outcome.error_message}"
         )
@@ -215,21 +261,12 @@ def main() -> None:
         "--himalayas-backfill-days",
         type=int,
         default=DEFAULT_BACKFILL_DAYS,
-        help=(
-            "Maximum Himalayas historical "
-            "window. Defaults to 30 days."
-        ),
     )
 
     parser.add_argument(
         "--himalayas-overlap-hours",
         type=int,
         default=DEFAULT_OVERLAP_HOURS,
-        help=(
-            "Himalayas overlap before the "
-            "previous successful start. "
-            "Defaults to 48 hours."
-        ),
     )
 
     parser.add_argument(
@@ -237,10 +274,6 @@ def main() -> None:
         type=int,
         default=(
             DEFAULT_GETONBOARD_MAX_PAGES
-        ),
-        help=(
-            "Get on Board Programming pages. "
-            "Use 0 to disable. Defaults to 5."
         ),
     )
 
@@ -250,22 +283,12 @@ def main() -> None:
         default=(
             DEFAULT_JOBICY_MAX_JOBS
         ),
-        help=(
-            "Jobicy Engineering LATAM jobs. "
-            "Range 1-100; use 0 to disable. "
-            "Defaults to 100."
-        ),
     )
 
     parser.add_argument(
         "--wwr-max-jobs",
         type=int,
         default=DEFAULT_WWR_MAX_JOBS,
-        help=(
-            "Maximum unique We Work Remotely "
-            "Programming + DevOps jobs. "
-            "Use 0 to disable. Defaults to 300."
-        ),
     )
 
     parser.add_argument(
@@ -273,11 +296,6 @@ def main() -> None:
         type=int,
         default=(
             DEFAULT_JOOBLE_MAX_PAGES_PER_QUERY
-        ),
-        help=(
-            "Jooble Argentina pages for each "
-            "configured backend query. "
-            "Use 0 to disable. Defaults to 2."
         ),
     )
 
@@ -341,7 +359,6 @@ def main() -> None:
         )
 
     database = Database()
-
     applied = migrate(
         database
     )
@@ -355,22 +372,14 @@ def main() -> None:
 
         print()
 
-    company_repository = (
-        CompanyRepository(
-            database
-        )
-    )
-
-    company_source_repository = (
-        CompanySourceRepository(
-            database
-        )
-    )
-
     company_import_service = (
         CompanyImportService(
-            company_repository,
-            company_source_repository,
+            CompanyRepository(
+                database
+            ),
+            CompanySourceRepository(
+                database
+            ),
         )
     )
 
@@ -461,20 +470,14 @@ def main() -> None:
             )
 
         except Exception as error:
-            outcome = SourceOutcome(
+            outcome = _failure(
                 source_type=(
                     SourceType.HIMALAYAS
                 ),
-                status=RunStatus.FAILED,
+                error=error,
                 strategy=(
                     "TEMPORAL_BACKFILL_"
                     "INCREMENTAL"
-                ),
-                error_type=(
-                    type(error).__name__
-                ),
-                error_message=str(
-                    error
                 ),
             )
 
@@ -490,11 +493,8 @@ def main() -> None:
 
         try:
             summary = (
-                BroadJobAcquisitionService(
-                    himalayas_client=(
-                        HimalayasJobsClient()
-                    ),
-                    getonboard_client=(
+                GetOnBoardJobAcquisitionService(
+                    client=(
                         GetOnBoardJobsClient()
                     ),
                     company_import_service=(
@@ -511,124 +511,75 @@ def main() -> None:
                     ),
                 )
                 .run(
-                    himalayas_max_jobs=0,
-                    getonboard_max_pages=(
+                    max_pages=(
                         args
                         .getonboard_max_pages
-                    ),
+                    )
                 )
             )
 
             finished_at = utc_now()
 
-            result = next(
-                (
-                    item
-                    for item in summary.results
-                    if (
-                        item.source_type
-                        == SourceType.GETONBOARD
-                    )
+            _record_source_success(
+                repository=(
+                    state_repository
                 ),
-                None,
-            )
-
-            if result is None:
-                raise RuntimeError(
-                    "Get on Board acquisition "
-                    "did not return a source "
-                    "result."
-                )
-
-            if (
-                result.status
-                == RunStatus.SUCCESS
-            ):
-                _record_source_success(
-                    repository=(
-                        state_repository
-                    ),
-                    source_type=(
-                        SourceType.GETONBOARD
-                    ),
-                    started_at=started_at,
-                    finished_at=finished_at,
-                    metadata={
-                        "max_pages": (
-                            args
-                            .getonboard_max_pages
-                        ),
-                        "received": (
-                            result.received
-                        ),
-                        "normalized": (
-                            result.normalized
-                        ),
-                        "skipped": (
-                            result.skipped
-                        ),
-                        "jobs_created": (
-                            result.jobs_created
-                        ),
-                        "jobs_updated": (
-                            result.jobs_updated
-                        ),
-                    },
-                )
-
-                outcome = SourceOutcome(
-                    source_type=(
-                        SourceType.GETONBOARD
-                    ),
-                    status=RunStatus.SUCCESS,
-                    strategy=(
-                        "FULL_CURRENT_SNAPSHOT"
-                    ),
-                    received=(
-                        result.received
-                    ),
-                    normalized=(
-                        result.normalized
-                    ),
-                    jobs_created=(
-                        result.jobs_created
-                    ),
-                    jobs_updated=(
-                        result.jobs_updated
-                    ),
-                )
-            else:
-                outcome = SourceOutcome(
-                    source_type=(
-                        SourceType.GETONBOARD
-                    ),
-                    status=RunStatus.FAILED,
-                    strategy=(
-                        "FULL_CURRENT_SNAPSHOT"
-                    ),
-                    error_type=(
-                        result.error_type
-                    ),
-                    error_message=(
-                        result.error_message
-                    ),
-                )
-
-        except Exception as error:
-            outcome = SourceOutcome(
                 source_type=(
                     SourceType.GETONBOARD
                 ),
-                status=RunStatus.FAILED,
-                strategy=(
-                    "FULL_CURRENT_SNAPSHOT"
+                started_at=started_at,
+                finished_at=finished_at,
+                metadata={
+                    "max_pages": (
+                        args
+                        .getonboard_max_pages
+                    ),
+                    "received": (
+                        summary.received
+                    ),
+                    "normalized": (
+                        summary.normalized
+                    ),
+                    "skipped": (
+                        summary.skipped
+                    ),
+                    "jobs_created": (
+                        summary.jobs_created
+                    ),
+                    "jobs_updated": (
+                        summary.jobs_updated
+                    ),
+                    "ats_hints_created": (
+                        summary
+                        .ats_hints_created
+                    ),
+                },
+            )
+
+            outcome = _success(
+                source_type=(
+                    SourceType.GETONBOARD
                 ),
-                error_type=(
-                    type(error).__name__
+                received=(
+                    summary.received
                 ),
-                error_message=str(
-                    error
+                normalized=(
+                    summary.normalized
                 ),
+                jobs_created=(
+                    summary.jobs_created
+                ),
+                jobs_updated=(
+                    summary.jobs_updated
+                ),
+            )
+
+        except Exception as error:
+            outcome = _failure(
+                source_type=(
+                    SourceType.GETONBOARD
+                ),
+                error=error,
             )
 
         outcomes.append(
@@ -676,14 +627,12 @@ def main() -> None:
             finished_at = utc_now()
 
             result_by_source = {
-                item.source_type: item
-                for item in summary.results
+                result.source_type: result
+                for result
+                in summary.results
             }
 
-            for (
-                source_type,
-                enabled,
-            ) in (
+            for source_type, enabled in (
                 (
                     SourceType.JOBICY,
                     (
@@ -692,9 +641,11 @@ def main() -> None:
                     ),
                 ),
                 (
-                    SourceType
-                    .WEWORKREMOTELY,
-                    args.wwr_max_jobs > 0,
+                    SourceType.WEWORKREMOTELY,
+                    (
+                        args.wwr_max_jobs
+                        > 0
+                    ),
                 ),
             ):
                 if not enabled:
@@ -706,71 +657,29 @@ def main() -> None:
                     )
                 )
 
-                scope_key, strategy = (
-                    _STATE_SCOPES[
-                        source_type
-                    ]
-                )
-                del scope_key
-
                 if result is None:
-                    outcome = (
-                        SourceOutcome(
-                            source_type=(
-                                source_type
-                            ),
-                            status=(
-                                RunStatus.FAILED
-                            ),
-                            strategy=strategy,
-                            error_type=(
-                                "RuntimeError"
-                            ),
-                            error_message=(
-                                "Public acquisition "
-                                "did not return a "
-                                "source result."
-                            ),
-                        )
+                    outcome = _failure(
+                        source_type=(
+                            source_type
+                        ),
+                        error=RuntimeError(
+                            "Public acquisition "
+                            "returned no source "
+                            "result."
+                        ),
                     )
                 elif (
                     result.status
                     == RunStatus.SUCCESS
                 ):
-                    metadata: JsonObject = {
-                        "received": (
-                            result.received
-                        ),
-                        "normalized": (
-                            result.normalized
-                        ),
-                        "skipped": (
-                            result.skipped
-                        ),
-                        "jobs_created": (
-                            result.jobs_created
-                        ),
-                        "jobs_updated": (
-                            result.jobs_updated
-                        ),
-                    }
-
-                    if (
-                        source_type
-                        == SourceType.JOBICY
-                    ):
-                        metadata[
-                            "max_jobs"
-                        ] = (
-                            args
-                            .jobicy_max_jobs
+                    max_jobs = (
+                        args.jobicy_max_jobs
+                        if (
+                            source_type
+                            == SourceType.JOBICY
                         )
-                    else:
-                        metadata[
-                            "max_jobs"
-                        ] = (
-                            args.wwr_max_jobs
-                        )
+                        else args.wwr_max_jobs
+                    )
 
                     _record_source_success(
                         repository=(
@@ -779,54 +688,70 @@ def main() -> None:
                         source_type=(
                             source_type
                         ),
-                        started_at=started_at,
+                        started_at=(
+                            started_at
+                        ),
                         finished_at=(
                             finished_at
                         ),
-                        metadata=metadata,
-                    )
-
-                    outcome = (
-                        SourceOutcome(
-                            source_type=(
-                                source_type
+                        metadata={
+                            "max_jobs": (
+                                max_jobs
                             ),
-                            status=(
-                                RunStatus.SUCCESS
-                            ),
-                            strategy=strategy,
-                            received=(
+                            "received": (
                                 result.received
                             ),
-                            normalized=(
+                            "normalized": (
                                 result.normalized
                             ),
-                            jobs_created=(
+                            "skipped": (
+                                result.skipped
+                            ),
+                            "jobs_created": (
                                 result.jobs_created
                             ),
-                            jobs_updated=(
+                            "jobs_updated": (
                                 result.jobs_updated
                             ),
-                        )
+                        },
+                    )
+
+                    outcome = _success(
+                        source_type=(
+                            source_type
+                        ),
+                        received=(
+                            result.received
+                        ),
+                        normalized=(
+                            result.normalized
+                        ),
+                        jobs_created=(
+                            result.jobs_created
+                        ),
+                        jobs_updated=(
+                            result.jobs_updated
+                        ),
                     )
                 else:
-                    outcome = (
-                        SourceOutcome(
-                            source_type=(
+                    outcome = SourceOutcome(
+                        source_type=(
+                            source_type
+                        ),
+                        status=(
+                            RunStatus.FAILED
+                        ),
+                        strategy=(
+                            _STATE_SCOPES[
                                 source_type
-                            ),
-                            status=(
-                                RunStatus.FAILED
-                            ),
-                            strategy=strategy,
-                            error_type=(
-                                result.error_type
-                            ),
-                            error_message=(
-                                result
-                                .error_message
-                            ),
-                        )
+                            ][1]
+                        ),
+                        error_type=(
+                            result.error_type
+                        ),
+                        error_message=(
+                            result.error_message
+                        ),
                     )
 
                 outcomes.append(
@@ -837,10 +762,7 @@ def main() -> None:
                 )
 
         except Exception as error:
-            for (
-                source_type,
-                enabled,
-            ) in (
+            for source_type, enabled in (
                 (
                     SourceType.JOBICY,
                     (
@@ -849,36 +771,21 @@ def main() -> None:
                     ),
                 ),
                 (
-                    SourceType
-                    .WEWORKREMOTELY,
-                    args.wwr_max_jobs > 0,
+                    SourceType.WEWORKREMOTELY,
+                    (
+                        args.wwr_max_jobs
+                        > 0
+                    ),
                 ),
             ):
                 if not enabled:
                     continue
 
-                _, strategy = (
-                    _STATE_SCOPES[
+                outcome = _failure(
+                    source_type=(
                         source_type
-                    ]
-                )
-
-                outcome = (
-                    SourceOutcome(
-                        source_type=(
-                            source_type
-                        ),
-                        status=(
-                            RunStatus.FAILED
-                        ),
-                        strategy=strategy,
-                        error_type=(
-                            type(error).__name__
-                        ),
-                        error_message=str(
-                            error
-                        ),
-                    )
+                    ),
+                    error=error,
                 )
 
                 outcomes.append(
@@ -956,19 +863,13 @@ def main() -> None:
                 },
             )
 
-            _, strategy = (
-                _STATE_SCOPES[
-                    SourceType.JOOBLE
-                ]
-            )
-
-            outcome = SourceOutcome(
+            outcome = _success(
                 source_type=(
                     SourceType.JOOBLE
                 ),
-                status=RunStatus.SUCCESS,
-                strategy=strategy,
-                received=summary.received,
+                received=(
+                    summary.received
+                ),
                 normalized=(
                     summary.normalized
                 ),
@@ -981,24 +882,11 @@ def main() -> None:
             )
 
         except Exception as error:
-            _, strategy = (
-                _STATE_SCOPES[
-                    SourceType.JOOBLE
-                ]
-            )
-
-            outcome = SourceOutcome(
+            outcome = _failure(
                 source_type=(
                     SourceType.JOOBLE
                 ),
-                status=RunStatus.FAILED,
-                strategy=strategy,
-                error_type=(
-                    type(error).__name__
-                ),
-                error_message=str(
-                    error
-                ),
+                error=error,
             )
 
         outcomes.append(
@@ -1017,13 +905,9 @@ def main() -> None:
         )
     )
 
-    failed = sum(
-        1
-        for outcome in outcomes
-        if (
-            outcome.status
-            != RunStatus.SUCCESS
-        )
+    failed = (
+        len(outcomes)
+        - succeeded
     )
 
     print(

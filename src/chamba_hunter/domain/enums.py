@@ -25,6 +25,7 @@ class CompanyStatus(StrEnum):
 class SourceType(StrEnum):
     MANUAL = "MANUAL"
     YC = "YC"
+    CESSI = "CESSI"
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"
@@ -60,6 +61,7 @@ class AtsProvider(StrEnum):
 class ContactType(StrEnum):
     CAREERS_EMAIL = "CAREERS_EMAIL"
     RECRUITING_EMAIL = "RECRUITING_EMAIL"
+    GENERAL_EMAIL = "GENERAL_EMAIL"
     GENERAL_APPLICATION_URL = "GENERAL_APPLICATION_URL"
 
 

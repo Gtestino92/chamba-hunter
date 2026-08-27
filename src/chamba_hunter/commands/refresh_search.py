@@ -27,10 +27,10 @@ ATS_SYNC_MODULES = (
 def build_plan(
     *,
     skip_broad: bool,
+    skip_himalayas: bool,
     skip_ats: bool,
     skip_export: bool,
     discover_broad_ats_limit: int,
-    himalayas_max_jobs: int,
     himalayas_backfill_days: int,
     himalayas_overlap_hours: int,
     getonboard_max_pages: int,
@@ -39,7 +39,9 @@ def build_plan(
     jooble_max_pages_per_query: int,
     output: Path,
 ) -> list[RefreshStep]:
-    steps: list[RefreshStep] = []
+    steps: list[
+        RefreshStep
+    ] = []
 
     if not skip_broad:
         broad_arguments: list[
@@ -71,7 +73,7 @@ def build_plan(
             ),
         ]
 
-        if himalayas_max_jobs == 0:
+        if skip_himalayas:
             broad_arguments.append(
                 "--skip-himalayas"
             )
@@ -132,7 +134,9 @@ def build_plan(
     steps.extend(
         [
             RefreshStep(
-                name="Canonicalize broad leads",
+                name=(
+                    "Canonicalize broad leads"
+                ),
                 module=(
                     "canonicalize_job_leads"
                 ),
@@ -142,7 +146,8 @@ def build_plan(
             ),
             RefreshStep(
                 name=(
-                    "Classify Argentina eligibility"
+                    "Classify Argentina "
+                    "eligibility"
                 ),
                 module=(
                     "classify_argentina_eligibility"
@@ -179,7 +184,9 @@ def build_plan(
                 ),
             ),
             RefreshStep(
-                name="Professional matching",
+                name=(
+                    "Professional matching"
+                ),
                 module="match_jobs",
                 arguments=(
                     "--apply",
@@ -188,7 +195,9 @@ def build_plan(
                 ),
             ),
             RefreshStep(
-                name="Operational priority",
+                name=(
+                    "Operational priority"
+                ),
                 module="prioritize_jobs",
                 arguments=(
                     "--apply",
@@ -202,7 +211,9 @@ def build_plan(
     if not skip_export:
         steps.append(
             RefreshStep(
-                name="Export XLSX shortlist",
+                name=(
+                    "Export XLSX shortlist"
+                ),
                 module="export_shortlist",
                 arguments=(
                     "--output",
@@ -260,9 +271,16 @@ def main() -> None:
         "--skip-broad",
         action="store_true",
         help=(
-            "Skip all broad acquisition "
-            "(Himalayas, Get on Board, "
-            "Jobicy, We Work Remotely, Jooble)."
+            "Skip all broad acquisition."
+        ),
+    )
+
+    parser.add_argument(
+        "--skip-himalayas",
+        action="store_true",
+        help=(
+            "Skip only Himalayas inside broad "
+            "acquisition."
         ),
     )
 
@@ -295,18 +313,6 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--himalayas-max-jobs",
-        type=int,
-        default=500,
-        help=(
-            "Legacy Himalayas enable/disable gate. "
-            "Any positive value enables temporal "
-            "backfill/incremental acquisition; "
-            "0 disables Himalayas."
-        ),
-    )
-
-    parser.add_argument(
         "--himalayas-backfill-days",
         type=int,
         default=30,
@@ -331,45 +337,24 @@ def main() -> None:
         "--getonboard-max-pages",
         type=int,
         default=5,
-        help=(
-            "Get on Board Programming page "
-            "limit. Use 0 to disable. "
-            "Defaults to 5."
-        ),
     )
 
     parser.add_argument(
         "--jobicy-max-jobs",
         type=int,
         default=100,
-        help=(
-            "Maximum Jobicy Software Engineering "
-            "jobs requested for LATAM. "
-            "Range 1-100; use 0 to disable. "
-            "Defaults to 100."
-        ),
     )
 
     parser.add_argument(
         "--wwr-max-jobs",
         type=int,
         default=300,
-        help=(
-            "Maximum unique We Work Remotely jobs "
-            "kept from Programming + DevOps RSS. "
-            "Use 0 to disable. Defaults to 300."
-        ),
     )
 
     parser.add_argument(
         "--jooble-max-pages-per-query",
         type=int,
         default=2,
-        help=(
-            "Maximum Jooble Argentina pages fetched "
-            "for each configured backend query. "
-            "Use 0 to disable. Defaults to 2."
-        ),
     )
 
     parser.add_argument(
@@ -378,23 +363,16 @@ def main() -> None:
         default=Path(
             "output/chamba-shortlist.xlsx"
         ),
-        help=(
-            "Final shortlist XLSX path. "
-            "Default: output/chamba-shortlist.xlsx"
-        ),
     )
 
     args = parser.parse_args()
 
-    if args.discover_broad_ats_limit < 0:
+    if (
+        args.discover_broad_ats_limit
+        < 0
+    ):
         parser.error(
             "--discover-broad-ats-limit "
-            "cannot be negative"
-        )
-
-    if args.himalayas_max_jobs < 0:
-        parser.error(
-            "--himalayas-max-jobs "
             "cannot be negative"
         )
 
@@ -417,10 +395,8 @@ def main() -> None:
         )
 
     if (
-        args.jobicy_max_jobs
-        < 0
-        or args.jobicy_max_jobs
-        > 100
+        args.jobicy_max_jobs < 0
+        or args.jobicy_max_jobs > 100
     ):
         parser.error(
             "--jobicy-max-jobs must "
@@ -433,7 +409,10 @@ def main() -> None:
             "be negative"
         )
 
-    if args.jooble_max_pages_per_query < 0:
+    if (
+        args.jooble_max_pages_per_query
+        < 0
+    ):
         parser.error(
             "--jooble-max-pages-per-query "
             "cannot be negative"
@@ -441,7 +420,7 @@ def main() -> None:
 
     if (
         not args.skip_broad
-        and args.himalayas_max_jobs == 0
+        and args.skip_himalayas
         and args.getonboard_max_pages == 0
         and args.jobicy_max_jobs == 0
         and args.wwr_max_jobs == 0
@@ -458,13 +437,13 @@ def main() -> None:
 
     plan = build_plan(
         skip_broad=args.skip_broad,
+        skip_himalayas=(
+            args.skip_himalayas
+        ),
         skip_ats=args.skip_ats,
         skip_export=args.skip_export,
         discover_broad_ats_limit=(
             args.discover_broad_ats_limit
-        ),
-        himalayas_max_jobs=(
-            args.himalayas_max_jobs
         ),
         himalayas_backfill_days=(
             args.himalayas_backfill_days
