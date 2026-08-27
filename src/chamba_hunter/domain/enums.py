@@ -26,6 +26,7 @@ class SourceType(StrEnum):
     MANUAL = "MANUAL"
     YC = "YC"
     CESSI = "CESSI"
+    OPENSTREETMAP = "OPENSTREETMAP"
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"

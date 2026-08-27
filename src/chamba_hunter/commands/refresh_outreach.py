@@ -67,6 +67,15 @@ def main() -> None:
         default=150,
     )
     parser.add_argument(
+        "--skip-argentina-discovery",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--argentina-max-companies",
+        type=int,
+        default=250,
+    )
+    parser.add_argument(
         "--skip-contact-scan",
         action="store_true",
     )
@@ -103,6 +112,12 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+
+    if args.argentina_max_companies < 1:
+        parser.error(
+            "--argentina-max-companies "
+            "must be at least 1"
+        )
 
     if args.yc_max_companies < 1:
         parser.error(
@@ -178,6 +193,25 @@ def main() -> None:
                     "--max-companies",
                     str(
                         args.yc_max_companies
+                    ),
+                ),
+            )
+        )
+
+    if not args.skip_argentina_discovery:
+        plan.append(
+            OutreachStep(
+                name=(
+                    "Discover Argentina "
+                    "software companies"
+                ),
+                module=(
+                    "discover_argentina_companies"
+                ),
+                arguments=(
+                    "--max-companies",
+                    str(
+                        args.argentina_max_companies
                     ),
                 ),
             )

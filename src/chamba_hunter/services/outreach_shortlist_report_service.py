@@ -24,7 +24,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 REPORT_VERSION = (
-    "OUTREACH_REPORT_V3"
+    "OUTREACH_REPORT_V4_2"
 )
 
 DEFAULT_MIN_SCORE = 45.0
@@ -198,6 +198,7 @@ HEADERS = (
     "CESSI Source",
     "YC Source",
     "YC Categories",
+    "Argentina Discovery Sources",
     "Country",
     "Remote Argentina",
     "Remote LATAM",
@@ -269,6 +270,9 @@ def _write_sheet(
                 ", ".join(
                     row.yc_categories
                 ),
+                ", ".join(
+                    row.argentina_directory_sources
+                ),
                 row.country,
                 _yes_no(
                     row.remote_argentina
@@ -320,7 +324,7 @@ def _write_sheet(
         for column in (
             9,
             10,
-            24,
+            25,
         ):
             cell = sheet.cell(
                 row=current_row,
@@ -366,6 +370,7 @@ def _write_sheet(
         14,
         12,
         34,
+        30,
         18,
         18,
         14,

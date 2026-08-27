@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from chamba_hunter.domain.common import (
     utc_now,
@@ -21,7 +22,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 RULE_VERSION = (
-    "COMPANY_OUTREACH_V3_1"
+    "COMPANY_OUTREACH_V4_2"
 )
 
 DEFAULT_MIN_ACTIONABLE_SCORE = 45.0
@@ -333,6 +334,27 @@ def _evaluate(
             )
         )
 
+    (
+        argentina_discovery_score,
+        argentina_discovery_exclusion,
+    ) = _argentina_discovery_score(
+        candidate
+    )
+
+    if argentina_discovery_score:
+        reasons.append(
+            "Argentina IT/software discovery: "
+            + ", ".join(
+                candidate.argentina_directory_sources
+            )
+        )
+
+    elif argentina_discovery_exclusion:
+        reasons.append(
+            "Argentina discovery excluded: "
+            + argentina_discovery_exclusion
+        )
+
     if (
         candidate.remote_argentina
         is True
@@ -411,6 +433,7 @@ def _evaluate(
                 + activity_score
                 + manual_score
                 + yc_score
+                + argentina_discovery_score
                 + geo_score
                 + targeting_score
                 + type_score,
@@ -456,6 +479,122 @@ def _evaluate(
         ),
     )
 
+
+
+NON_TARGET_ARGENTINA_NAME_TERMS = (
+    "freelance",
+    "desarrollador de software",
+    "desarrolladora de software freelance",
+    "polo tic",
+    "parque informatico",
+    "parque informático",
+    "parque tecnologico",
+    "parque tecnológico",
+    "oficinas de ",
+    "universidad",
+    "municipalidad",
+    "ministerio",
+    "gobierno",
+    "instituto educativo",
+    "centro educativo",
+    "online marketing",
+    "e-mail & sms marketing",
+    "email & sms marketing",
+)
+
+NON_TARGET_ARGENTINA_HOST_SUFFIXES = (
+    ".gob.ar",
+    ".gov.ar",
+    ".edu.ar",
+)
+
+NON_TARGET_ARGENTINA_HOSTS = {
+    "linktr.ee",
+    "facebook.com",
+    "instagram.com",
+    "linkedin.com",
+    "woohands.com",
+}
+
+
+def _argentina_discovery_score(
+    candidate: CompanyOutreachCandidate,
+) -> tuple[
+    float,
+    str | None,
+]:
+    raw_score = min(
+        18.0,
+        max(
+            0.0,
+            candidate.argentina_discovery_score,
+        ),
+    )
+
+    if raw_score <= 0:
+        return (
+            0.0,
+            None,
+        )
+
+    name = (
+        candidate.company_name
+        .casefold()
+    )
+
+    for term in (
+        NON_TARGET_ARGENTINA_NAME_TERMS
+    ):
+        if term in name:
+            return (
+                0.0,
+                f"name signal '{term}'",
+            )
+
+    website = (
+        candidate.website_url
+        or ""
+    ).strip()
+
+    if website:
+        hostname = (
+            urlsplit(
+                website
+            ).hostname
+        )
+
+        if hostname:
+            hostname = (
+                hostname.casefold()
+                .removeprefix("www.")
+            )
+
+            if (
+                hostname
+                in NON_TARGET_ARGENTINA_HOSTS
+            ):
+                return (
+                    0.0,
+                    f"non-company host {hostname}",
+                )
+
+            if any(
+                hostname.endswith(
+                    suffix
+                )
+                for suffix in (
+                    NON_TARGET_ARGENTINA_HOST_SUFFIXES
+                )
+            ):
+                return (
+                    0.0,
+                    f"institutional domain {hostname}",
+                )
+
+    return (
+        raw_score,
+        None,
+    )
 
 def _best_contact(
     contacts: tuple[

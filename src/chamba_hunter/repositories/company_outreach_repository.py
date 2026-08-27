@@ -42,6 +42,8 @@ class CompanyOutreachCandidate:
     manual_reference: bool
     yc_relevance_score: float
     yc_categories: tuple[str, ...]
+    argentina_directory_sources: tuple[str, ...]
+    argentina_discovery_score: float
     current_max_match: float | None
     current_relevant_jobs: int
     historical_max_match: float | None
@@ -87,6 +89,7 @@ class OutreachReportRow:
     cessi_source: bool
     yc_source: bool
     yc_categories: tuple[str, ...]
+    argentina_directory_sources: tuple[str, ...]
     reasons: tuple[str, ...]
     contacted: bool
     outreach_status: str | None
@@ -194,6 +197,7 @@ class CompanyOutreachRepository:
             SourceType.CESSI.value,
             SourceType.MANUAL.value,
             SourceType.YC.value,
+            SourceType.OPENSTREETMAP.value,
             search_profile_name,
             search_profile_name,
         ]
@@ -251,7 +255,7 @@ class CompanyOutreachRepository:
                         SELECT 1
                         FROM company_sources cs
                         WHERE cs.company_id = c.id
-                          AND cs.source_type IN (?, ?, ?)
+                          AND cs.source_type IN (?, ?, ?, ?)
                     )
                     OR c.target_priority IN (
                         'VERY_HIGH',
@@ -492,6 +496,22 @@ class CompanyOutreachRepository:
                 (SourceType.YC.value,),
             ).fetchall()
 
+            argentina_directory_rows = connection.execute(
+                """
+                SELECT
+                    company_id,
+                    source_type,
+                    metadata_json
+                FROM company_sources
+                WHERE source_type = ?
+                """,
+                (
+                    SourceType
+                    .OPENSTREETMAP
+                    .value,
+                ),
+            ).fetchall()
+
             contacted_rows = connection.execute(
                 """
                 SELECT DISTINCT company_id
@@ -635,6 +655,54 @@ class CompanyOutreachRepository:
                             cleaned
                         )
 
+        argentina_directory_sources: dict[
+            int,
+            set[str],
+        ] = {}
+
+        argentina_discovery_scores: dict[
+            int,
+            float,
+        ] = {}
+
+        for row in argentina_directory_rows:
+            company_id = int(
+                row["company_id"]
+            )
+
+            argentina_directory_sources.setdefault(
+                company_id,
+                set(),
+            ).add(
+                str(row["source_type"])
+            )
+
+            metadata = json_from_db(
+                row["metadata_json"]
+            )
+
+            if isinstance(
+                metadata,
+                dict,
+            ):
+                raw_score = metadata.get(
+                    "outreach_relevance_score"
+                )
+
+                if isinstance(
+                    raw_score,
+                    (int, float),
+                ):
+                    argentina_discovery_scores[
+                        company_id
+                    ] = max(
+                        argentina_discovery_scores.get(
+                            company_id,
+                            0.0,
+                        ),
+                        float(raw_score),
+                    )
+
         contacted_ids = {
             int(row["company_id"])
             for row in contacted_rows
@@ -774,6 +842,21 @@ class CompanyOutreachRepository:
                                 set(),
                             ),
                             key=str.casefold,
+                        )
+                    ),
+                    argentina_directory_sources=tuple(
+                        sorted(
+                            argentina_directory_sources.get(
+                                company_id,
+                                set(),
+                            ),
+                            key=str.casefold,
+                        )
+                    ),
+                    argentina_discovery_score=(
+                        argentina_discovery_scores.get(
+                            company_id,
+                            0.0,
                         )
                     ),
                     current_max_match=current_max,
@@ -980,6 +1063,15 @@ class CompanyOutreachRepository:
                         LIMIT 1
                     ) AS yc_metadata_json,
 
+                    (
+                        SELECT GROUP_CONCAT(
+                            DISTINCT ads.source_type
+                        )
+                        FROM company_sources ads
+                        WHERE ads.company_id = c.id
+                          AND ads.source_type = 'OPENSTREETMAP'
+                    ) AS argentina_directory_sources,
+
                     EXISTS (
                         SELECT 1
                         FROM applications a
@@ -1087,6 +1179,32 @@ class CompanyOutreachRepository:
                 else ()
             )
 
+            raw_directory_sources = (
+                str(
+                    row[
+                        "argentina_directory_sources"
+                    ]
+                )
+                if row[
+                    "argentina_directory_sources"
+                ] is not None
+                else ""
+            )
+
+            report_directory_sources = tuple(
+                sorted(
+                    {
+                        item.strip()
+                        for item in (
+                            raw_directory_sources
+                            .split(",")
+                        )
+                        if item.strip()
+                    },
+                    key=str.casefold,
+                )
+            )
+
             result.append(
                 OutreachReportRow(
                     company_id=int(
@@ -1185,6 +1303,9 @@ class CompanyOutreachRepository:
                     ),
                     yc_categories=(
                         report_yc_categories
+                    ),
+                    argentina_directory_sources=(
+                        report_directory_sources
                     ),
                     reasons=reasons,
                     contacted=bool(
