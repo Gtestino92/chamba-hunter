@@ -14,6 +14,12 @@ from chamba_hunter.repositories.company_outreach_repository import (
 from chamba_hunter.repositories.public_contact_repository import (
     PublicContactRepository,
 )
+from chamba_hunter.services.outreach_decision_service import (
+    DECISION_VERSION,
+)
+from chamba_hunter.services.outreach_eligibility_service import (
+    ELIGIBILITY_VERSION,
+)
 from chamba_hunter.services.outreach_shortlist_report_service import (
     DEFAULT_MIN_EXPLORE_SCORE,
     DEFAULT_MIN_SCORE,
@@ -65,6 +71,16 @@ def main() -> None:
         type=float,
         default=(
             DEFAULT_MIN_EXPLORE_SCORE
+        ),
+    )
+
+    parser.add_argument(
+        "--include-unknown",
+        action="store_true",
+        help=(
+            "Include companies with UNKNOWN "
+            "Argentina/LATAM eligibility. "
+            "INELIGIBLE companies remain excluded."
         ),
     )
 
@@ -141,6 +157,9 @@ def main() -> None:
             min_explore_score=(
                 args.min_explore_score
             ),
+            include_unknown=(
+                args.include_unknown
+            ),
         )
     )
 
@@ -153,6 +172,14 @@ def main() -> None:
     print(
         f"Report version: "
         f"{REPORT_VERSION}"
+    )
+    print(
+        f"Decision:       "
+        f"{DECISION_VERSION}"
+    )
+    print(
+        f"Eligibility:    "
+        f"{ELIGIBILITY_VERSION}"
     )
     print(
         f"Profile:        "
@@ -177,6 +204,14 @@ def main() -> None:
     print(
         f"History:        "
         f"{summary.history}"
+    )
+    print(
+        f"Unknown skipped:"
+        f" {summary.skipped_unknown}"
+    )
+    print(
+        f"Inelig. skipped:"
+        f" {summary.skipped_ineligible}"
     )
     print(
         f"Output:         "

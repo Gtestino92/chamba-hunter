@@ -10,6 +10,12 @@ from chamba_hunter.domain.enums import (
 from chamba_hunter.repositories.application_repository import (
     ApplicationRepository,
 )
+from chamba_hunter.repositories.company_outreach_repository import (
+    CompanyOutreachRepository,
+)
+from chamba_hunter.repositories.public_contact_repository import (
+    PublicContactRepository,
+)
 from chamba_hunter.services.application_tracking_service import (
     ApplicationTrackingService,
 )
@@ -49,12 +55,86 @@ def _write_result(
     )
 
 
+def _mark_outreach_sent(
+    database: Database,
+    *,
+    contact_id: int,
+) -> tuple[str, str]:
+    contact_repository = (
+        PublicContactRepository(
+            database
+        )
+    )
+
+    with database.connection() as connection:
+        row = connection.execute(
+            """
+            SELECT company_id
+            FROM public_contacts
+            WHERE id = ?
+              AND is_active = 1
+              AND review_status != 'INVALID'
+            """,
+            (contact_id,),
+        ).fetchone()
+
+    if row is None:
+        raise RuntimeError(
+            "Active public outreach contact "
+            f"not found: {contact_id}"
+        )
+
+    company_id = int(
+        row["company_id"]
+    )
+
+    contact = next(
+        (
+            item
+            for item in (
+                contact_repository
+                .list_active_for_company(
+                    company_id
+                )
+            )
+            if item.id == contact_id
+        ),
+        None,
+    )
+
+    if contact is None:
+        raise RuntimeError(
+            "Public outreach contact could "
+            "not be resolved after lookup."
+        )
+
+    repository = CompanyOutreachRepository(
+        database,
+        contact_repository,
+    )
+
+    result = repository.track_outreach(
+        company_id=company_id,
+        contact=contact,
+        status=ApplicationStatus.SENT,
+        notes=(
+            "Marked sent from the outreach "
+            "workbook action."
+        ),
+    )
+
+    return (
+        result.current_status,
+        str(result.application_id),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "OpenOffice bridge: mark one "
-            "canonical ATS/LEAD opportunity "
-            "as APPLIED and write a small "
+            "OpenOffice bridge: persist one "
+            "job application or company "
+            "outreach action and write a "
             "machine-readable result file."
         )
     )
@@ -64,6 +144,7 @@ def main() -> int:
         choices=[
             "ATS",
             "LEAD",
+            "OUTREACH",
         ],
     )
     parser.add_argument(
@@ -102,6 +183,21 @@ def main() -> int:
         migrate(
             database
         )
+
+        if args.record_kind == "OUTREACH":
+            status, detail = (
+                _mark_outreach_sent(
+                    database,
+                    contact_id=args.record_id,
+                )
+            )
+
+            _write_result(
+                args.result_file,
+                f"OK|{status}|{detail}",
+            )
+
+            return 0
 
         repository = (
             ApplicationRepository(

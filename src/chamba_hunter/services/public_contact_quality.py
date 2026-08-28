@@ -101,6 +101,7 @@ GENERIC_USEFUL_LOCAL_PARTS = {
 
 RECRUITING_TOKENS = (
     "recruit",
+    "hiring",
     "talent",
     "humanresources",
     "recursoshumanos",

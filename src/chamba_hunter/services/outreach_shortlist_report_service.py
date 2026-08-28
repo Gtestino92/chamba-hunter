@@ -5,6 +5,7 @@ from openpyxl import Workbook
 from openpyxl.styles import (
     Alignment,
     Font,
+    PatternFill,
 )
 from openpyxl.utils import (
     get_column_letter,
@@ -17,6 +18,12 @@ from chamba_hunter.repositories.company_outreach_repository import (
     CompanyOutreachRepository,
     OutreachReportRow,
 )
+from chamba_hunter.services.outreach_decision_service import (
+    decide_outreach,
+)
+from chamba_hunter.services.outreach_eligibility_service import (
+    OutreachEligibilityService,
+)
 from chamba_hunter.services.public_contact_quality import (
     contact_quality_label_for,
     contact_quality_score_for,
@@ -24,7 +31,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 REPORT_VERSION = (
-    "OUTREACH_REPORT_V5_3"
+    "OUTREACH_REPORT_V6_2"
 )
 
 DEFAULT_MIN_SCORE = 45.0
@@ -36,6 +43,8 @@ class OutreachReportSummary:
     priority: int
     explore: int
     history: int
+    skipped_unknown: int
+    skipped_ineligible: int
 
 
 class OutreachShortlistReportService:
@@ -56,6 +65,7 @@ class OutreachShortlistReportService:
         min_explore_score: float = (
             DEFAULT_MIN_EXPLORE_SCORE
         ),
+        include_unknown: bool = False,
     ) -> OutreachReportSummary:
         rows = (
             self.repository
@@ -79,11 +89,37 @@ class OutreachShortlistReportService:
             OutreachReportRow
         ] = []
 
+        eligibility_service = (
+            OutreachEligibilityService(
+                self.repository.database
+            )
+        )
+
+        skipped_unknown = 0
+        skipped_ineligible = 0
+
         for row in rows:
             if row.contacted:
                 history.append(
                     row
                 )
+                continue
+
+            eligibility = (
+                eligibility_service.decide(
+                    row
+                )
+            )
+
+            if eligibility.status == "INELIGIBLE":
+                skipped_ineligible += 1
+                continue
+
+            if (
+                eligibility.status == "UNKNOWN"
+                and not include_unknown
+            ):
+                skipped_unknown += 1
                 continue
 
             if (
@@ -132,6 +168,9 @@ class OutreachShortlistReportService:
             active,
             priority,
             bucket="PRIORITY",
+            eligibility_service=(
+                eligibility_service
+            ),
         )
 
         explore_sheet = (
@@ -144,6 +183,9 @@ class OutreachShortlistReportService:
             explore_sheet,
             explore,
             bucket="EXPLORE",
+            eligibility_service=(
+                eligibility_service
+            ),
         )
 
         history_sheet = (
@@ -156,6 +198,9 @@ class OutreachShortlistReportService:
             history_sheet,
             history,
             bucket="HISTORY",
+            eligibility_service=(
+                eligibility_service
+            ),
         )
 
         output.parent.mkdir(
@@ -177,6 +222,12 @@ class OutreachShortlistReportService:
             history=len(
                 history
             ),
+            skipped_unknown=(
+                skipped_unknown
+            ),
+            skipped_ineligible=(
+                skipped_ineligible
+            ),
         )
 
 
@@ -187,6 +238,11 @@ HEADERS = (
     "Company",
     "Contact",
     "Contact Type",
+    "Apply",
+    "Status",
+    "Recommended Strategy",
+    "Language",
+    "Decision Confidence",
     "Contact Intelligence",
     "Direct Score",
     "Role Hint",
@@ -208,11 +264,36 @@ HEADERS = (
     "Target Priority",
     "Reasons",
     "Contact Source",
-    "Outreach Status",
     "Outreach At",
+    "Argentina Eligibility",
+    "Eligibility Reason",
     "Company ID",
     "Contact ID",
 )
+
+
+_ACTION_FILL = "2E7D32"
+_ACTION_FONT = "FFFFFF"
+
+
+def _outreach_macro_url(
+    *,
+    contact_id: int,
+    sheet_index: int,
+    row_index: int,
+    action_column_index: int,
+) -> str:
+    return (
+        "vnd.sun.star.script:"
+        "Standard.ChambaHunterActions.MarkApplied"
+        "?language=Basic"
+        "&location=application"
+        "&kind=OUTREACH"
+        f"&id={contact_id}"
+        f"&sheet={sheet_index}"
+        f"&row={row_index}"
+        f"&status_col={action_column_index}"
+    )
 
 
 def _write_sheet(
@@ -222,6 +303,9 @@ def _write_sheet(
     ],
     *,
     bucket: str,
+    eligibility_service: (
+        OutreachEligibilityService
+    ),
 ) -> None:
     sheet.append(
         HEADERS
@@ -245,6 +329,18 @@ def _write_sheet(
             )
         )
 
+        decision = (
+            decide_outreach(
+                row
+            )
+        )
+
+        eligibility = (
+            eligibility_service.decide(
+                row
+            )
+        )
+
         sheet.append(
             (
                 row.score,
@@ -253,6 +349,11 @@ def _write_sheet(
                 row.company_name,
                 row.contact_value,
                 row.contact_type,
+                "",
+                row.outreach_status,
+                decision.strategy,
+                decision.language,
+                decision.confidence,
                 contact_quality,
                 contact_score,
                 row.contact_intelligence_role_hint,
@@ -290,8 +391,9 @@ def _write_sheet(
                     row.reasons
                 ),
                 row.contact_source_url,
-                row.outreach_status,
                 row.outreach_at,
+                eligibility.status,
+                eligibility.reason,
                 row.company_id,
                 row.best_contact_id,
             )
@@ -300,6 +402,45 @@ def _write_sheet(
         current_row = (
             sheet.max_row
         )
+
+        action_cell = sheet.cell(
+            row=current_row,
+            column=7,
+        )
+
+        if (
+            bucket != "HISTORY"
+            and not row.contacted
+            and row.best_contact_id is not None
+        ):
+            sheet_index = (
+                sheet.parent.sheetnames.index(
+                    sheet.title
+                )
+            )
+            action_cell.value = "APPLY"
+            action_cell.hyperlink = (
+                _outreach_macro_url(
+                    contact_id=(
+                        row.best_contact_id
+                    ),
+                    sheet_index=sheet_index,
+                    row_index=current_row - 1,
+                    action_column_index=6,
+                )
+            )
+            action_cell.fill = PatternFill(
+                "solid",
+                fgColor=_ACTION_FILL,
+            )
+            action_cell.font = Font(
+                color=_ACTION_FONT,
+                bold=True,
+            )
+            action_cell.alignment = Alignment(
+                horizontal="center",
+                vertical="center",
+            )
 
         contact_cell = sheet.cell(
             row=current_row,
@@ -326,9 +467,9 @@ def _write_sheet(
                 )
 
         for column in (
-            11,
-            12,
-            27,
+            16,
+            17,
+            32,
         ):
             cell = sheet.cell(
                 row=current_row,
@@ -363,6 +504,11 @@ def _write_sheet(
         30,
         34,
         24,
+        12,
+        14,
+        24,
+        12,
+        20,
         28,
         14,
         22,
@@ -384,8 +530,9 @@ def _write_sheet(
         18,
         56,
         34,
-        18,
         24,
+        18,
+        32,
         12,
         12,
     )
