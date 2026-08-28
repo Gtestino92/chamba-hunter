@@ -14,6 +14,7 @@ from chamba_hunter.domain.models import (
 from chamba_hunter.repositories.company_outreach_repository import (
     CompanyOutreachCandidate,
     CompanyOutreachRepository,
+    ContactOutreachSignal,
     OutreachPriorityWrite,
 )
 from chamba_hunter.services.public_contact_quality import (
@@ -22,7 +23,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 RULE_VERSION = (
-    "COMPANY_OUTREACH_V4_2"
+    "COMPANY_OUTREACH_V5_3"
 )
 
 DEFAULT_MIN_ACTIONABLE_SCORE = 45.0
@@ -275,15 +276,27 @@ def _evaluate(
     (
         best_contact,
         contact_score,
+        contact_label,
+        contact_role_hint,
     ) = _best_contact(
         candidate.contacts
     )
 
     if best_contact is not None:
+        detail = (
+            contact_label
+            or best_contact.contact_type.value
+        )
+
+        if contact_role_hint:
+            detail += (
+                f" / {contact_role_hint}"
+            )
+
         reasons.append(
-            "public contact: "
-            f"{best_contact.contact_type.value} "
-            f"(quality {contact_score:.0f})"
+            "contact intelligence: "
+            f"{detail} "
+            f"(score {contact_score:.0f})"
         )
 
     activity_score = (
@@ -598,49 +611,66 @@ def _argentina_discovery_score(
 
 def _best_contact(
     contacts: tuple[
-        PublicContact,
+        ContactOutreachSignal,
         ...
     ],
 ) -> tuple[
     PublicContact | None,
     float,
+    str | None,
+    str | None,
 ]:
-    ranked = [
-        (
-            contact_quality_score(
-                contact
-            ),
-            contact,
-        )
-        for contact in contacts
-    ]
+    ranked: list[
+        tuple[
+            float,
+            ContactOutreachSignal,
+        ]
+    ] = []
 
-    ranked = [
-        item
-        for item in ranked
-        if item[0] > 0
-    ]
+    for signal in contacts:
+        score = (
+            signal.intelligence_score
+            if signal.intelligence_score
+            is not None
+            else contact_quality_score(
+                signal.contact
+            )
+        )
+
+        if score <= 0:
+            continue
+
+        ranked.append(
+            (
+                score,
+                signal,
+            )
+        )
 
     if not ranked:
         return (
             None,
             0.0,
+            None,
+            None,
         )
 
-    score, contact = max(
+    score, signal = max(
         ranked,
         key=lambda item: (
             item[0],
             -(
-                item[1].id
+                item[1].contact.id
                 or 0
             ),
         ),
     )
 
     return (
-        contact,
+        signal.contact,
         score,
+        signal.intelligence_label,
+        signal.intelligence_role_hint,
     )
 
 

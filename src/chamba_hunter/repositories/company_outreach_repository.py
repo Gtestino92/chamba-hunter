@@ -26,6 +26,14 @@ from chamba_hunter.repositories.public_contact_repository import (
 
 
 @dataclass(frozen=True, slots=True)
+class ContactOutreachSignal:
+    contact: PublicContact
+    intelligence_score: float | None
+    intelligence_label: str | None
+    intelligence_role_hint: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class CompanyOutreachCandidate:
     company_id: int
     company_name: str
@@ -37,7 +45,7 @@ class CompanyOutreachCandidate:
     remote_argentina: bool | None
     company_type: CompanyType
     target_priority: TargetPriority
-    contacts: tuple[PublicContact, ...]
+    contacts: tuple[ContactOutreachSignal, ...]
     cessi_activities: tuple[str, ...]
     manual_reference: bool
     yc_relevance_score: float
@@ -75,6 +83,10 @@ class OutreachReportRow:
     contact_type: str | None
     contact_value: str | None
     contact_source_url: str | None
+    contact_intelligence_score: float | None
+    contact_intelligence_label: str | None
+    contact_intelligence_role_hint: str | None
+    contact_intelligence_context: str | None
     website_url: str | None
     careers_url: str | None
     country: str | None
@@ -194,6 +206,10 @@ class CompanyOutreachRepository:
             CompanyStatus.ACTIVE.value,
             ApplicationType.SPONTANEOUS_EMAIL.value,
             ApplicationType.GENERAL_APPLICATION.value,
+            ApplicationType.JOB.value,
+            ApplicationStatus.APPLIED.value,
+            ApplicationStatus.SENT.value,
+            ApplicationStatus.INTERVIEW.value,
             SourceType.CESSI.value,
             SourceType.MANUAL.value,
             SourceType.YC.value,
@@ -233,8 +249,38 @@ class CompanyOutreachRepository:
                 AND NOT EXISTS (
                     SELECT 1
                     FROM applications a
-                    WHERE a.company_id = c.id
+                    LEFT JOIN company_aliases application_alias
+                      ON application_alias.alias_company_id =
+                         a.company_id
+                    LEFT JOIN company_aliases candidate_alias
+                      ON candidate_alias.alias_company_id = c.id
+                    WHERE COALESCE(
+                              application_alias.canonical_company_id,
+                              a.company_id
+                          ) = COALESCE(
+                              candidate_alias.canonical_company_id,
+                              c.id
+                          )
                       AND a.application_type IN (?, ?)
+                )
+
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM applications active_job
+                    LEFT JOIN company_aliases application_alias
+                      ON application_alias.alias_company_id =
+                         active_job.company_id
+                    LEFT JOIN company_aliases candidate_alias
+                      ON candidate_alias.alias_company_id = c.id
+                    WHERE COALESCE(
+                              application_alias.canonical_company_id,
+                              active_job.company_id
+                          ) = COALESCE(
+                              candidate_alias.canonical_company_id,
+                              c.id
+                          )
+                      AND active_job.application_type = ?
+                      AND active_job.status IN (?, ?, ?)
                 )
 
                 AND NOT EXISTS (
@@ -402,18 +448,32 @@ class CompanyOutreachRepository:
                     c.company_type,
                     c.target_priority,
                     pc.id AS contact_id,
+                    pc.company_id AS contact_company_id,
                     pc.contact_type,
                     pc.value AS contact_value,
                     pc.source_url AS contact_source_url,
                     pc.first_seen_at,
                     pc.last_seen_at,
                     pc.review_status,
-                    pc.notes AS contact_notes
-                FROM companies c
+                    pc.notes AS contact_notes,
+                    pci.score AS intelligence_score,
+                    pci.label AS intelligence_label,
+                    pci.role_hint AS intelligence_role_hint
+                FROM companies source_company
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     source_company.id
+                JOIN companies c
+                  ON c.id = COALESCE(
+                      company_alias.canonical_company_id,
+                      source_company.id
+                  )
                 JOIN public_contacts pc
-                  ON pc.company_id = c.id
+                  ON pc.company_id = source_company.id
                  AND pc.is_active = 1
                  AND pc.review_status != 'INVALID'
+                LEFT JOIN public_contact_intelligence pci
+                  ON pci.public_contact_id = pc.id
                 WHERE c.status = 'ACTIVE'
                 ORDER BY c.id, pc.id
                 """
@@ -427,23 +487,35 @@ class CompanyOutreachRepository:
                     COUNT(*) AS relevant_jobs
                 FROM (
                     SELECT
-                        j.company_id AS company_id,
+                        COALESCE(
+                            company_alias.canonical_company_id,
+                            j.company_id
+                        ) AS company_id,
                         jpm.score AS score
                     FROM job_professional_matches jpm
                     JOIN jobs j
                       ON jpm.record_kind = 'ATS'
                      AND j.id = jpm.record_id
+                    LEFT JOIN company_aliases company_alias
+                      ON company_alias.alias_company_id =
+                         j.company_id
                     WHERE jpm.search_profile_id = ?
 
                     UNION ALL
 
                     SELECT
-                        jl.company_id AS company_id,
+                        COALESCE(
+                            company_alias.canonical_company_id,
+                            jl.company_id
+                        ) AS company_id,
                         jpm.score AS score
                     FROM job_professional_matches jpm
                     JOIN job_leads jl
                       ON jpm.record_kind = 'LEAD'
                      AND jl.id = jpm.record_id
+                    LEFT JOIN company_aliases company_alias
+                      ON company_alias.alias_company_id =
+                         jl.company_id
                     WHERE jpm.search_profile_id = ?
                 ) evidence
                 GROUP BY evidence.company_id
@@ -457,10 +529,21 @@ class CompanyOutreachRepository:
             prior_rows = connection.execute(
                 """
                 SELECT
-                    company_id,
-                    historical_max_match
-                FROM company_outreach_priorities
-                WHERE search_profile_id = ?
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        cop.company_id
+                    ) AS company_id,
+                    MAX(cop.historical_max_match)
+                        AS historical_max_match
+                FROM company_outreach_priorities cop
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     cop.company_id
+                WHERE cop.search_profile_id = ?
+                GROUP BY COALESCE(
+                    company_alias.canonical_company_id,
+                    cop.company_id
+                )
                 """,
                 (profile_id,),
             ).fetchall()
@@ -468,19 +551,32 @@ class CompanyOutreachRepository:
             cessi_rows = connection.execute(
                 """
                 SELECT
-                    company_id,
-                    metadata_json
-                FROM company_sources
-                WHERE source_type = ?
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        cs.company_id
+                    ) AS company_id,
+                    cs.metadata_json
+                FROM company_sources cs
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     cs.company_id
+                WHERE cs.source_type = ?
                 """,
                 (SourceType.CESSI.value,),
             ).fetchall()
 
             manual_rows = connection.execute(
                 """
-                SELECT DISTINCT company_id
-                FROM company_sources
-                WHERE source_type = ?
+                SELECT DISTINCT
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        cs.company_id
+                    ) AS company_id
+                FROM company_sources cs
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     cs.company_id
+                WHERE cs.source_type = ?
                 """,
                 (SourceType.MANUAL.value,),
             ).fetchall()
@@ -488,10 +584,16 @@ class CompanyOutreachRepository:
             yc_rows = connection.execute(
                 """
                 SELECT
-                    company_id,
-                    metadata_json
-                FROM company_sources
-                WHERE source_type = ?
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        cs.company_id
+                    ) AS company_id,
+                    cs.metadata_json
+                FROM company_sources cs
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     cs.company_id
+                WHERE cs.source_type = ?
                 """,
                 (SourceType.YC.value,),
             ).fetchall()
@@ -499,11 +601,17 @@ class CompanyOutreachRepository:
             argentina_directory_rows = connection.execute(
                 """
                 SELECT
-                    company_id,
-                    source_type,
-                    metadata_json
-                FROM company_sources
-                WHERE source_type = ?
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        cs.company_id
+                    ) AS company_id,
+                    cs.source_type,
+                    cs.metadata_json
+                FROM company_sources cs
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     cs.company_id
+                WHERE cs.source_type = ?
                 """,
                 (
                     SourceType
@@ -514,13 +622,42 @@ class CompanyOutreachRepository:
 
             contacted_rows = connection.execute(
                 """
-                SELECT DISTINCT company_id
+                SELECT DISTINCT
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        applications.company_id
+                    ) AS company_id
                 FROM applications
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     applications.company_id
                 WHERE application_type IN (?, ?)
                 """,
                 (
                     ApplicationType.SPONTANEOUS_EMAIL.value,
                     ApplicationType.GENERAL_APPLICATION.value,
+                ),
+            ).fetchall()
+
+            active_job_process_rows = connection.execute(
+                """
+                SELECT DISTINCT
+                    COALESCE(
+                        company_alias.canonical_company_id,
+                        applications.company_id
+                    ) AS company_id
+                FROM applications
+                LEFT JOIN company_aliases company_alias
+                  ON company_alias.alias_company_id =
+                     applications.company_id
+                WHERE application_type = ?
+                  AND status IN (?, ?, ?)
+                """,
+                (
+                    ApplicationType.JOB.value,
+                    ApplicationStatus.APPLIED.value,
+                    ApplicationStatus.SENT.value,
+                    ApplicationStatus.INTERVIEW.value,
                 ),
             ).fetchall()
 
@@ -708,6 +845,11 @@ class CompanyOutreachRepository:
             for row in contacted_rows
         }
 
+        active_job_process_ids = {
+            int(row["company_id"])
+            for row in active_job_process_rows
+        }
+
         company_data: dict[
             int,
             dict[str, object],
@@ -728,7 +870,9 @@ class CompanyOutreachRepository:
 
             contact = PublicContact(
                 id=int(row["contact_id"]),
-                company_id=company_id,
+                company_id=int(
+                    row["contact_company_id"]
+                ),
                 contact_type=ContactType(
                     row["contact_type"]
                 ),
@@ -758,7 +902,20 @@ class CompanyOutreachRepository:
                 contacts,
                 list,
             )
-            contacts.append(contact)
+            contacts.append(
+                ContactOutreachSignal(
+                    contact=contact,
+                    intelligence_score=(
+                        float(row["intelligence_score"])
+                        if row["intelligence_score"] is not None
+                        else None
+                    ),
+                    intelligence_label=row["intelligence_label"],
+                    intelligence_role_hint=(
+                        row["intelligence_role_hint"]
+                    ),
+                )
+            )
 
         candidates: list[
             CompanyOutreachCandidate
@@ -767,6 +924,13 @@ class CompanyOutreachRepository:
         for company_id, entry in (
             company_data.items()
         ):
+            # A live job application/selection is already a stronger
+            # company engagement than cold outreach. Keep the job
+            # application in its own tracking flow and suppress this
+            # company from direct outreach until that process closes.
+            if company_id in active_job_process_ids:
+                continue
+
             row = entry["row"]
             contacts = entry["contacts"]
 
@@ -1021,6 +1185,10 @@ class CompanyOutreachRepository:
                     pc.contact_type,
                     pc.value AS contact_value,
                     pc.source_url AS contact_source_url,
+                    pci.score AS contact_intelligence_score,
+                    pci.label AS contact_intelligence_label,
+                    pci.role_hint AS contact_intelligence_role_hint,
+                    pci.context AS contact_intelligence_context,
                     c.website_url,
                     c.careers_url,
                     c.country,
@@ -1036,28 +1204,52 @@ class CompanyOutreachRepository:
                     EXISTS (
                         SELECT 1
                         FROM company_sources mcs
-                        WHERE mcs.company_id = c.id
+                        LEFT JOIN company_aliases source_alias
+                          ON source_alias.alias_company_id =
+                             mcs.company_id
+                        WHERE COALESCE(
+                                  source_alias.canonical_company_id,
+                                  mcs.company_id
+                              ) = c.id
                           AND mcs.source_type = 'MANUAL'
                     ) AS manual_reference,
 
                     EXISTS (
                         SELECT 1
                         FROM company_sources ccs
-                        WHERE ccs.company_id = c.id
+                        LEFT JOIN company_aliases source_alias
+                          ON source_alias.alias_company_id =
+                             ccs.company_id
+                        WHERE COALESCE(
+                                  source_alias.canonical_company_id,
+                                  ccs.company_id
+                              ) = c.id
                           AND ccs.source_type = 'CESSI'
                     ) AS cessi_source,
 
                     EXISTS (
                         SELECT 1
                         FROM company_sources ycs
-                        WHERE ycs.company_id = c.id
+                        LEFT JOIN company_aliases source_alias
+                          ON source_alias.alias_company_id =
+                             ycs.company_id
+                        WHERE COALESCE(
+                                  source_alias.canonical_company_id,
+                                  ycs.company_id
+                              ) = c.id
                           AND ycs.source_type = 'YC'
                     ) AS yc_source,
 
                     (
                         SELECT ycs.metadata_json
                         FROM company_sources ycs
-                        WHERE ycs.company_id = c.id
+                        LEFT JOIN company_aliases source_alias
+                          ON source_alias.alias_company_id =
+                             ycs.company_id
+                        WHERE COALESCE(
+                                  source_alias.canonical_company_id,
+                                  ycs.company_id
+                              ) = c.id
                           AND ycs.source_type = 'YC'
                         ORDER BY ycs.id
                         LIMIT 1
@@ -1068,21 +1260,39 @@ class CompanyOutreachRepository:
                             DISTINCT ads.source_type
                         )
                         FROM company_sources ads
-                        WHERE ads.company_id = c.id
+                        LEFT JOIN company_aliases source_alias
+                          ON source_alias.alias_company_id =
+                             ads.company_id
+                        WHERE COALESCE(
+                                  source_alias.canonical_company_id,
+                                  ads.company_id
+                              ) = c.id
                           AND ads.source_type = 'OPENSTREETMAP'
                     ) AS argentina_directory_sources,
 
                     EXISTS (
                         SELECT 1
                         FROM applications a
-                        WHERE a.company_id = c.id
+                        LEFT JOIN company_aliases application_alias
+                          ON application_alias.alias_company_id =
+                             a.company_id
+                        WHERE COALESCE(
+                                  application_alias.canonical_company_id,
+                                  a.company_id
+                              ) = c.id
                           AND a.application_type IN (?, ?)
                     ) AS contacted,
 
                     (
                         SELECT a.status
                         FROM applications a
-                        WHERE a.company_id = c.id
+                        LEFT JOIN company_aliases application_alias
+                          ON application_alias.alias_company_id =
+                             a.company_id
+                        WHERE COALESCE(
+                                  application_alias.canonical_company_id,
+                                  a.company_id
+                              ) = c.id
                           AND a.application_type IN (?, ?)
                         ORDER BY a.id DESC
                         LIMIT 1
@@ -1096,7 +1306,13 @@ class CompanyOutreachRepository:
                                 a.created_at
                             )
                         FROM applications a
-                        WHERE a.company_id = c.id
+                        LEFT JOIN company_aliases application_alias
+                          ON application_alias.alias_company_id =
+                             a.company_id
+                        WHERE COALESCE(
+                                  application_alias.canonical_company_id,
+                                  a.company_id
+                              ) = c.id
                           AND a.application_type IN (?, ?)
                         ORDER BY a.id DESC
                         LIMIT 1
@@ -1107,8 +1323,28 @@ class CompanyOutreachRepository:
                   ON c.id = cop.company_id
                 LEFT JOIN public_contacts pc
                   ON pc.id = cop.best_contact_id
+                LEFT JOIN public_contact_intelligence pci
+                  ON pci.public_contact_id = pc.id
                 WHERE cop.search_profile_id = ?
                   AND cop.score >= ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM company_aliases stale_alias
+                      WHERE stale_alias.alias_company_id = c.id
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM applications active_job
+                      LEFT JOIN company_aliases application_alias
+                        ON application_alias.alias_company_id =
+                           active_job.company_id
+                      WHERE COALESCE(
+                                application_alias.canonical_company_id,
+                                active_job.company_id
+                            ) = c.id
+                        AND active_job.application_type = ?
+                        AND active_job.status IN (?, ?, ?)
+                  )
                 ORDER BY
                     contacted ASC,
                     cop.score DESC,
@@ -1123,6 +1359,10 @@ class CompanyOutreachRepository:
                     ApplicationType.GENERAL_APPLICATION.value,
                     profile_id,
                     min_score,
+                    ApplicationType.JOB.value,
+                    ApplicationStatus.APPLIED.value,
+                    ApplicationStatus.SENT.value,
+                    ApplicationStatus.INTERVIEW.value,
                 ),
             ).fetchall()
 
@@ -1234,6 +1474,32 @@ class CompanyOutreachRepository:
                             "contact_source_url"
                         ]
                     ),
+                    contact_intelligence_score=(
+                        float(
+                            row[
+                                "contact_intelligence_score"
+                            ]
+                        )
+                        if row[
+                            "contact_intelligence_score"
+                        ] is not None
+                        else None
+                    ),
+                    contact_intelligence_label=(
+                        row[
+                            "contact_intelligence_label"
+                        ]
+                    ),
+                    contact_intelligence_role_hint=(
+                        row[
+                            "contact_intelligence_role_hint"
+                        ]
+                    ),
+                    contact_intelligence_context=(
+                        row[
+                            "contact_intelligence_context"
+                        ]
+                    ),
                     website_url=row["website_url"],
                     careers_url=row["careers_url"],
                     country=row["country"],
@@ -1320,33 +1586,152 @@ class CompanyOutreachRepository:
 
         return result
 
+    def canonical_company_id(
+        self,
+        company_id: int,
+    ) -> int:
+        with self.database.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT COALESCE(
+                    (
+                        SELECT canonical_company_id
+                        FROM company_aliases
+                        WHERE alias_company_id = ?
+                    ),
+                    ?
+                ) AS canonical_company_id
+                """,
+                (
+                    company_id,
+                    company_id,
+                ),
+            ).fetchone()
+
+        return int(
+            row["canonical_company_id"]
+        )
+
+    def equivalent_company_ids(
+        self,
+        company_id: int,
+    ) -> tuple[int, ...]:
+        canonical_id = self.canonical_company_id(
+            company_id
+        )
+
+        with self.database.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT alias_company_id
+                FROM company_aliases
+                WHERE canonical_company_id = ?
+                ORDER BY alias_company_id
+                """,
+                (canonical_id,),
+            ).fetchall()
+
+        return (
+            canonical_id,
+            *(
+                int(row["alias_company_id"])
+                for row in rows
+            ),
+        )
+
+    def find_active_contact_value(
+        self,
+        company_id: int,
+        value: str,
+    ) -> PublicContact | None:
+        for equivalent_id in self.equivalent_company_ids(
+            company_id
+        ):
+            contact = (
+                self.public_contact_repository
+                .find_active_value(
+                    equivalent_id,
+                    value,
+                )
+            )
+            if contact is not None:
+                return contact
+
+        return None
+
     def best_active_contact(
         self,
         company_id: int,
     ) -> PublicContact | None:
-        contacts = (
-            self.public_contact_repository
-            .list_active_for_company(
-                company_id
+        contacts: list[PublicContact] = []
+
+        for equivalent_id in self.equivalent_company_ids(
+            company_id
+        ):
+            contacts.extend(
+                self.public_contact_repository
+                .list_active_for_company(
+                    equivalent_id
+                )
             )
-        )
 
         if not contacts:
             return None
 
-        weight = {
-            ContactType.RECRUITING_EMAIL: 4,
-            ContactType.CAREERS_EMAIL: 3,
-            ContactType.GENERAL_APPLICATION_URL: 2,
-            ContactType.GENERAL_EMAIL: 1,
+        contact_ids = [
+            contact.id
+            for contact in contacts
+            if contact.id is not None
+        ]
+
+        intelligence_scores: dict[
+            int,
+            float,
+        ] = {}
+
+        if contact_ids:
+            placeholders = ", ".join(
+                "?"
+                for _ in contact_ids
+            )
+
+            with self.database.connection() as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT
+                        public_contact_id,
+                        score
+                    FROM public_contact_intelligence
+                    WHERE public_contact_id IN (
+                        {placeholders}
+                    )
+                    """,
+                    tuple(contact_ids),
+                ).fetchall()
+
+            intelligence_scores = {
+                int(row["public_contact_id"]): float(
+                    row["score"]
+                )
+                for row in rows
+            }
+
+        fallback = {
+            ContactType.RECRUITING_EMAIL: 20.0,
+            ContactType.CAREERS_EMAIL: 18.0,
+            ContactType.GENERAL_EMAIL: 10.0,
+            ContactType.GENERAL_APPLICATION_URL: 8.0,
         }
 
         return max(
             contacts,
             key=lambda item: (
-                weight.get(
-                    item.contact_type,
-                    0,
+                intelligence_scores.get(
+                    item.id or -1,
+                    fallback.get(
+                        item.contact_type,
+                        0.0,
+                    ),
                 ),
                 -(
                     item.id
@@ -1367,6 +1752,10 @@ class CompanyOutreachRepository:
             raise ValueError(
                 "Tracked contact must have an id."
             )
+
+        company_id = self.canonical_company_id(
+            company_id
+        )
 
         application_type = (
             ApplicationType.GENERAL_APPLICATION

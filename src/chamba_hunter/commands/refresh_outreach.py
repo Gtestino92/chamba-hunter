@@ -94,6 +94,19 @@ def main() -> None:
         action="store_true",
     )
     parser.add_argument(
+        "--skip-contact-intelligence",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--contact-intelligence-limit",
+        type=int,
+        default=500,
+    )
+    parser.add_argument(
+        "--force-contact-intelligence",
+        action="store_true",
+    )
+    parser.add_argument(
         "--min-score",
         type=float,
         default=45.0,
@@ -135,6 +148,12 @@ def main() -> None:
         parser.error(
             "--contact-max-pages must "
             "be at least 1"
+        )
+
+    if args.contact_intelligence_limit < 1:
+        parser.error(
+            "--contact-intelligence-limit "
+            "must be at least 1"
         )
 
     for argument_name, value in (
@@ -261,6 +280,33 @@ def main() -> None:
             ),
         )
     )
+
+    if not args.skip_contact_intelligence:
+        intelligence_arguments = [
+            "--limit",
+            str(
+                args.contact_intelligence_limit
+            ),
+        ]
+
+        if args.force_contact_intelligence:
+            intelligence_arguments.append(
+                "--force"
+            )
+
+        plan.append(
+            OutreachStep(
+                name=(
+                    "Qualify direct public contacts"
+                ),
+                module=(
+                    "qualify_public_contacts"
+                ),
+                arguments=tuple(
+                    intelligence_arguments
+                ),
+            )
+        )
 
     plan.append(
         OutreachStep(

@@ -24,7 +24,7 @@ from chamba_hunter.services.public_contact_quality import (
 
 
 REPORT_VERSION = (
-    "OUTREACH_REPORT_V4_2"
+    "OUTREACH_REPORT_V5_3"
 )
 
 DEFAULT_MIN_SCORE = 45.0
@@ -187,8 +187,10 @@ HEADERS = (
     "Company",
     "Contact",
     "Contact Type",
-    "Contact Quality",
-    "Contact Score",
+    "Contact Intelligence",
+    "Direct Score",
+    "Role Hint",
+    "Contact Context",
     "Website",
     "Careers",
     "Historical Match",
@@ -253,6 +255,8 @@ def _write_sheet(
                 row.contact_type,
                 contact_quality,
                 contact_score,
+                row.contact_intelligence_role_hint,
+                row.contact_intelligence_context,
                 row.website_url,
                 row.careers_url,
                 row.historical_max_match,
@@ -322,9 +326,9 @@ def _write_sheet(
                 )
 
         for column in (
-            9,
-            10,
-            25,
+            11,
+            12,
+            27,
         ):
             cell = sheet.cell(
                 row=current_row,
@@ -359,8 +363,10 @@ def _write_sheet(
         30,
         34,
         24,
-        18,
+        28,
         14,
+        22,
+        56,
         34,
         34,
         16,
@@ -423,6 +429,14 @@ def _contact_score(
     ):
         return 0.0
 
+    if (
+        row.contact_intelligence_score
+        is not None
+    ):
+        return (
+            row.contact_intelligence_score
+        )
+
     return (
         contact_quality_score_for(
             ContactType(
@@ -441,6 +455,11 @@ def _contact_quality(
         or row.contact_value is None
     ):
         return ""
+
+    if row.contact_intelligence_label:
+        return (
+            row.contact_intelligence_label
+        )
 
     return (
         contact_quality_label_for(

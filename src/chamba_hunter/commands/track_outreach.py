@@ -107,8 +107,8 @@ def main() -> None:
 
     if args.contact:
         contact = (
-            contact_repository
-            .find_active_value(
+            outreach_repository
+            .find_active_contact_value(
                 company.id,
                 args.contact,
             )
