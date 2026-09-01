@@ -22,6 +22,26 @@ JOB_PATH_PATTERNS = (
     re.compile(rf"^/careers/{_JOB_ID}(?:/apply)?/?$", re.I),
     re.compile(rf"^/careers/job/{_JOB_ID}(?:/apply)?/?$", re.I),
 )
+RESERVED_JOB_IDS = {
+    "jobs",
+    "job",
+    "careers",
+    "positions",
+    "apply",
+    "application",
+    "login",
+    "signin",
+    "sign-in",
+    "about",
+}
+GENERIC_LINK_TITLES = {
+    "apply",
+    "apply now",
+    "application",
+    "view job",
+    "view role",
+}
+
 EMPTY_BOARD_MARKERS = (
     "no open positions",
     "no open roles",
@@ -65,7 +85,6 @@ class _AnchorParser(HTMLParser):
         self.anchors: list[tuple[str, str]] = []
         self._href: str | None = None
         self._text: list[str] = []
-        self._depth = 0
 
     def handle_starttag(
         self,
@@ -73,7 +92,6 @@ class _AnchorParser(HTMLParser):
         attrs: list[tuple[str, str | None]],
     ) -> None:
         if self._href is not None:
-            self._depth += 1
             return
 
         if tag.casefold() != "a":
@@ -90,15 +108,12 @@ class _AnchorParser(HTMLParser):
 
         self._href = href
         self._text = []
-        self._depth = 1
 
     def handle_endtag(self, tag: str) -> None:
-        if self._href is None:
-            return
-
-        self._depth -= 1
-
-        if self._depth > 0:
+        if (
+            self._href is None
+            or tag.casefold() != "a"
+        ):
             return
 
         self.anchors.append(
@@ -109,7 +124,6 @@ class _AnchorParser(HTMLParser):
         )
         self._href = None
         self._text = []
-        self._depth = 0
 
     def handle_data(self, data: str) -> None:
         if self._href is None:
@@ -301,13 +315,18 @@ class HiBobClient:
 
             try:
                 for future in as_completed(futures):
-                    results[futures[future]] = future.result()
+                    results[
+                        futures[future]
+                    ] = future.result()
             except Exception:
                 for future in futures:
                     future.cancel()
                 raise
 
-        if any(item is None for item in results):
+        if any(
+            item is None
+            for item in results
+        ):
             raise RuntimeError(
                 "HiBob detail fetch did not produce a full snapshot."
             )
@@ -337,6 +356,7 @@ class HiBobClient:
                 f"'{final_url}'."
             )
 
+        final_url = _detail_url(final_url)
         parser = _DetailParser()
         parser.feed(response.text)
         posting = _job_posting(parser.json_ld)
@@ -360,9 +380,7 @@ class HiBobClient:
             parser=parser,
             title=title,
         )
-        location_text = _location_text(
-            posting
-        )
+        location_text = _location_text(posting)
         job_location_type = _json_text(
             (posting or {}).get("jobLocationType")
         )
@@ -410,7 +428,10 @@ def hibob_tenant_from_url(
     value: str,
 ) -> str | None:
     try:
-        host = (urlsplit(value).hostname or "").casefold()
+        host = (
+            urlsplit(value).hostname
+            or ""
+        ).casefold()
     except ValueError:
         return None
 
@@ -428,11 +449,18 @@ def canonical_hibob_board_url(
     tenant: str,
 ) -> str:
     cleaned = tenant.strip().casefold()
-    if not cleaned or "." in cleaned or "/" in cleaned:
+    if (
+        not cleaned
+        or "." in cleaned
+        or "/" in cleaned
+    ):
         raise ValueError(
             f"Invalid HiBob tenant identifier: '{tenant}'."
         )
-    return f"https://{cleaned}{HIBOB_CAREERS_SUFFIX}/jobs"
+    return (
+        f"https://{cleaned}"
+        f"{HIBOB_CAREERS_SUFFIX}/jobs"
+    )
 
 
 def normalize_hibob_board_url(
@@ -457,7 +485,13 @@ def extract_hibob_job_id(
     for pattern in JOB_PATH_PATTERNS:
         match = pattern.match(path)
         if match is not None:
-            return match.group(1)
+            candidate = match.group(1)
+            if (
+                candidate.casefold()
+                in RESERVED_JOB_IDS
+            ):
+                return None
+            return candidate
     return None
 
 
@@ -473,8 +507,13 @@ def _parse_job_links(
     for href, text in parser.anchors:
         resolved = urljoin(board_url, href)
         tenant = hibob_tenant_from_url(resolved)
-        external_id = extract_hibob_job_id(resolved)
-        if tenant is None or external_id is None:
+        external_id = extract_hibob_job_id(
+            resolved
+        )
+        if (
+            tenant is None
+            or external_id is None
+        ):
             continue
 
         parsed = urlsplit(resolved)
@@ -488,14 +527,20 @@ def _parse_job_links(
             f"{parsed.scheme}://{parsed.netloc}"
             f"{clean_path}"
         )
-        by_id.setdefault(
-            external_id,
-            HiBobJobLink(
-                external_id=external_id,
-                title_hint=(text or None),
-                job_url=job_url,
-            ),
+        candidate = HiBobJobLink(
+            external_id=external_id,
+            title_hint=(text or None),
+            job_url=job_url,
         )
+        existing = by_id.get(external_id)
+        if (
+            existing is None
+            or _better_title_hint(
+                candidate.title_hint,
+                existing.title_hint,
+            )
+        ):
+            by_id[external_id] = candidate
 
     return sorted(
         by_id.values(),
@@ -503,10 +548,47 @@ def _parse_job_links(
     )
 
 
+def _detail_url(value: str) -> str:
+    parsed = urlsplit(value)
+    path = re.sub(
+        r"/apply/?$",
+        "",
+        parsed.path,
+        flags=re.I,
+    )
+    return (
+        f"{parsed.scheme}://{parsed.netloc}"
+        f"{path}"
+    )
+
+
+def _better_title_hint(
+    candidate: str | None,
+    existing: str | None,
+) -> bool:
+    if not candidate:
+        return False
+    if not existing:
+        return True
+
+    candidate_key = " ".join(
+        candidate.casefold().split()
+    )
+    existing_key = " ".join(
+        existing.casefold().split()
+    )
+    return (
+        existing_key in GENERIC_LINK_TITLES
+        and candidate_key
+        not in GENERIC_LINK_TITLES
+    )
+
+
 def _validate_hibob_url(value: str) -> None:
     if hibob_tenant_from_url(value) is None:
         raise ValueError(
-            f"HiBob request resolved outside a public careers host: '{value}'."
+            "HiBob request resolved outside a public "
+            f"careers host: '{value}'."
         )
 
 
@@ -526,7 +608,10 @@ def _job_posting(
     for raw in values:
         try:
             parsed = json.loads(raw)
-        except (TypeError, json.JSONDecodeError):
+        except (
+            TypeError,
+            json.JSONDecodeError,
+        ):
             continue
 
         for item in _json_objects(parsed):
@@ -537,7 +622,8 @@ def _job_posting(
                 else [kind]
             )
             if any(
-                str(value).casefold() == "jobposting"
+                str(value).casefold()
+                == "jobposting"
                 for value in kinds
                 if value is not None
             ):
@@ -545,7 +631,9 @@ def _job_posting(
     return None
 
 
-def _json_objects(value: Any) -> list[dict[str, Any]]:
+def _json_objects(
+    value: Any,
+) -> list[dict[str, Any]]:
     if isinstance(value, dict):
         objects = [value]
         graph = value.get("@graph")
@@ -556,12 +644,14 @@ def _json_objects(value: Any) -> list[dict[str, Any]]:
                 if isinstance(item, dict)
             )
         return objects
+
     if isinstance(value, list):
         return [
             item
             for item in value
             if isinstance(item, dict)
         ]
+
     return []
 
 
@@ -581,10 +671,16 @@ def _description(
         parser.meta.get("description")
         or parser.meta.get("og:description")
     )
-    if meta and meta.strip() and meta.strip() != title:
+    if (
+        meta
+        and meta.strip()
+        and meta.strip() != title
+    ):
         return " ".join(meta.split())
 
-    visible = "\n".join(parser.visible_text).strip()
+    visible = "\n".join(
+        parser.visible_text
+    ).strip()
     if len(visible) >= 80:
         return visible
     return None
@@ -607,6 +703,7 @@ def _location_text(
     for location in locations:
         if not isinstance(location, dict):
             continue
+
         address = location.get("address")
         if isinstance(address, dict):
             for key in (
@@ -614,28 +711,49 @@ def _location_text(
                 "addressRegion",
                 "addressCountry",
             ):
-                value = _json_text(address.get(key))
-                if value and value not in values:
+                value = _json_text(
+                    address.get(key)
+                )
+                if (
+                    value
+                    and value not in values
+                ):
                     values.append(value)
         else:
             value = _json_text(address)
-            if value and value not in values:
+            if (
+                value
+                and value not in values
+            ):
                 values.append(value)
 
     if not values:
         applicant = posting.get(
             "applicantLocationRequirements"
         )
-        items = applicant if isinstance(applicant, list) else [applicant]
+        items = (
+            applicant
+            if isinstance(applicant, list)
+            else [applicant]
+        )
         for item in items:
             if isinstance(item, dict):
-                value = _json_text(item.get("name"))
+                value = _json_text(
+                    item.get("name")
+                )
             else:
                 value = _json_text(item)
-            if value and value not in values:
+            if (
+                value
+                and value not in values
+            ):
                 values.append(value)
 
-    return ", ".join(values) if values else None
+    return (
+        ", ".join(values)
+        if values
+        else None
+    )
 
 
 def _employment_type(value: Any) -> str | None:
@@ -645,19 +763,31 @@ def _employment_type(value: Any) -> str | None:
             for item in value
             if str(item).strip()
         ]
-        return ", ".join(parts) if parts else None
+        return (
+            ", ".join(parts)
+            if parts
+            else None
+        )
     return _json_text(value)
 
 
-def _published_at(value: str | None) -> datetime | None:
+def _published_at(
+    value: str | None,
+) -> datetime | None:
     if not value:
         return None
-    cleaned = value.strip().replace("Z", "+00:00")
+
+    cleaned = value.strip().replace(
+        "Z",
+        "+00:00",
+    )
     try:
         return datetime.fromisoformat(cleaned)
     except ValueError:
         try:
-            return datetime.fromisoformat(cleaned[:10])
+            return datetime.fromisoformat(
+                cleaned[:10]
+            )
         except ValueError:
             return None
 
@@ -673,4 +803,6 @@ def _json_text(value: Any) -> str | None:
 
 def _strip_html(value: str) -> str:
     text = re.sub(r"<[^>]+>", " ", value)
-    return " ".join(unescape(text).split())
+    return " ".join(
+        unescape(text).split()
+    )
