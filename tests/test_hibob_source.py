@@ -1,4 +1,5 @@
 from chamba_hunter.sources.hibob import (
+    _detail_url,
     _job_posting,
     _parse_job_links,
     canonical_hibob_board_url,
@@ -32,6 +33,15 @@ def test_hibob_job_id_accepts_detail_and_apply_urls() -> None:
     ) is None
 
 
+def test_hibob_job_id_rejects_reserved_navigation_paths() -> None:
+    assert extract_hibob_job_id(
+        "https://uala.careers.hibob.com/careers/jobs"
+    ) is None
+    assert extract_hibob_job_id(
+        "https://uala.careers.hibob.com/job/login"
+    ) is None
+
+
 def test_hibob_listing_deduplicates_apply_link() -> None:
     html = """
     <html><body>
@@ -49,6 +59,27 @@ def test_hibob_listing_deduplicates_apply_link() -> None:
     assert jobs[0].job_url == (
         "https://uala.careers.hibob.com/jobs/backend-123"
     )
+
+
+def test_hibob_listing_handles_void_elements_inside_anchor() -> None:
+    html = """
+    <a href="/jobs/backend-123">
+      <img src="icon.svg">
+      Backend Engineer
+    </a>
+    """
+    jobs = _parse_job_links(
+        board_url="https://uala.careers.hibob.com/jobs",
+        html=html,
+    )
+    assert len(jobs) == 1
+    assert jobs[0].title_hint == "Backend Engineer"
+
+
+def test_hibob_detail_url_strips_apply_suffix() -> None:
+    assert _detail_url(
+        "https://uala.careers.hibob.com/jobs/backend-123/apply"
+    ) == "https://uala.careers.hibob.com/jobs/backend-123"
 
 
 def test_hibob_job_posting_reads_json_ld_graph() -> None:
