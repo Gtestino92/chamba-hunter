@@ -19,6 +19,9 @@ from chamba_hunter.repositories.tracing_repository import (
 from chamba_hunter.services.careers_ats_detection_service import (
     CareersAtsDetectionService,
 )
+from chamba_hunter.services.hibob_ats_detection_service import (
+    HiBobAtsDetectionService,
+)
 
 
 def main() -> None:
@@ -189,6 +192,83 @@ def main() -> None:
             print(
                 "No current careers URL "
                 "was discovered."
+            )
+            print()
+            print(
+                "No company or ATS state "
+                "was changed."
+            )
+
+            return
+
+        hibob_summary = (
+            HiBobAtsDetectionService(
+                company_ats_repository=(
+                    company_ats_repository
+                ),
+                tracing_repository=(
+                    tracing_repository
+                ),
+            )
+            .run(
+                [
+                    replace(
+                        company,
+                        careers_url=(
+                            result.careers_url
+                        ),
+                    )
+                ]
+            )
+        )
+
+        if len(hibob_summary.results) != 1:
+            raise RuntimeError(
+                "Expected exactly one HiBob "
+                "fallback result."
+            )
+
+        hibob_result = (
+            hibob_summary.results[0]
+        )
+
+        if hibob_result.detected:
+            (
+                company_repository
+                .update_careers_url(
+                    company_id=company.id,
+                    careers_url=(
+                        result.careers_url
+                    ),
+                )
+            )
+
+            print("Result: DETECTED")
+            print(
+                "Careers: "
+                f"{result.careers_url}"
+            )
+            print("ATS:     HIBOB")
+            print(
+                "ID:      "
+                f"{hibob_result.tenant}"
+            )
+            print()
+            print(
+                "The detected ATS is now the "
+                "active primary ATS."
+            )
+
+            return
+
+        if hibob_result.error is not None:
+            print("Result: ERROR")
+            print(
+                "HiBob fallback could not "
+                "revalidate the careers page."
+            )
+            print(
+                f"Error: {hibob_result.error}"
             )
             print()
             print(
