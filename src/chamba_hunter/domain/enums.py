@@ -56,6 +56,7 @@ class AtsProvider(StrEnum):
     BAMBOOHR = "BAMBOOHR"
     HIRINGROOM = "HIRINGROOM"
     TEAMTAILOR = "TEAMTAILOR"
+    HIBOB = "HIBOB"
     CUSTOM = "CUSTOM"
 
 
