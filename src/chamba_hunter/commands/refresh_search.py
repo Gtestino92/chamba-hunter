@@ -21,6 +21,7 @@ ATS_SYNC_MODULES = (
     "sync_bamboohr_jobs",
     "sync_hiringroom_jobs",
     "sync_teamtailor_jobs",
+    "sync_hibob_jobs",
 )
 
 
@@ -30,6 +31,7 @@ def build_plan(
     skip_himalayas: bool,
     skip_ats: bool,
     skip_export: bool,
+    discover_known_ats_limit: int,
     discover_broad_ats_limit: int,
     himalayas_backfill_days: int,
     himalayas_overlap_hours: int,
@@ -88,6 +90,23 @@ def build_plan(
                 ),
                 arguments=tuple(
                     broad_arguments
+                ),
+            )
+        )
+
+    if discover_known_ats_limit > 0:
+        steps.append(
+            RefreshStep(
+                name=(
+                    "Discover ATS for known "
+                    "companies"
+                ),
+                module="discover_known_ats",
+                arguments=(
+                    "--limit",
+                    str(
+                        discover_known_ats_limit
+                    ),
                 ),
             )
         )
@@ -302,13 +321,27 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--discover-known-ats-limit",
+        type=int,
+        default=25,
+        help=(
+            "Scan up to N known companies without "
+            "an active ATS before ATS sync. "
+            "Never-scanned and least-recently-"
+            "scanned companies are prioritized. "
+            "Defaults to 25; use 0 to disable."
+        ),
+    )
+
+    parser.add_argument(
         "--discover-broad-ats-limit",
         type=int,
-        default=0,
+        default=10,
         help=(
-            "Optionally run careers/ATS discovery "
+            "Additionally run careers/ATS discovery "
             "for up to N broad-source companies "
-            "before ATS sync. Disabled by default."
+            "before ATS sync. Defaults to 10; "
+            "use 0 to disable."
         ),
     )
 
@@ -366,6 +399,15 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if (
+        args.discover_known_ats_limit
+        < 0
+    ):
+        parser.error(
+            "--discover-known-ats-limit "
+            "cannot be negative"
+        )
 
     if (
         args.discover_broad_ats_limit
@@ -442,6 +484,9 @@ def main() -> None:
         ),
         skip_ats=args.skip_ats,
         skip_export=args.skip_export,
+        discover_known_ats_limit=(
+            args.discover_known_ats_limit
+        ),
         discover_broad_ats_limit=(
             args.discover_broad_ats_limit
         ),
