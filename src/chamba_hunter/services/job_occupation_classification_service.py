@@ -20,7 +20,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OCCUPATION_V1"
+RULE_VERSION = "OCCUPATION_V2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -796,7 +796,14 @@ _TITLE_NON_TECHNICAL = (
         r"sales manager|sales director|"
         r"manager .*sales|director .*sales|"
         r"solution sales|software sales|"
-        r"supervisor de ventas|ejecutivo comercial"
+        r"supervisor de ventas|"
+        r"asesor(?:a| a)? comercial|"
+        r"asesor(?:a| a)? de ventas|"
+        r"ejecutivo comercial|"
+        r"ejecutivo de ventas|"
+        r"ejecutivo de desarrollo comercial|"
+        r"ejecutivo (?:de )?soluciones digitales|"
+        r"supervisor(?:a| a)? comercial"
         r")\b",
     ),
     _signal(
@@ -1231,7 +1238,8 @@ _TITLE_IT_TECHNICAL = (
         "quality_assurance",
         r"\b("
         r"quality assurance|qa automation|"
-        r"qa manual|analista qa|tester"
+        r"qa manual|analista qa|"
+        r"qa automatizacion|tester"
         r")\b",
     ),
     _signal(
@@ -1265,7 +1273,13 @@ _TITLE_IT_TECHNICAL = (
         "systems_network",
         r"\b("
         r"systems engineer|network engineer|"
-        r"network security engineer"
+        r"network security engineer|"
+        r"ingenier[oa](?: a)? de red|"
+        r"ingenier[oa](?: a)? .*infraestructura de red|"
+        r"ingenier[oa](?: a)? de administracion "
+        r"de fibra optica|"
+        r"ingenier[oa](?: a)? de despliegue ftth|"
+        r"supervisor(?:a)? de red ftth"
         r")\b",
     ),
     _signal(
@@ -1344,6 +1358,7 @@ _TITLE_IT_TECHNICAL = (
         r"\b("
         r"systems? administrator|"
         r"administrador de sistemas|"
+        r"administrador(?:a)? cloud|"
         r"revenue systems administrator"
         r")\b",
     ),
@@ -1376,6 +1391,22 @@ _TITLE_IT_TECHNICAL = (
         r"(ai|ia|gcp|cloud).*arquitect[oa]"
         r")\b",
     ),
+    _signal(
+        "systems_audit_spanish",
+        r"\b("
+        r"auditoria de sistemas|"
+        r"auditor(?: a)? de sistemas"
+        r")\b",
+    ),
+    _signal(
+        "identity_access_spanish",
+        r"\b("
+        r"identidades digitales|"
+        r"gestion de accesos|"
+        r"identity and access management|"
+        r"\biam\b"
+        r")\b",
+    ),
 )
 
 
@@ -1385,6 +1416,16 @@ _TITLE_TECH_ADJACENT = (
         r"\b("
         r"analista funcional|functional analyst"
         r")\b",
+    ),
+    _signal(
+        "product_owner",
+        r"\b("
+        r"product owner|po proxy"
+        r")\b",
+    ),
+    _signal(
+        "functional_architecture_spanish",
+        r"\barquitectura funcional\b",
     ),
     _signal(
         "technical_product",
@@ -1514,6 +1555,8 @@ _DESCRIPTION_FALLBACK_TITLE = re.compile(
     r"cloud|linux|platform|data|"
     r"consultant|consultor|consultora|"
     r"implementation|support|soporte|"
+    r"referente|jefe|jefa|"
+    r"soluciones digitales|"
     r"operations engineer"
     r")\b"
 )
@@ -1522,28 +1565,59 @@ _DESCRIPTION_FALLBACK_TITLE = re.compile(
 _DESCRIPTION_SOFTWARE = (
     _signal(
         "software_development",
-        r"\bsoftware development\b",
+        r"\b(software development|desarrollo de software)\b",
     ),
     _signal(
         "write_code",
-        r"\b(write|writing|writes) code\b",
+        r"\b("
+        r"(write|writing|writes) code|"
+        r"escribir codigo|codificacion"
+        r")\b",
     ),
     _signal(
         "design_software",
-        r"\bdesign(ing)? .*software\b",
+        r"\b("
+        r"design(ing)? .*software|"
+        r"disenar .*software|"
+        r"arquitectura de software"
+        r")\b",
     ),
     _signal(
         "develop_applications",
-        r"\bdevelop(ing)? .*applications?\b",
+        r"\b("
+        r"develop(ing)? .*applications?|"
+        r"desarrollar aplicaciones|"
+        r"desarrollo de aplicaciones"
+        r")\b",
     ),
     _signal(
         "software_engineering_team",
-        r"\bsoftware engineering (team|teams|organization)\b",
+        r"\b("
+        r"software engineering (team|teams|organization)|"
+        r"equipo de ingenieria de software|"
+        r"cultura de ingenieria"
+        r")\b",
     ),
     _signal(
         "programming_language",
         r"\b(code|coding|programming) in "
         r"(python|go|golang|java|kotlin|rust|c\+\+|c#)\b",
+    ),
+    _signal(
+        "spanish_programming_language",
+        r"\b("
+        r"programacion|programar"
+        r") (?:en |con )?"
+        r"(python|go|golang|java|kotlin|rust|c\+\+|c#|"
+        r"javascript|typescript|node\.?js|\.net)\b",
+    ),
+    _signal(
+        "developer_experience_spanish",
+        r"\bexperiencia .*como desarrollador(?:a)?\b",
+    ),
+    _signal(
+        "native_development",
+        r"\bdesarrollo nativo\b",
     ),
 )
 
@@ -1551,7 +1625,12 @@ _DESCRIPTION_SOFTWARE = (
 _DESCRIPTION_IT_TECHNICAL = (
     _signal(
         "cloud_infrastructure",
-        r"\bcloud infrastructure\b",
+        r"\b("
+        r"cloud infrastructure|"
+        r"infraestructura cloud|"
+        r"plataformas? cloud|"
+        r"plataforma tecnologica .*cloud"
+        r")\b",
     ),
     _signal(
         "site_reliability",
@@ -1559,7 +1638,7 @@ _DESCRIPTION_IT_TECHNICAL = (
     ),
     _signal(
         "kubernetes_operations",
-        r"\b(kubernetes|openshift)\b",
+        r"\b(kubernetes|openshift|contenedores|orquestacion)\b",
     ),
     _signal(
         "linux_operations",
@@ -1567,7 +1646,11 @@ _DESCRIPTION_IT_TECHNICAL = (
     ),
     _signal(
         "data_pipelines",
-        r"\bdata pipelines?\b",
+        r"\b("
+        r"data pipelines?|"
+        r"extraccion y consolidacion de datos|"
+        r"procesamiento de datos"
+        r")\b",
     ),
     _signal(
         "machine_learning",
@@ -1575,7 +1658,12 @@ _DESCRIPTION_IT_TECHNICAL = (
     ),
     _signal(
         "security_engineering",
-        r"\bsecurity engineering\b",
+        r"\b("
+        r"security engineering|"
+        r"ciberseguridad|"
+        r"seguridad de identidades|"
+        r"zero trust"
+        r")\b",
     ),
     _signal(
         "database_administration",
@@ -1583,15 +1671,80 @@ _DESCRIPTION_IT_TECHNICAL = (
     ),
     _signal(
         "network_operations",
-        r"\bnetwork operations\b",
+        r"\b("
+        r"network operations|"
+        r"operacion de red|"
+        r"infraestructura de red|"
+        r"despliegue de red|"
+        r"elementos de red|"
+        r"redes lan|"
+        r"redes inalambricas|"
+        r"fibra optica|"
+        r"\bftth\b"
+        r")\b",
     ),
     _signal(
         "technical_support",
-        r"\btechnical support\b",
+        r"\b(technical support|soporte tecnico)\b",
     ),
     _signal(
         "incident_management",
-        r"\bincident management\b",
+        r"\b("
+        r"incident management|"
+        r"gestion de incidentes|"
+        r"gestion de problemas|"
+        r"gestion de cambios"
+        r")\b",
+    ),
+    _signal(
+        "telecommunications",
+        r"\b("
+        r"telecomunicaciones .*redes|"
+        r"redes .*telecomunicaciones|"
+        r"servicios tecnologicos .*infraestructura|"
+        r"servicios de telecomunicaciones .*red"
+        r")\b",
+    ),
+    _signal(
+        "data_analytics_spanish",
+        r"\b("
+        r"analisis de datos|"
+        r"consultas complejas en sql|"
+        r"modelos predictivos|"
+        r"herramientas de analisis y procesamiento de datos"
+        r")\b",
+    ),
+    _signal(
+        "qa_automation_spanish",
+        r"\b("
+        r"automatizacion qa|"
+        r"pruebas automatizadas|"
+        r"calidad de software|"
+        r"testing automatizado|"
+        r"postman .*soapui"
+        r")\b",
+    ),
+    _signal(
+        "systems_audit_spanish",
+        r"\b("
+        r"auditoria de sistemas|"
+        r"controles it|"
+        r"procesos de it|"
+        r"controles tecnologicos|"
+        r"testing de controles"
+        r")\b",
+    ),
+    _signal(
+        "identity_access_spanish",
+        r"\b("
+        r"gestion integral de identidades|"
+        r"gestion de identidades|"
+        r"gestion de accesos|"
+        r"acceso seguro|"
+        r"autenticacion|"
+        r"\bsso\b|\bsaml\b|oauth|oidc|"
+        r"\biam\b"
+        r")\b",
     ),
 )
 
@@ -1603,7 +1756,11 @@ _DESCRIPTION_TECH_ADJACENT = (
     ),
     _signal(
         "technical_requirements",
-        r"\btechnical requirements\b",
+        r"\b("
+        r"technical requirements|"
+        r"requerimientos tecnicos|"
+        r"requerimientos no funcionales"
+        r")\b",
     ),
     _signal(
         "project_delivery",
@@ -1611,7 +1768,11 @@ _DESCRIPTION_TECH_ADJACENT = (
     ),
     _signal(
         "technical_point_of_contact",
-        r"\btechnical point of contact\b",
+        r"\b("
+        r"technical point of contact|"
+        r"nexo entre .*equipos? tecnicos|"
+        r"nexo entre .*equipos? de desarrollo"
+        r")\b",
     ),
     _signal(
         "product_demos",
@@ -1627,7 +1788,41 @@ _DESCRIPTION_TECH_ADJACENT = (
     ),
     _signal(
         "functional_requirements",
-        r"\bfunctional requirements\b",
+        r"\b("
+        r"functional requirements|"
+        r"requerimientos funcionales|"
+        r"definiciones funcionales|"
+        r"analisis funcional|"
+        r"analista funcional"
+        r")\b",
+    ),
+    _signal(
+        "user_stories",
+        r"\b("
+        r"historias de usuario|"
+        r"criterios de aceptacion|"
+        r"backlog funcional|"
+        r"roadmap de iniciativas|"
+        r"roadmap evolutivo"
+        r")\b",
+    ),
+    _signal(
+        "product_owner_spanish",
+        r"\b("
+        r"product owner|"
+        r"\bpo\b|"
+        r"gestion de productos digitales|"
+        r"gestion de producto"
+        r")\b",
+    ),
+    _signal(
+        "business_technical_liaison_spanish",
+        r"\b("
+        r"areas usuarias.*equipos tecnicos|"
+        r"necesidades de negocio .*equipos tecnicos|"
+        r"transformar necesidades de negocio|"
+        r"equipos de it .*ux"
+        r")\b",
     ),
 )
 
@@ -1635,11 +1830,20 @@ _DESCRIPTION_TECH_ADJACENT = (
 _DESCRIPTION_NON_TECHNICAL = (
     _signal(
         "sales_pipeline",
-        r"\bsales pipeline\b",
+        r"\b("
+        r"sales pipeline|"
+        r"pipeline comercial|"
+        r"proceso de ventas"
+        r")\b",
     ),
     _signal(
         "business_development",
-        r"\bbusiness development\b",
+        r"\b("
+        r"business development|"
+        r"desarrollo de negocios|"
+        r"oportunidades de negocio|"
+        r"nuevas oportunidades de negocio"
+        r")\b",
     ),
     _signal(
         "recruiting",
@@ -1666,6 +1870,42 @@ _DESCRIPTION_NON_TECHNICAL = (
         r"\bcustomer success.*"
         r"(manager|specialist|associate|director)\b",
     ),
+    _signal(
+        "consultative_sales_spanish",
+        r"\b("
+        r"venta consultiva|"
+        r"comercializacion consultiva|"
+        r"asesoramiento comercial"
+        r")\b",
+    ),
+    _signal(
+        "commercial_goals_spanish",
+        r"\b("
+        r"objetivos comerciales|"
+        r"oportunidades comerciales|"
+        r"negociacion comercial|"
+        r"ciclo comercial"
+        r")\b",
+    ),
+    _signal(
+        "customer_sales_spanish",
+        r"\b("
+        r"cartera de clientes|"
+        r"captacion de clientes|"
+        r"atencion integral a clientes|"
+        r"generando oportunidades de venta|"
+        r"realizar ventas de productos y servicios"
+        r")\b",
+    ),
+    _signal(
+        "account_territory_sales_spanish",
+        r"\b("
+        r"planes estrategicos de cuentas|"
+        r"planes estrategicos .*territorios|"
+        r"prospectos|"
+        r"tomadores de decisiones clave"
+        r")\b",
+    ),
 )
 
 
@@ -1680,7 +1920,11 @@ _DESCRIPTION_FULL_STACK = (
 _DESCRIPTION_BACKEND_STRONG = (
     _signal(
         "backend",
-        r"\b(back ?end|backend)\b",
+        r"\b("
+        r"back ?end|backend|"
+        r"servicios backend|"
+        r"desarrollo backend"
+        r")\b",
     ),
     _signal(
         "server_side",
@@ -1712,27 +1956,35 @@ _DESCRIPTION_NON_BACKEND_STRONG = (
 _DESCRIPTION_BACKEND_SUPPORT = (
     _signal(
         "microservices",
-        r"\bmicroservices?\b",
+        r"\b(microservices?|microservicios)\b",
     ),
     _signal(
         "rest_api",
-        r"\brest(ful)? apis?\b",
+        r"\b("
+        r"rest(ful)? apis?|"
+        r"apis? rest|"
+        r"servicios .*rest"
+        r")\b",
     ),
     _signal(
         "api_development",
-        r"\bapi development\b",
+        r"\b(api development|desarrollo de apis)\b",
     ),
     _signal(
         "distributed_systems",
-        r"\bdistributed systems?\b",
+        r"\b(sistemas distribuidos|distributed systems?)\b",
     ),
     _signal(
         "event_driven",
-        r"\bevent driven\b",
+        r"\b(event driven|procesamiento de eventos)\b",
     ),
     _signal(
         "service_architecture",
-        r"\bservices? architecture\b",
+        r"\b("
+        r"services? architecture|"
+        r"arquitectura de servicios|"
+        r"arquitectura orientada a servicios"
+        r")\b",
     ),
 )
 
@@ -1748,7 +2000,12 @@ _DESCRIPTION_NON_BACKEND_SUPPORT = (
     ),
     _signal(
         "mobile_applications",
-        r"\bmobile applications?\b",
+        r"\b("
+        r"mobile applications?|"
+        r"aplicaciones mobile|"
+        r"aplicaciones moviles|"
+        r"desarrollo nativo"
+        r")\b",
     ),
     _signal(
         "web_ui",
