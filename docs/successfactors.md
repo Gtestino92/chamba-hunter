@@ -2,7 +2,7 @@
 
 ## Purpose
 
-SuccessFactors support turns measured LATAM enterprise fingerprints into a real, standalone ATS sync path. It does not implement Workday, Avature, Oracle/Taleo, Gupy, Pandapé, broad acquisition, classification, matching, XLSX export, or `refresh_search` integration.
+SuccessFactors support turns measured LATAM enterprise fingerprints into a real ATS sync path. It participates in the routine `refresh_search` ATS sync group and remains available as a targeted standalone command. It does not implement Workday, Avature, Oracle/Taleo, Gupy, Pandapé, broad acquisition, classification, matching, or XLSX export changes.
 
 ## Observed Variants
 
@@ -63,7 +63,13 @@ Sync a small batch of active SuccessFactors boards:
 python -m chamba_hunter.commands.sync_successfactors_jobs --limit 5
 ```
 
-The SuccessFactors sync command is intentionally standalone and is not wired into `refresh_search`.
+Routine refresh now runs SuccessFactors with the other active ATS providers:
+
+```powershell
+python -m chamba_hunter.commands.refresh_search --apply
+```
+
+Use `--skip-ats` to skip SuccessFactors together with the other ATS sync commands.
 
 ## Validation Notes
 

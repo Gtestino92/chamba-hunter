@@ -11,7 +11,7 @@ Chamba Hunter is a local job-search intelligence tool. It discovers companies an
 - ATS discovery operates on companies, using known `website_url` or `careers_url` entry points and provider hints from broad job evidence.
 - LATAM ATS fingerprinting measures recruiting-platform evidence for `LATAM_ENTERPRISE` companies and stores observations in `ats_fingerprints`; it does not register unsupported providers as syncable ATS integrations.
 - ATS synchronization operates on `company_ats` records and writes canonical first-party `jobs`.
-- SuccessFactors synchronization is implemented as a standalone ATS provider command; validated public Career Site Builder/custom-domain and direct/legacy surfaces use conservative snapshot semantics.
+- SuccessFactors synchronization is implemented as an ATS provider command and participates in routine refresh; validated public Career Site Builder/custom-domain and direct/legacy surfaces use conservative snapshot semantics.
 - Canonicalization links broad `job_leads` to canonical `jobs` when identity is sufficiently clear.
 - Argentina eligibility, occupation classification, skills classification, seniority classification, professional matching, and operational priority operate on job opportunities.
 - XLSX export is an operational/reporting view over SQLite state, not primary persistence.
@@ -78,7 +78,7 @@ python -m chamba_hunter.commands.discover_known_ats --company-id 3950
 python -m chamba_hunter.commands.sync_successfactors_jobs --company-id 3950
 ```
 
-The LATAM enterprise ingestion, fingerprinting, and SuccessFactors sync commands are intentionally isolated and are not part of `refresh_search`.
+The LATAM enterprise ingestion and fingerprinting commands are intentionally isolated and are not part of `refresh_search`; SuccessFactors job sync now runs with the routine ATS sync group.
 Without `--apply`, it previews acquisition changes only; pending migrations may still run at startup.
 
 ## Performance And Workflow
@@ -104,4 +104,4 @@ Slice 1 company ingestion and Slice 2 ATS fingerprinting are implemented. Use me
 - Slice 4 — Workday / Avature based on measured coverage.
 - Slice 5 — decide whether/how regional acquisition enters routine refresh.
 
-See `docs/latam-enterprise-acquisition.md` for the curated registry workflow, `docs/latam-ats-fingerprinting.md` for measurement workflow, and `docs/successfactors.md` for standalone SuccessFactors sync.
+See `docs/latam-enterprise-acquisition.md` for the curated registry workflow, `docs/latam-ats-fingerprinting.md` for measurement workflow, and `docs/successfactors.md` for SuccessFactors sync.

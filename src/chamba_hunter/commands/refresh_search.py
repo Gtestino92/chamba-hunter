@@ -22,6 +22,7 @@ ATS_SYNC_MODULES = (
     "sync_hiringroom_jobs",
     "sync_teamtailor_jobs",
     "sync_hibob_jobs",
+    "sync_successfactors_jobs",
 )
 
 

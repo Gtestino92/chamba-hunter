@@ -1,6 +1,4 @@
 from datetime import datetime, timezone
-from pathlib import Path
-
 import httpx
 
 from chamba_hunter.db.connection import (
@@ -866,14 +864,17 @@ def test_successfactors_sync_only_processes_requested_provider(
     assert len(rows) == 1
 
 
-def test_refresh_search_remains_unwired():
-    contents = Path(
-        "src/chamba_hunter/commands/"
-        "refresh_search.py"
-    ).read_text(encoding="utf-8")
+def test_refresh_search_includes_successfactors_once():
+    from chamba_hunter.commands import (
+        refresh_search,
+    )
 
-    assert "sync_successfactors_jobs" not in contents
-    assert "SUCCESSFACTORS" not in contents
+    assert (
+        refresh_search.ATS_SYNC_MODULES.count(
+            "sync_successfactors_jobs"
+        )
+        == 1
+    )
 
 
 def _client(
