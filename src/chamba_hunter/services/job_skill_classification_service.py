@@ -19,7 +19,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "SKILLS_V1"
+RULE_VERSION = "SKILLS_V2"
 
 MAX_EVIDENCE_MATCHES_PER_SOURCE = 3
 CONTEXT_RADIUS = 180
@@ -30,6 +30,7 @@ class SkillDefinition:
     key: str
     category: str
     patterns: tuple[re.Pattern[str], ...]
+    required_terms: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +84,7 @@ def _skill(
     key: str,
     category: str,
     *aliases: str,
+    required_terms: tuple[str, ...] = (),
 ) -> SkillDefinition:
     return SkillDefinition(
         key=key,
@@ -94,6 +96,7 @@ def _skill(
             )
             for alias in aliases
         ),
+        required_terms=required_terms,
     )
 
 
@@ -160,7 +163,7 @@ SKILL_CATALOG: tuple[
     _skill("MYSQL", "DATABASE", r"\bmysql\b"),
     _skill("MARIADB", "DATABASE", r"\bmariadb\b"),
     _skill("PERCONA", "DATABASE", r"\bpercona\b"),
-    _skill("ORACLE_DB", "DATABASE", r"\boracle database\b", r"\boracle db\b"),
+    _skill("ORACLE_DB", "DATABASE", r"\boracle database\b", r"\boracle db\b", r"\bpl\s*[/\-]\s*sql\b", r"\bplsql\b", required_terms=("oracle", "pl/sql", "pl-sql", "plsql")),
     _skill("SQL_SERVER", "DATABASE", r"\bsql server\b", r"\bmssql\b"),
     _skill("MONGODB", "DATABASE", r"\bmongodb\b", r"\bmongo db\b"),
     _skill("REDIS", "DATABASE", r"\bredis\b"),
@@ -230,16 +233,16 @@ SKILL_CATALOG: tuple[
     _skill("CIRCLECI", "CI_CD", r"\bcircleci\b", r"\bcircle ci\b"),
     _skill("TEAMCITY", "CI_CD", r"\bteamcity\b"),
     _skill("BITBUCKET_PIPELINES", "CI_CD", r"\bbitbucket pipelines\b"),
-    _skill("REST", "ARCHITECTURE", r"\brestful\b", r"\brest api(?:s)?\b", r"\brest services?\b"),
+    _skill("REST", "ARCHITECTURE", r"\brestful\b", r"\brest api(?:s)?\b", r"\brest services?\b", r"\bapis?\s+rest(?:ful)?\b", r"\bservicios?\s+rest(?:ful)?\b", r"\bapis?\s*\([^)]{0,80}\brest(?:ful)?\b[^)]{0,80}\)", r"\bdesarrollo\s+de\s+apis?\b", r"\bintegraci[oó]n\s+de\s+apis?\b", required_terms=("rest", "api", "servicio")),
     _skill("GRAPHQL", "ARCHITECTURE", r"\bgraphql\b"),
     _skill("GRPC", "ARCHITECTURE", r"\bgrpc\b"),
     _skill("OPENAPI", "ARCHITECTURE", r"\bopenapi\b", r"\bopen api specification\b"),
     _skill("SWAGGER", "ARCHITECTURE", r"\bswagger\b"),
     _skill("SOAP", "ARCHITECTURE", r"\bsoap\b"),
     _skill("WEBSOCKETS", "ARCHITECTURE", r"\bwebsockets?\b", r"\bweb sockets?\b"),
-    _skill("MICROSERVICES", "ARCHITECTURE", r"\bmicroservices?\b", r"\bmicro services?\b"),
-    _skill("DISTRIBUTED_SYSTEMS", "ARCHITECTURE", r"\bdistributed systems?\b"),
-    _skill("EVENT_DRIVEN", "ARCHITECTURE", r"\bevent[- ]driven\b"),
+    _skill("MICROSERVICES", "ARCHITECTURE", r"\bmicroservices?\b", r"\bmicro services?\b", r"\bmicroservicios?\b", required_terms=("micro",)),
+    _skill("DISTRIBUTED_SYSTEMS", "ARCHITECTURE", r"\bdistributed systems?\b", r"\bsistemas?\s+distribuidos?\b", r"\barquitecturas?\s+distribuidas?\b", required_terms=("distributed", "distribuid")),
+    _skill("EVENT_DRIVEN", "ARCHITECTURE", r"\bevent[- ]driven\b", r"\barquitecturas?\s+orientadas?\s+a\s+eventos?\b", r"\barquitecturas?\s+basadas?\s+en\s+eventos?\b", r"\beventos?\s+asincr[oó]nicos?\b", r"\bprocesamiento\s+de\s+eventos?\b", required_terms=("event", "evento")),
     _skill("CQRS", "ARCHITECTURE", r"\bcqrs\b"),
     _skill("EVENT_SOURCING", "ARCHITECTURE", r"\bevent sourcing\b"),
     _skill("SAGA", "ARCHITECTURE", r"\bsagas?\b"),
@@ -544,11 +547,13 @@ def _extract_candidate_skills(
         title_matches = _find_matches(
             text=title,
             patterns=skill.patterns,
+            required_terms=skill.required_terms,
         )
 
         description_matches = _find_matches(
             text=description,
             patterns=skill.patterns,
+            required_terms=skill.required_terms,
         )
 
         if (
@@ -638,9 +643,19 @@ def _find_matches(
         re.Pattern[str],
         ...,
     ],
+    required_terms: tuple[str, ...] = (),
 ) -> list[re.Match[str]]:
     if not text:
         return []
+
+    if required_terms:
+        searchable_text = text.casefold()
+
+        if not any(
+            term in searchable_text
+            for term in required_terms
+        ):
+            return []
 
     matches: list[
         re.Match[str]
