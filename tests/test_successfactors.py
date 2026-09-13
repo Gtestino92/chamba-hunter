@@ -265,7 +265,8 @@ def test_direct_edenor_style_listing_parsing():
         },
     )
 
-    assert fetch.snapshot_complete is True
+    assert fetch.snapshot_complete is False
+    assert fetch.error_type == "PARTIAL_SNAPSHOT"
     assert fetch.variant == "DIRECT_LEGACY"
     assert fetch.jobs[0].external_id == "12345"
 
@@ -441,6 +442,71 @@ def test_complete_snapshot_deactivates_disappeared_jobs(
     assert rows[0]["is_active"] == 0
 
 
+def test_partial_legacy_static_links_do_not_deactivate_unseen_jobs(
+    tmp_path,
+):
+    database, company_ats = _database_with_ats(
+        tmp_path,
+        board_url=(
+            "https://career4.successfactors.com/"
+            "career?company=example"
+        ),
+        external_identifier=(
+            "career4.successfactors.com/"
+            "career?company=example"
+        ),
+    )
+    _seed_existing_job(database, company_ats)
+    fetch = _fetch(
+        board_url=(
+            "https://career4.successfactors.com/"
+            "career?company=example"
+        ),
+        responses={
+            (
+                "https://career4.successfactors.com/"
+                "career?company=example"
+            ): (
+                200,
+                (
+                    "<html><a href=\"/career?"
+                    "company=example&"
+                    "career_job_req_id=new\">"
+                    "Nuevo puesto</a></html>"
+                ),
+            ),
+            (
+                "https://career4.successfactors.com/"
+                "career?company=example&"
+                "career_job_req_id=new"
+            ): (
+                200,
+                _detail_html(
+                    job_id="new",
+                    title="Nuevo puesto",
+                ),
+            ),
+        },
+    )
+
+    summary = _service(
+        database,
+        _fake_fetch(fetch=fetch),
+    ).run([company_ats])
+
+    rows = _job_rows(database)
+    rows_by_id = {
+        row["external_id"]: row
+        for row in rows
+    }
+    assert fetch.snapshot_complete is False
+    assert summary.partial == 1
+    assert summary.jobs_created == 1
+    assert summary.jobs_deactivated == 0
+    assert rows_by_id["old"]["is_active"] == 1
+    assert rows_by_id["new"]["is_active"] == 1
+
+
 def test_incomplete_listing_prevents_deactivation(
     tmp_path,
 ):
@@ -463,6 +529,49 @@ def test_incomplete_listing_prevents_deactivation(
     assert summary.partial == 1
     assert summary.jobs_deactivated == 0
     assert rows[0]["is_active"] == 1
+
+
+def test_explicit_empty_legacy_board_safely_reconciles(
+    tmp_path,
+):
+    database, company_ats = _database_with_ats(
+        tmp_path,
+        board_url=(
+            "https://career4.successfactors.com/"
+            "career?company=example"
+        ),
+        external_identifier=(
+            "career4.successfactors.com/"
+            "career?company=example"
+        ),
+    )
+    _seed_existing_job(database, company_ats)
+    fetch = _fetch(
+        board_url=(
+            "https://career4.successfactors.com/"
+            "career?company=example"
+        ),
+        responses={
+            (
+                "https://career4.successfactors.com/"
+                "career?company=example"
+            ): (
+                200,
+                "<html>No hay puestos vacantes</html>",
+            ),
+        },
+    )
+
+    assert fetch.snapshot_complete is True
+    assert fetch.jobs == []
+    summary = _service(
+        database,
+        _fake_fetch(fetch=fetch),
+    ).run([company_ats])
+
+    assert summary.succeeded == 1
+    assert summary.jobs_deactivated == 1
+    assert _job_rows(database)[0]["is_active"] == 0
 
 
 def test_failed_detail_fetch_prevents_deactivation():
@@ -844,6 +953,9 @@ def _sf_job(
 
 def _database_with_ats(
     tmp_path,
+    *,
+    board_url: str = "https://example.jobs/",
+    external_identifier: str = "example.jobs",
 ) -> tuple[Database, CompanyAts]:
     database = Database(
         tmp_path / "test.db"
@@ -868,10 +980,10 @@ def _database_with_ats(
                     .SUCCESSFACTORS
                 ),
                 external_identifier=(
-                    "example.jobs"
+                    external_identifier
                 ),
                 board_url=(
-                    "https://example.jobs/"
+                    board_url
                 ),
             )
         )

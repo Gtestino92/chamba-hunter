@@ -221,14 +221,35 @@ class SuccessFactorsClient:
                         )
                     ),
                 )
+            total_hint = _parse_total_hint(
+                response.text
+            )
+            page_size = _parse_page_size(
+                response.text
+            )
+            record_count = _parse_record_count(
+                response.text
+            )
             pages = [
                 _ListingPage(
                     url=str(response.url),
                     html=response.text,
                     links=links,
-                    page_size=len(links),
-                    total_hint=len(links),
-                    record_count=len(links),
+                    page_size=(
+                        page_size
+                        or record_count
+                        or len(links)
+                    ),
+                    total_hint=total_hint,
+                    record_count=(
+                        record_count
+                        or len(links)
+                    ),
+                    has_completeness_evidence=(
+                        total_hint is not None
+                        or page_size is not None
+                        or record_count is not None
+                    ),
                 )
             ]
         else:
@@ -321,24 +342,34 @@ class SuccessFactorsClient:
                 page_url=str(response.url),
                 html=response.text,
             )
+            parsed_page_size = _parse_page_size(
+                response.text
+            )
+            parsed_total_hint = _parse_total_hint(
+                response.text
+            )
+            parsed_record_count = _parse_record_count(
+                response.text
+            )
             page = _ListingPage(
                 url=str(response.url),
                 html=response.text,
                 links=links,
                 page_size=(
-                    _parse_page_size(response.text)
+                    parsed_page_size
                     or page_size
                 ),
-                total_hint=_parse_total_hint(
-                    response.text
-                ),
+                total_hint=parsed_total_hint,
                 record_count=(
-                    _parse_record_count(response.text)
-                    if _parse_record_count(
-                        response.text
-                    )
+                    parsed_record_count
+                    if parsed_record_count
                     is not None
                     else len(links)
+                ),
+                has_completeness_evidence=(
+                    parsed_page_size is not None
+                    or parsed_total_hint is not None
+                    or parsed_record_count is not None
                 ),
             )
             pages.append(page)
@@ -393,6 +424,7 @@ class _ListingPage:
     page_size: int
     total_hint: int | None
     record_count: int
+    has_completeness_evidence: bool
 
 
 def detect_successfactors_from_url(
@@ -927,6 +959,8 @@ def _listing_complete(
 
     last = pages[-1]
     return (
+        last.has_completeness_evidence
+        and
         link_count > 0
         and last.record_count < last.page_size
     )

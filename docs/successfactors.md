@@ -32,11 +32,14 @@ Generic text-only matches are not sufficient.
 - Career Site Builder listings are discovered from `/search/` forms or links and paginated with observed `startrow` behavior.
 - Job tiles are parsed from `job-tile` / `data-url` structures.
 - Detail pages are fetched to extract title, description, location, date posted, employment type, and apply URL when available.
-- Direct legacy pages are supported when public HTML exposes stable job links; JS-only or ambiguous surfaces are treated as incomplete rather than guessed.
+- Direct legacy pages are supported when public HTML exposes stable job links; static links alone do not prove the complete job set.
+- JS-only or ambiguous direct/legacy surfaces are treated as incomplete rather than guessed.
 
 ## Snapshot Safety
 
 SuccessFactors sync only deactivates disappeared jobs when the source produced a complete board snapshot. It does not deactivate jobs when listing fetch, pagination, detail fetch, parsing, blocked, or HTTP/network errors make completeness uncertain. Partial runs may still upsert successfully fetched jobs.
+
+Direct/legacy SuccessFactors pages with static public job links can be ingested, but static links alone do not prove a complete snapshot. Such runs remain partial and never deactivate unseen jobs unless independent completeness evidence exists, such as a trustworthy total count or exhaustively traversed pagination.
 
 An explicit empty board can safely reconcile to zero active jobs only when the parser recognizes a valid empty-board marker.
 
