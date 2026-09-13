@@ -1,0 +1,474 @@
+{
+  "schema_version": 1,
+  "description": "Curated high-confidence Argentina/LATAM enterprise employers for company-universe acquisition only.",
+  "entries": [
+    {
+      "name": "Grupo Sancor Seguros",
+      "country": "Argentina",
+      "website_url": "https://www.sancorseguros.com.ar/",
+      "careers_url": "https://empleos.gruposancorseguros.com/",
+      "external_id": "ar:grupo-sancor-seguros",
+      "source_url": "https://www.sancorseguros.com.ar/",
+      "sector": "insurance"
+    },
+    {
+      "name": "Claro Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.claro.com.ar/",
+      "careers_url": "https://sapweb.claro.com.ar/",
+      "external_id": "ar:claro-argentina",
+      "source_url": "https://www.claro.com.ar/",
+      "sector": "telecommunications"
+    },
+    {
+      "name": "Mercado Libre",
+      "country": "Argentina",
+      "website_url": "https://www.mercadolibre.com.ar/",
+      "careers_url": "https://careers-meli.mercadolibre.com/",
+      "external_id": "ar:mercado-libre",
+      "source_url": "https://www.mercadolibre.com.ar/",
+      "sector": "ecommerce"
+    },
+    {
+      "name": "Globant",
+      "country": "Argentina",
+      "website_url": "https://www.globant.com/",
+      "careers_url": "https://www.globant.com/careers",
+      "external_id": "ar:globant",
+      "source_url": "https://www.globant.com/",
+      "sector": "technology"
+    },
+    {
+      "name": "Despegar",
+      "country": "Argentina",
+      "website_url": "https://www.despegar.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:despegar",
+      "source_url": "https://www.despegar.com.ar/",
+      "sector": "travel"
+    },
+    {
+      "name": "Naranja X",
+      "country": "Argentina",
+      "website_url": "https://www.naranjax.com/",
+      "careers_url": null,
+      "external_id": "ar:naranja-x",
+      "source_url": "https://www.naranjax.com/",
+      "sector": "fintech"
+    },
+    {
+      "name": "Ualá",
+      "country": "Argentina",
+      "website_url": "https://www.uala.com.ar/",
+      "careers_url": "https://www.uala.com.ar/sumate",
+      "external_id": "ar:uala",
+      "source_url": "https://www.uala.com.ar/",
+      "sector": "fintech"
+    },
+    {
+      "name": "Banco Galicia",
+      "country": "Argentina",
+      "website_url": "https://www.galicia.ar/",
+      "careers_url": null,
+      "external_id": "ar:banco-galicia",
+      "source_url": "https://www.galicia.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "BBVA Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.bbva.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:bbva-argentina",
+      "source_url": "https://www.bbva.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Santander Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.santander.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:santander-argentina",
+      "source_url": "https://www.santander.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Banco Macro",
+      "country": "Argentina",
+      "website_url": "https://www.macro.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:banco-macro",
+      "source_url": "https://www.macro.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Banco Supervielle",
+      "country": "Argentina",
+      "website_url": "https://www.supervielle.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:banco-supervielle",
+      "source_url": "https://www.supervielle.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Banco Ciudad",
+      "country": "Argentina",
+      "website_url": "https://www.bancociudad.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:banco-ciudad",
+      "source_url": "https://www.bancociudad.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Banco Nación",
+      "country": "Argentina",
+      "website_url": "https://www.bna.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:banco-nacion",
+      "source_url": "https://www.bna.com.ar/",
+      "sector": "banking"
+    },
+    {
+      "name": "Telecom Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.telecom.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:telecom-argentina",
+      "source_url": "https://www.telecom.com.ar/",
+      "sector": "telecommunications"
+    },
+    {
+      "name": "Movistar Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.movistar.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:movistar-argentina",
+      "source_url": "https://www.movistar.com.ar/",
+      "sector": "telecommunications"
+    },
+    {
+      "name": "YPF",
+      "country": "Argentina",
+      "website_url": "https://www.ypf.com/",
+      "careers_url": null,
+      "external_id": "ar:ypf",
+      "source_url": "https://www.ypf.com/",
+      "sector": "energy"
+    },
+    {
+      "name": "Pan American Energy",
+      "country": "Argentina",
+      "website_url": "https://www.pan-energy.com/",
+      "careers_url": null,
+      "external_id": "ar:pan-american-energy",
+      "source_url": "https://www.pan-energy.com/",
+      "sector": "energy"
+    },
+    {
+      "name": "Pampa Energía",
+      "country": "Argentina",
+      "website_url": "https://www.pampaenergia.com/",
+      "careers_url": null,
+      "external_id": "ar:pampa-energia",
+      "source_url": "https://www.pampaenergia.com/",
+      "sector": "energy"
+    },
+    {
+      "name": "Edenor",
+      "country": "Argentina",
+      "website_url": "https://www.edenor.com/",
+      "careers_url": null,
+      "external_id": "ar:edenor",
+      "source_url": "https://www.edenor.com/",
+      "sector": "utilities"
+    },
+    {
+      "name": "EDESUR",
+      "country": "Argentina",
+      "website_url": "https://www.edesur.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:edesur",
+      "source_url": "https://www.edesur.com.ar/",
+      "sector": "utilities"
+    },
+    {
+      "name": "Andreani",
+      "country": "Argentina",
+      "website_url": "https://www.andreani.com/",
+      "careers_url": null,
+      "external_id": "ar:andreani",
+      "source_url": "https://www.andreani.com/",
+      "sector": "logistics"
+    },
+    {
+      "name": "Ocasa",
+      "country": "Argentina",
+      "website_url": "https://www.ocasa.com/",
+      "careers_url": null,
+      "external_id": "ar:ocasa",
+      "source_url": "https://www.ocasa.com/",
+      "sector": "logistics"
+    },
+    {
+      "name": "Aerolíneas Argentinas",
+      "country": "Argentina",
+      "website_url": "https://www.aerolineas.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:aerolineas-argentinas",
+      "source_url": "https://www.aerolineas.com.ar/",
+      "sector": "airlines"
+    },
+    {
+      "name": "Flybondi",
+      "country": "Argentina",
+      "website_url": "https://flybondi.com/",
+      "careers_url": null,
+      "external_id": "ar:flybondi",
+      "source_url": "https://flybondi.com/",
+      "sector": "airlines"
+    },
+    {
+      "name": "Arcos Dorados",
+      "country": "Argentina",
+      "website_url": "https://www.arcosdorados.com/",
+      "careers_url": null,
+      "external_id": "ar:arcos-dorados",
+      "source_url": "https://www.arcosdorados.com/",
+      "sector": "consumer"
+    },
+    {
+      "name": "Cencosud Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.cencosud.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:cencosud-argentina",
+      "source_url": "https://www.cencosud.com.ar/",
+      "sector": "retail"
+    },
+    {
+      "name": "Carrefour Argentina",
+      "country": "Argentina",
+      "website_url": "https://www.carrefour.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:carrefour-argentina",
+      "source_url": "https://www.carrefour.com.ar/",
+      "sector": "retail"
+    },
+    {
+      "name": "Frávega",
+      "country": "Argentina",
+      "website_url": "https://www.fravega.com/",
+      "careers_url": null,
+      "external_id": "ar:fravega",
+      "source_url": "https://www.fravega.com/",
+      "sector": "retail"
+    },
+    {
+      "name": "La Anónima",
+      "country": "Argentina",
+      "website_url": "https://www.laanonima.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:la-anonima",
+      "source_url": "https://www.laanonima.com.ar/",
+      "sector": "retail"
+    },
+    {
+      "name": "Swiss Medical",
+      "country": "Argentina",
+      "website_url": "https://www.swissmedical.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:swiss-medical",
+      "source_url": "https://www.swissmedical.com.ar/",
+      "sector": "health"
+    },
+    {
+      "name": "Galeno",
+      "country": "Argentina",
+      "website_url": "https://www.galeno.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:galeno",
+      "source_url": "https://www.galeno.com.ar/",
+      "sector": "health"
+    },
+    {
+      "name": "OSDE",
+      "country": "Argentina",
+      "website_url": "https://www.osde.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:osde",
+      "source_url": "https://www.osde.com.ar/",
+      "sector": "health"
+    },
+    {
+      "name": "Techint",
+      "country": "Argentina",
+      "website_url": "https://www.techint.com/",
+      "careers_url": null,
+      "external_id": "ar:techint",
+      "source_url": "https://www.techint.com/",
+      "sector": "industrial"
+    },
+    {
+      "name": "Tenaris",
+      "country": "Argentina",
+      "website_url": "https://www.tenaris.com/",
+      "careers_url": null,
+      "external_id": "ar:tenaris",
+      "source_url": "https://www.tenaris.com/",
+      "sector": "industrial"
+    },
+    {
+      "name": "Ternium",
+      "country": "Argentina",
+      "website_url": "https://www.ternium.com/",
+      "careers_url": null,
+      "external_id": "ar:ternium",
+      "source_url": "https://www.ternium.com/",
+      "sector": "industrial"
+    },
+    {
+      "name": "Aluar",
+      "country": "Argentina",
+      "website_url": "https://www.aluar.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:aluar",
+      "source_url": "https://www.aluar.com.ar/",
+      "sector": "industrial"
+    },
+    {
+      "name": "Molinos Río de la Plata",
+      "country": "Argentina",
+      "website_url": "https://www.molinos.com.ar/",
+      "careers_url": null,
+      "external_id": "ar:molinos-rio-de-la-plata",
+      "source_url": "https://www.molinos.com.ar/",
+      "sector": "consumer"
+    },
+    {
+      "name": "Arcor",
+      "country": "Argentina",
+      "website_url": "https://www.arcor.com/",
+      "careers_url": null,
+      "external_id": "ar:arcor",
+      "source_url": "https://www.arcor.com/",
+      "sector": "consumer"
+    },
+    {
+      "name": "Quilmes",
+      "country": "Argentina",
+      "website_url": "https://www.cerveceriaymalteriaquilmes.com/",
+      "careers_url": null,
+      "external_id": "ar:quilmes",
+      "source_url": "https://www.cerveceriaymalteriaquilmes.com/",
+      "sector": "consumer"
+    },
+    {
+      "name": "PedidosYa",
+      "country": "Uruguay",
+      "website_url": "https://www.pedidosya.com/",
+      "careers_url": null,
+      "external_id": "uy:pedidosya",
+      "source_url": "https://www.pedidosya.com/",
+      "sector": "delivery"
+    },
+    {
+      "name": "dLocal",
+      "country": "Uruguay",
+      "website_url": "https://www.dlocal.com/",
+      "careers_url": "https://dlocal.com/careers/",
+      "external_id": "uy:dlocal",
+      "source_url": "https://www.dlocal.com/",
+      "sector": "fintech"
+    },
+    {
+      "name": "Nubank",
+      "country": "Brazil",
+      "website_url": "https://nubank.com.br/",
+      "careers_url": "https://international.nubank.com.br/careers/",
+      "external_id": "br:nubank",
+      "source_url": "https://nubank.com.br/",
+      "sector": "fintech"
+    },
+    {
+      "name": "Banco Itaú",
+      "country": "Brazil",
+      "website_url": "https://www.itau.com.br/",
+      "careers_url": null,
+      "external_id": "br:banco-itau",
+      "source_url": "https://www.itau.com.br/",
+      "sector": "banking"
+    },
+    {
+      "name": "Stone",
+      "country": "Brazil",
+      "website_url": "https://www.stone.com.br/",
+      "careers_url": null,
+      "external_id": "br:stone",
+      "source_url": "https://www.stone.com.br/",
+      "sector": "fintech"
+    },
+    {
+      "name": "TOTVS",
+      "country": "Brazil",
+      "website_url": "https://www.totvs.com/",
+      "careers_url": null,
+      "external_id": "br:totvs",
+      "source_url": "https://www.totvs.com/",
+      "sector": "technology"
+    },
+    {
+      "name": "Falabella",
+      "country": "Chile",
+      "website_url": "https://www.falabella.com/",
+      "careers_url": null,
+      "external_id": "cl:falabella",
+      "source_url": "https://www.falabella.com/",
+      "sector": "retail"
+    },
+    {
+      "name": "Banco de Chile",
+      "country": "Chile",
+      "website_url": "https://www.bancochile.cl/",
+      "careers_url": null,
+      "external_id": "cl:banco-de-chile",
+      "source_url": "https://www.bancochile.cl/",
+      "sector": "banking"
+    },
+    {
+      "name": "Rappi",
+      "country": "Colombia",
+      "website_url": "https://www.rappi.com/",
+      "careers_url": "https://careers.rappi.com/",
+      "external_id": "co:rappi",
+      "source_url": "https://www.rappi.com/",
+      "sector": "delivery"
+    },
+    {
+      "name": "Bancolombia",
+      "country": "Colombia",
+      "website_url": "https://www.bancolombia.com/",
+      "careers_url": null,
+      "external_id": "co:bancolombia",
+      "source_url": "https://www.bancolombia.com/",
+      "sector": "banking"
+    },
+    {
+      "name": "Kavak",
+      "country": "Mexico",
+      "website_url": "https://www.kavak.com/",
+      "careers_url": null,
+      "external_id": "mx:kavak",
+      "source_url": "https://www.kavak.com/",
+      "sector": "ecommerce"
+    },
+    {
+      "name": "Clip",
+      "country": "Mexico",
+      "website_url": "https://www.clip.mx/",
+      "careers_url": null,
+      "external_id": "mx:clip",
+      "source_url": "https://www.clip.mx/",
+      "sector": "fintech"
+    }
+  ]
+}

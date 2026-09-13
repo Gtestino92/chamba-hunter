@@ -142,6 +142,23 @@ class CompanyImportResult:
     matched_by: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _PreparedCompanySeed:
+    name: str
+    normalized_name: str
+    website_url: str | None
+    domain: str | None
+    careers_url: str | None
+    source_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _CompanyMatch:
+    company: Company | None
+    matched_by: str | None
+    prepared: _PreparedCompanySeed
+
+
 class CompanyImportService:
     def __init__(
         self,
@@ -160,6 +177,128 @@ class CompanyImportService:
         seed: CompanySeedInput,
         source_metadata: dict | None = None,
     ) -> CompanyImportResult:
+        match = self._match_seed(
+            seed
+        )
+
+        prepared = match.prepared
+        existing = match.company
+        matched_by = match.matched_by
+
+        if existing is not None:
+            if existing.id is None:
+                raise RuntimeError(
+                    "Existing company must "
+                    "have an id."
+                )
+
+            company = (
+                self.company_repository
+                .fill_missing_discovery_fields(
+                    company_id=existing.id,
+                    website_url=(
+                        prepared.website_url
+                    ),
+                    domain=prepared.domain,
+                    careers_url=(
+                        prepared.careers_url
+                    ),
+                    country=seed.country,
+                )
+            )
+
+            created = False
+
+        else:
+            company = Company(
+                name=prepared.name,
+                normalized_name=(
+                    prepared.normalized_name
+                ),
+                domain=prepared.domain,
+                website_url=(
+                    prepared.website_url
+                ),
+                careers_url=(
+                    prepared.careers_url
+                ),
+                country=seed.country,
+                notes=seed.notes,
+            )
+
+            company = (
+                self.company_repository.add(
+                    company
+                )
+            )
+
+            created = True
+
+        if company.id is None:
+            raise RuntimeError(
+                "Imported company must have "
+                "an id before recording its "
+                "source."
+            )
+
+        self.company_source_repository.add_or_touch(
+            CompanySource(
+                company_id=company.id,
+                source_type=seed.source_type,
+                external_id=seed.external_id,
+                source_url=prepared.source_url,
+                raw_name=seed.name,
+                metadata=source_metadata,
+            )
+        )
+
+        return CompanyImportResult(
+            company=company,
+            created=created,
+            matched_by=matched_by,
+        )
+
+    def preview_seed(
+        self,
+        seed: CompanySeedInput,
+    ) -> CompanyImportResult:
+        match = self._match_seed(
+            seed
+        )
+
+        if match.company is not None:
+            return CompanyImportResult(
+                company=match.company,
+                created=False,
+                matched_by=match.matched_by,
+            )
+
+        prepared = match.prepared
+
+        return CompanyImportResult(
+            company=Company(
+                name=prepared.name,
+                normalized_name=(
+                    prepared.normalized_name
+                ),
+                domain=prepared.domain,
+                website_url=(
+                    prepared.website_url
+                ),
+                careers_url=(
+                    prepared.careers_url
+                ),
+                country=seed.country,
+                notes=seed.notes,
+            ),
+            created=True,
+            matched_by=None,
+        )
+
+    def _match_seed(
+        self,
+        seed: CompanySeedInput,
+    ) -> _CompanyMatch:
         name = clean_company_name(
             seed.name
         )
@@ -194,6 +333,15 @@ class CompanyImportService:
             )
             if seed.source_url is not None
             else None
+        )
+
+        prepared = _PreparedCompanySeed(
+            name=name,
+            normalized_name=normalized_name,
+            website_url=website_url,
+            domain=domain,
+            careers_url=careers_url,
+            source_url=source_url,
         )
 
         existing: Company | None = None
@@ -260,67 +408,8 @@ class CompanyImportService:
                         "NORMALIZED_NAME_DOMAINLESS"
                     )
 
-        if existing is not None:
-            if existing.id is None:
-                raise RuntimeError(
-                    "Existing company must "
-                    "have an id."
-                )
-
-            company = (
-                self.company_repository
-                .fill_missing_discovery_fields(
-                    company_id=existing.id,
-                    website_url=website_url,
-                    domain=domain,
-                    careers_url=careers_url,
-                    country=seed.country,
-                )
-            )
-
-            created = False
-
-        else:
-            company = Company(
-                name=name,
-                normalized_name=(
-                    normalized_name
-                ),
-                domain=domain,
-                website_url=website_url,
-                careers_url=careers_url,
-                country=seed.country,
-                notes=seed.notes,
-            )
-
-            company = (
-                self.company_repository.add(
-                    company
-                )
-            )
-
-            created = True
-
-        if company.id is None:
-            raise RuntimeError(
-                "Imported company must have "
-                "an id before recording its "
-                "source."
-            )
-
-        self.company_source_repository.add_or_touch(
-            CompanySource(
-                company_id=company.id,
-                source_type=seed.source_type,
-                external_id=seed.external_id,
-                source_url=source_url,
-                raw_name=seed.name,
-                metadata=source_metadata,
-            )
-        )
-
-        return CompanyImportResult(
-            company=company,
-            created=created,
+        return _CompanyMatch(
+            company=existing,
             matched_by=matched_by,
+            prepared=prepared,
         )
