@@ -79,7 +79,7 @@ def test_registry_rejects_invalid_structure(tmp_path):
 
 
 def test_dry_run_does_not_persist_any_companies(tmp_path):
-    service, repository, _, registry = (
+    service, repository, source_repository, registry = (
         _build_service(tmp_path)
     )
 
@@ -92,6 +92,59 @@ def test_dry_run_does_not_persist_any_companies(tmp_path):
     assert summary.companies_created == 2
     assert summary.companies_existing == 0
     assert repository.list_all() == []
+    assert (
+        source_repository.list_by_source_type(
+            SourceType.LATAM_ENTERPRISE
+        )
+        == []
+    )
+
+
+def test_dry_run_does_not_mutate_existing_company(
+    tmp_path,
+):
+    service, repository, source_repository, registry = (
+        _build_service(tmp_path)
+    )
+
+    existing = (
+        service.company_import_service.import_seed(
+            CompanySeedInput(
+                name="Grupo Sancor Seguros",
+            )
+        )
+    )
+
+    assert existing.company.id is not None
+
+    summary = service.run(
+        registry=registry,
+        apply=False,
+        limit=1,
+    )
+
+    stored = repository.get_by_id(
+        existing.company.id
+    )
+
+    assert summary.companies_created == 0
+    assert summary.companies_existing == 1
+    assert summary.matched_by_counts[
+        "NORMALIZED_NAME_DOMAINLESS"
+    ] == 1
+
+    assert stored is not None
+    assert stored.website_url is None
+    assert stored.domain is None
+    assert stored.careers_url is None
+    assert stored.country is None
+
+    assert (
+        source_repository.list_by_source_type(
+            SourceType.LATAM_ENTERPRISE
+        )
+        == []
+    )
 
 
 def test_apply_imports_companies(tmp_path):

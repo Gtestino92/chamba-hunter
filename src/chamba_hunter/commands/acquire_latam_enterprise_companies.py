@@ -210,6 +210,11 @@ def _print_summary(
             "company sources were written."
         )
         print(
+            "Pending schema migrations may "
+            "still have been applied during "
+            "command startup."
+        )
+        print(
             "Use --apply to persist this "
             "company universe."
         )

@@ -26,6 +26,7 @@ SQLite under `data/` is the source of truth. XLSX files under `output/` are gene
 - Source types are persisted as text in SQLite; adding a new enum value does not require a migration unless schema constraints are introduced.
 - Deduplication order is source identity, domain, unique normalized name without a seed domain, then unique normalized name for a domainless existing company.
 - Repeated ingestion must be idempotent and must not create duplicate companies or duplicate source records.
+- LATAM enterprise dry-run does not create/update acquisition companies or source records, but standard command startup may still apply pending schema migrations.
 
 ## Job Acquisition Sources
 
@@ -69,6 +70,7 @@ python -m chamba_hunter.commands.acquire_latam_enterprise_companies --country Ar
 ```
 
 The LATAM enterprise command is intentionally isolated and is not part of `refresh_search`.
+Without `--apply`, it previews acquisition changes only; pending migrations may still run at startup.
 
 ## Performance And Workflow
 

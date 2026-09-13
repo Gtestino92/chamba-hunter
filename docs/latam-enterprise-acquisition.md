@@ -69,7 +69,7 @@ CompanySeedInput
 -> CompanySourceRepository
 ```
 
-Dry-run uses `CompanyImportService.preview_seed`, which applies the same matching rules without writing companies or source records.
+Dry-run uses `CompanyImportService.preview_seed`, which applies the same matching rules without creating/updating LATAM enterprise companies or source records. Command startup still runs normal migrations, so pending schema migrations may be applied even without `--apply`.
 
 ## Commands
 
@@ -78,6 +78,8 @@ Preview all entries:
 ```powershell
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies
 ```
+
+Preview mode does not persist LATAM enterprise acquisition data. It is not a byte-for-byte read-only SQLite mode because pending schema migrations may still be applied at startup.
 
 Apply all entries:
 

@@ -1,14 +1,29 @@
 from chamba_hunter.db.connection import Database
-from chamba_hunter.db.migrations import migrate
+from chamba_hunter.db.migrations import (
+    DEFAULT_MIGRATIONS_DIR,
+    MIGRATION_FILENAME_PATTERN,
+    migrate,
+)
 
 
 def test_migrations_are_applied_once(tmp_path):
     database = Database(tmp_path / "test.db")
+    expected_migrations = [
+        path.name
+        for path in sorted(
+            DEFAULT_MIGRATIONS_DIR.glob(
+                "*.sql"
+            )
+        )
+        if MIGRATION_FILENAME_PATTERN.match(
+            path.name
+        )
+    ]
 
     first_run = migrate(database)
     second_run = migrate(database)
 
-    assert first_run == ["001_initial_schema.sql"]
+    assert first_run == expected_migrations
     assert second_run == []
 
     with database.connection() as connection:
@@ -21,12 +36,16 @@ def test_migrations_are_applied_once(tmp_path):
             """
         ).fetchone()
 
-        applied_migration = connection.execute(
+        applied_migrations = connection.execute(
             """
             SELECT version
             FROM schema_migrations
+            ORDER BY version
             """
-        ).fetchone()
+        ).fetchall()
 
     assert companies_table is not None
-    assert applied_migration["version"] == "001_initial_schema.sql"
+    assert [
+        row["version"]
+        for row in applied_migrations
+    ] == expected_migrations
