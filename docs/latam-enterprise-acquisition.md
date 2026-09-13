@@ -123,9 +123,8 @@ python -m chamba_hunter.commands.acquire_latam_enterprise_companies --limit 5
 
 ## Intentional Non-Goals
 
-This slice intentionally does not add:
+This company-acquisition slice intentionally does not add:
 
-- SAP SuccessFactors support.
 - Workday support.
 - Avature support.
 - Oracle Recruiting / Taleo support.
@@ -136,3 +135,5 @@ This slice intentionally does not add:
 - Job scraping or job ingestion.
 - Classification, matching, prioritization, or XLSX export changes.
 - Automatic integration into `refresh_search`.
+
+SAP SuccessFactors support was added later as a standalone ATS sync slice; LATAM company acquisition remains independent from that sync path.

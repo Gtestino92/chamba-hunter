@@ -36,6 +36,7 @@ class JobRepository:
         company_ats: CompanyAts,
         jobs: list[Job],
         seen_at: datetime,
+        deactivate_missing: bool = True,
     ) -> JobSyncCounts:
         if company_ats.id is None:
             raise ValueError(
@@ -285,35 +286,38 @@ class JobRepository:
 
                 created += 1
 
-            incoming_external_ids = set(
-                incoming_by_external_id
-            )
+            missing_active_ids: set[str] = set()
 
-            missing_active_ids = (
-                active_external_ids
-                - incoming_external_ids
-            )
-
-            if missing_active_ids:
-                connection.executemany(
-                    """
-                    UPDATE jobs
-                    SET is_active = ?
-                    WHERE company_ats_id = ?
-                      AND external_id = ?
-                    """,
-                    [
-                        (
-                            bool_to_db(False),
-                            company_ats.id,
-                            external_id,
-                        )
-                        for external_id
-                        in sorted(
-                            missing_active_ids
-                        )
-                    ],
+            if deactivate_missing:
+                incoming_external_ids = set(
+                    incoming_by_external_id
                 )
+
+                missing_active_ids = (
+                    active_external_ids
+                    - incoming_external_ids
+                )
+
+                if missing_active_ids:
+                    connection.executemany(
+                        """
+                        UPDATE jobs
+                        SET is_active = ?
+                        WHERE company_ats_id = ?
+                          AND external_id = ?
+                        """,
+                        [
+                            (
+                                bool_to_db(False),
+                                company_ats.id,
+                                external_id,
+                            )
+                            for external_id
+                            in sorted(
+                                missing_active_ids
+                            )
+                        ],
+                    )
 
         return JobSyncCounts(
             created=created,

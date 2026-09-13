@@ -36,6 +36,10 @@ from chamba_hunter.repositories.company_repository import (
 from chamba_hunter.repositories.tracing_repository import (
     TracingRepository,
 )
+from chamba_hunter.sources.successfactors import (
+    detect_successfactors_from_html,
+    detect_successfactors_from_url,
+)
 
 
 MAX_HTML_CHARS = 2_000_000
@@ -1238,7 +1242,42 @@ def _detect_from_page(
             )
         )
 
-    return candidates
+    successfactors = (
+        detect_successfactors_from_html(
+            page_url=page.final_url,
+            html=raw_html,
+        )
+    )
+
+    if successfactors is not None:
+        candidates.append(
+            AtsCandidate(
+                provider=(
+                    AtsProvider
+                    .SUCCESSFACTORS
+                ),
+                method=(
+                    AtsDetectionMethod
+                    .OTHER
+                ),
+                confidence=0.98,
+                source_url=page.final_url,
+                evidence=(
+                    successfactors.evidence
+                ),
+                external_identifier=(
+                    successfactors
+                    .external_identifier
+                ),
+                board_url=(
+                    successfactors.board_url
+                ),
+            )
+        )
+
+    return _deduplicate_candidates(
+        candidates
+    )
 
 
 def _detect_from_url(
@@ -1273,6 +1312,33 @@ def _detect_from_url(
     query = parse_qs(
         parsed.query
     )
+
+    successfactors = (
+        detect_successfactors_from_url(
+            url
+        )
+    )
+
+    if successfactors is not None:
+        return AtsCandidate(
+            provider=(
+                AtsProvider
+                .SUCCESSFACTORS
+            ),
+            method=method,
+            confidence=confidence,
+            source_url=url,
+            evidence=(
+                successfactors.evidence
+            ),
+            external_identifier=(
+                successfactors
+                .external_identifier
+            ),
+            board_url=(
+                successfactors.board_url
+            ),
+        )
 
     if "ashby_jid" in query:
         return AtsCandidate(
@@ -2876,6 +2942,12 @@ def _canonical_board_url(
                 f"{parsed.netloc}/jobs"
             )
 
+        return fallback
+
+    if (
+        provider
+        == AtsProvider.SUCCESSFACTORS
+    ):
         return fallback
 
     return fallback

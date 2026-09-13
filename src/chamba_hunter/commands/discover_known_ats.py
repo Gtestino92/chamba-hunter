@@ -32,9 +32,25 @@ def main() -> None:
         action="store_true",
         help="Print selected targets without making HTTP requests.",
     )
+    parser.add_argument(
+        "--company-id",
+        type=int,
+        default=None,
+        help=(
+            "Scan only one active company id "
+            "that does not yet have an active ATS."
+        ),
+    )
     args = parser.parse_args()
     if args.limit < 1:
         parser.error("--limit must be at least 1")
+    if (
+        args.company_id is not None
+        and args.company_id < 1
+    ):
+        parser.error(
+            "--company-id must be at least 1"
+        )
 
     database = Database()
     migrate(database)
@@ -47,7 +63,11 @@ def main() -> None:
         for company in company_repository.list_all()
         if company.id is not None
     }
-    target_ids = _target_company_ids(database=database, limit=args.limit)
+    target_ids = _target_company_ids(
+        database=database,
+        limit=args.limit,
+        company_id=args.company_id,
+    )
     targets = [
         company_by_id[company_id]
         for company_id in target_ids
@@ -109,10 +129,26 @@ def main() -> None:
         print("HiBob failed:      0")
 
 
-def _target_company_ids(*, database: Database, limit: int) -> list[int]:
+def _target_company_ids(
+    *,
+    database: Database,
+    limit: int,
+    company_id: int | None = None,
+) -> list[int]:
+    company_filter = ""
+    parameters: list[object] = [
+        CompanyStatus.ACTIVE.value
+    ]
+
+    if company_id is not None:
+        company_filter = "AND c.id = ?"
+        parameters.append(company_id)
+
+    parameters.append(limit)
+
     with database.connection() as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT
                 c.id AS company_id,
                 MAX(cs.started_at) AS last_scanned_at
@@ -120,6 +156,7 @@ def _target_company_ids(*, database: Database, limit: int) -> list[int]:
             LEFT JOIN company_scans cs
               ON cs.company_id = c.id
             WHERE c.status = ?
+              {company_filter}
               AND (c.careers_url IS NOT NULL OR c.website_url IS NOT NULL)
               AND NOT EXISTS (
                     SELECT 1
@@ -135,7 +172,7 @@ def _target_company_ids(*, database: Database, limit: int) -> list[int]:
                 c.id
             LIMIT ?
             """,
-            (CompanyStatus.ACTIVE.value, limit),
+            tuple(parameters),
         ).fetchall()
     return [int(row["company_id"]) for row in rows]
 

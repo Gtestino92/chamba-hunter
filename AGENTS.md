@@ -11,6 +11,7 @@ Chamba Hunter is a local job-search intelligence tool. It discovers companies an
 - ATS discovery operates on companies, using known `website_url` or `careers_url` entry points and provider hints from broad job evidence.
 - LATAM ATS fingerprinting measures recruiting-platform evidence for `LATAM_ENTERPRISE` companies and stores observations in `ats_fingerprints`; it does not register unsupported providers as syncable ATS integrations.
 - ATS synchronization operates on `company_ats` records and writes canonical first-party `jobs`.
+- SuccessFactors synchronization is implemented as a standalone ATS provider command; validated public Career Site Builder/custom-domain and direct/legacy surfaces use conservative snapshot semantics.
 - Canonicalization links broad `job_leads` to canonical `jobs` when identity is sufficiently clear.
 - Argentina eligibility, occupation classification, skills classification, seniority classification, professional matching, and operational priority operate on job opportunities.
 - XLSX export is an operational/reporting view over SQLite state, not primary persistence.
@@ -52,15 +53,16 @@ Implemented ATS providers:
 - `HIRINGROOM`
 - `TEAMTAILOR`
 - `HIBOB`
+- `SUCCESSFACTORS`
 
 Planned coverage work, not implemented:
 
-- SAP SuccessFactors
 - Workday
 - Avature
 - Other LATAM enterprise ATS providers based on measured coverage
 
 Fingerprint recognition for unsupported providers is measurement only. It does not mean job sync support exists.
+SuccessFactors fingerprint recognition now maps to a supported ATS integration, but fingerprinting remains distinct from job synchronization.
 
 ## Important Commands
 
@@ -72,9 +74,11 @@ python -m chamba_hunter.commands.acquire_latam_enterprise_companies --apply
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies --country Argentina --limit 10
 python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats
 python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats --country Argentina --limit 10
+python -m chamba_hunter.commands.discover_known_ats --company-id 3950
+python -m chamba_hunter.commands.sync_successfactors_jobs --company-id 3950
 ```
 
-The LATAM enterprise ingestion and fingerprinting commands are intentionally isolated and are not part of `refresh_search`.
+The LATAM enterprise ingestion, fingerprinting, and SuccessFactors sync commands are intentionally isolated and are not part of `refresh_search`.
 Without `--apply`, it previews acquisition changes only; pending migrations may still run at startup.
 
 ## Performance And Workflow
@@ -86,6 +90,7 @@ New acquisition features should initially be executable independently. Avoid aut
 - Keep source/provider parsing isolated in `sources/`; keep business workflow in `services/`; keep CLI wiring in `commands/`.
 - Maintain idempotency for ingestion and source tracking.
 - Avoid destructive full-snapshot reconciliation unless acquisition was complete and successful.
+- SuccessFactors sync must not deactivate disappeared jobs when listing, pagination, detail, blocked, or network states make snapshot completeness uncertain.
 - Add focused tests for source/provider integrations.
 - Do not implement new ATS providers, scraping, classification, matching, or export changes inside company-only acquisition slices.
 
@@ -99,4 +104,4 @@ Slice 1 company ingestion and Slice 2 ATS fingerprinting are implemented. Use me
 - Slice 4 — Workday / Avature based on measured coverage.
 - Slice 5 — decide whether/how regional acquisition enters routine refresh.
 
-See `docs/latam-enterprise-acquisition.md` for the curated registry workflow and `docs/latam-ats-fingerprinting.md` for measurement workflow.
+See `docs/latam-enterprise-acquisition.md` for the curated registry workflow, `docs/latam-ats-fingerprinting.md` for measurement workflow, and `docs/successfactors.md` for standalone SuccessFactors sync.

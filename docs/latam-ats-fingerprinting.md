@@ -35,17 +35,17 @@ Supported ATS fingerprints:
 - `HIRINGROOM`
 - `TEAMTAILOR`
 - `HIBOB`
+- `SUCCESSFACTORS`
 
 Unsupported measurement-only fingerprints:
 
-- `SUCCESSFACTORS`
 - `WORKDAY`
 - `AVATURE`
 - `ORACLE_TALEO`
 - `GUPY`
 - `PANDAPE`
 
-Unsupported fingerprints must not be added to `AtsProvider` or treated as syncable until an ingestion adapter exists.
+Unsupported fingerprints must not be added to `AtsProvider` or treated as syncable until an ingestion adapter exists. `SUCCESSFACTORS` is now supported, but fingerprinting still only measures evidence; it does not sync jobs or update `company_ats`.
 
 ## Status Meanings
 

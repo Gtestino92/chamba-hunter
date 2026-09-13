@@ -41,6 +41,9 @@ from chamba_hunter.sources.hibob import (
     canonical_hibob_board_url,
     hibob_tenant_from_url,
 )
+from chamba_hunter.sources.successfactors import (
+    detect_successfactors_from_url,
+)
 
 
 SUPPORTED_PROVIDER_FAMILIES = frozenset(
@@ -51,7 +54,6 @@ SUPPORTED_PROVIDER_FAMILIES = frozenset(
 
 UNSUPPORTED_PROVIDER_FAMILIES = frozenset(
     {
-        "SUCCESSFACTORS",
         "WORKDAY",
         "AVATURE",
         "ORACLE_TALEO",
@@ -804,18 +806,20 @@ def _unsupported_from_url(
     ).casefold()
     path = parsed.path.casefold()
 
-    if _is_successfactors_url(
-        host=host,
-        path=path,
-    ):
-        return _unsupported_candidate(
+    successfactors = (
+        detect_successfactors_from_url(url)
+    )
+
+    if successfactors is not None:
+        return _supported_family_candidate(
             family="SUCCESSFACTORS",
             method=method,
             confidence=confidence,
-            source_url=url,
+            source_url=(
+                successfactors.board_url
+            ),
             evidence=(
-                "SAP SuccessFactors "
-                f"URL host/path: {host}{path}"
+                successfactors.evidence
             ),
         )
 
@@ -918,7 +922,7 @@ def _detect_from_html_markers(
         in lower_html
     ):
         candidates.append(
-            _unsupported_candidate(
+            _supported_family_candidate(
                 family="SUCCESSFACTORS",
                 method=(
                     AtsDetectionMethod
@@ -993,6 +997,26 @@ def _is_pandape_host(
     return any(
         label == "pandape"
         for label in labels
+    )
+
+
+def _supported_family_candidate(
+    *,
+    family: str,
+    method: str,
+    confidence: float,
+    source_url: str,
+    evidence: str,
+) -> AtsFingerprintCandidate:
+    return AtsFingerprintCandidate(
+        provider_family=family,
+        support_status=(
+            AtsSupportStatus.SUPPORTED
+        ),
+        confidence=confidence,
+        detection_method=method,
+        evidence=evidence,
+        source_url=source_url,
     )
 
 

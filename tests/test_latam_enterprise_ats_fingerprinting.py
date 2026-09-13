@@ -59,7 +59,7 @@ def test_direct_successfactors_url_detection():
     )
     assert (
         candidate.support_status
-        == AtsSupportStatus.UNSUPPORTED
+        == AtsSupportStatus.SUPPORTED
     )
     assert "SuccessFactors" in candidate.evidence
 
