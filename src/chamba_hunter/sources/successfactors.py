@@ -189,15 +189,14 @@ class _JobDescriptionParser(HTMLParser):
                 self._skip_depth += 1
             return
 
+        if normalized in _VOID_TAGS:
+            return
+
         if not _is_description_container(attributes):
             return
 
         self._capturing = True
-        self._depth = (
-            0
-            if normalized in _VOID_TAGS
-            else 1
-        )
+        self._depth = 1
         if normalized in _IGNORED_TEXT_TAGS:
             self._skip_depth = 1
 

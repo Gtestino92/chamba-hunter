@@ -331,6 +331,22 @@ def test_missing_description_container_is_safe():
     assert description is None
 
 
+def test_meta_itemprop_description_does_not_capture_page_text():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<meta itemprop=\"description\" "
+                "content=\"SEO summary only\">"
+                "<main>Visible page text after meta.</main>"
+                "<footer>Privacy / navigation / "
+                "corporate text</footer>"
+            )
+        )
+    )
+
+    assert description is None
+
+
 def test_direct_edenor_style_listing_parsing():
     fetch = _fetch(
         board_url=(
