@@ -9,6 +9,7 @@ Chamba Hunter is a local job-search intelligence tool. It discovers companies an
 - Company acquisition populates `companies` and `company_sources`; CESSI, YC, manual import, broad job sources, and the LATAM enterprise registry all reuse `CompanyImportService`.
 - Broad job acquisition creates companies when needed and writes source job leads for Himalayas, GetOnBoard, Jobicy, WeWorkRemotely, and Jooble.
 - ATS discovery operates on companies, using known `website_url` or `careers_url` entry points and provider hints from broad job evidence.
+- LATAM ATS fingerprinting measures recruiting-platform evidence for `LATAM_ENTERPRISE` companies and stores observations in `ats_fingerprints`; it does not register unsupported providers as syncable ATS integrations.
 - ATS synchronization operates on `company_ats` records and writes canonical first-party `jobs`.
 - Canonicalization links broad `job_leads` to canonical `jobs` when identity is sufficiently clear.
 - Argentina eligibility, occupation classification, skills classification, seniority classification, professional matching, and operational priority operate on job opportunities.
@@ -59,6 +60,8 @@ Planned coverage work, not implemented:
 - Avature
 - Other LATAM enterprise ATS providers based on measured coverage
 
+Fingerprint recognition for unsupported providers is measurement only. It does not mean job sync support exists.
+
 ## Important Commands
 
 ```powershell
@@ -67,9 +70,11 @@ python -m chamba_hunter.commands.refresh_search --apply
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies --apply
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies --country Argentina --limit 10
+python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats
+python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats --country Argentina --limit 10
 ```
 
-The LATAM enterprise command is intentionally isolated and is not part of `refresh_search`.
+The LATAM enterprise ingestion and fingerprinting commands are intentionally isolated and are not part of `refresh_search`.
 Without `--apply`, it previews acquisition changes only; pending migrations may still run at startup.
 
 ## Performance And Workflow
@@ -86,10 +91,12 @@ New acquisition features should initially be executable independently. Avoid aut
 
 ## Current LATAM Expansion Roadmap
 
+Slice 1 company ingestion and Slice 2 ATS fingerprinting are implemented. Use measured fingerprint coverage to choose the next provider implementation.
+
 - Slice 1 — Argentina/LATAM enterprise company universe.
 - Slice 2 — measure ATS fingerprints / unknown providers.
 - Slice 3 — SAP SuccessFactors support.
 - Slice 4 — Workday / Avature based on measured coverage.
 - Slice 5 — decide whether/how regional acquisition enters routine refresh.
 
-See `docs/latam-enterprise-acquisition.md` for the curated registry workflow.
+See `docs/latam-enterprise-acquisition.md` for the curated registry workflow and `docs/latam-ats-fingerprinting.md` for measurement workflow.

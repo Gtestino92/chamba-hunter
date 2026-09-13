@@ -129,6 +129,21 @@ class AtsScanStatus(StrEnum):
     ERROR = "ERROR"
 
 
+class AtsFingerprintStatus(StrEnum):
+    DETECTED = "DETECTED"
+    UNKNOWN = "UNKNOWN"
+    BLOCKED = "BLOCKED"
+    ERROR = "ERROR"
+    NO_CAREERS_URL = "NO_CAREERS_URL"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+
+class AtsSupportStatus(StrEnum):
+    SUPPORTED = "SUPPORTED"
+    UNSUPPORTED = "UNSUPPORTED"
+    UNKNOWN = "UNKNOWN"
+
+
 class AtsDetectionMethod(StrEnum):
     HOMEPAGE_LINK = "HOMEPAGE_LINK"
     CAREERS_LINK = "CAREERS_LINK"
