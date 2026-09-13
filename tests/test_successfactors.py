@@ -228,6 +228,107 @@ def test_custom_csb_listing_and_detail_parsing():
         "https://claroempleos-aup.com/"
         "talentcommunity/apply/603583417/"
     )
+    assert fetch.jobs[0].description == (
+        "Equipo digital h\u00edbrido."
+    )
+
+
+def test_nested_csb_description_is_complete():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<span class=\"jobdescription\">"
+                "<span>Generic intro</span>"
+                "<div>Tu rol sera desarrollar "
+                "servicios backend.</div>"
+                "<div>Requisitos: Java, Spring "
+                "Boot, APIs REST.</div>"
+                "</span>"
+                "<footer>Privacy / navigation / "
+                "corporate text</footer>"
+            )
+        )
+    )
+
+    assert description == (
+        "Generic intro Tu rol sera desarrollar "
+        "servicios backend. Requisitos: Java, "
+        "Spring Boot, APIs REST."
+    )
+
+
+def test_nested_itemprop_description_is_complete():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<div itemprop=\"description\">"
+                "<p>Generic intro</p>"
+                "<div><strong>Tu rol sera:</strong> "
+                "desarrollar servicios backend.</div>"
+                "<div><strong>Requisitos:</strong> "
+                "Java, Spring Boot, APIs REST.</div>"
+                "</div>"
+            )
+        )
+    )
+
+    assert description == (
+        "Generic intro Tu rol sera: desarrollar "
+        "servicios backend. Requisitos: Java, "
+        "Spring Boot, APIs REST."
+    )
+
+
+def test_description_lists_remain_readable():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<div itemprop=\"description\">"
+                "<p>Requisitos:</p>"
+                "<ul><li>Java</li>"
+                "<li>Spring Boot</li></ul>"
+                "</div>"
+            )
+        )
+    )
+
+    assert description == (
+        "Requisitos: Java Spring Boot"
+    )
+
+
+def test_description_boundary_excludes_footer():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<div itemprop=\"description\">"
+                "<p>Role-specific responsibilities.</p>"
+                "</div>"
+                "<footer>Privacy / navigation / "
+                "corporate text</footer>"
+            )
+        )
+    )
+
+    assert description == (
+        "Role-specific responsibilities."
+    )
+    assert "Privacy" not in description
+
+
+def test_missing_description_container_is_safe():
+    description = _fetch_single_description(
+        _detail_html_with_description(
+            (
+                "<main>Role text without recognized "
+                "description container.</main>"
+                "<footer>Privacy / navigation / "
+                "corporate text</footer>"
+            )
+        )
+    )
+
+    assert description is None
 
 
 def test_direct_edenor_style_listing_parsing():
@@ -833,6 +934,48 @@ def _search_html(
         f"data-per-page=\"{per_page}\" "
         f"data-record-returned=\"{records}\">"
         f"{tiles}</ul></html>"
+    )
+
+
+def _fetch_single_description(
+    detail_html: str,
+) -> str | None:
+    fetch = _fetch(
+        board_url="https://example.jobs/",
+        responses={
+            "https://example.jobs/": (
+                200,
+                _board_html(),
+            ),
+            (
+                "https://example.jobs/search/"
+                "?createNewAlert=false"
+            ): (
+                200,
+                _search_html(
+                    total=1,
+                    links=[("1", "Uno", "AR")],
+                ),
+            ),
+            "https://example.jobs/job/Uno/1/": (
+                200,
+                detail_html,
+            ),
+        },
+    )
+    assert fetch.snapshot_complete is True
+    return fetch.jobs[0].description
+
+
+def _detail_html_with_description(
+    description_html: str,
+) -> str:
+    return (
+        "<html><div class=\"jobDisplayShell\" "
+        "itemscope itemtype=\"http://schema.org/JobPosting\">"
+        "<h1><span itemprop=\"title\">Uno</span></h1>"
+        f"{description_html}"
+        "</div></html>"
     )
 
 

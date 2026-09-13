@@ -28,6 +28,27 @@ EMPTY_BOARD_MARKERS = (
     "no hay resultados",
     "0 puestos",
 )
+_VOID_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
+_IGNORED_TEXT_TAGS = {
+    "script",
+    "style",
+    "noscript",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +151,88 @@ class _ReferenceParser(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         if self._href is None:
+            return
+
+        text = " ".join(data.split())
+        if text:
+            self._text.append(text)
+
+
+class _JobDescriptionParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.description: str | None = None
+        self._capturing = False
+        self._depth = 0
+        self._skip_depth = 0
+        self._text: list[str] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        normalized = tag.casefold()
+        attributes = {
+            key.casefold(): value
+            for key, value in attrs
+            if value is not None
+        }
+
+        if self.description is not None:
+            return
+
+        if self._capturing:
+            if normalized not in _VOID_TAGS:
+                self._depth += 1
+            if normalized in _IGNORED_TEXT_TAGS:
+                self._skip_depth += 1
+            return
+
+        if not _is_description_container(attributes):
+            return
+
+        self._capturing = True
+        self._depth = (
+            0
+            if normalized in _VOID_TAGS
+            else 1
+        )
+        if normalized in _IGNORED_TEXT_TAGS:
+            self._skip_depth = 1
+
+    def handle_endtag(
+        self,
+        tag: str,
+    ) -> None:
+        if not self._capturing:
+            return
+
+        normalized = tag.casefold()
+        if (
+            self._skip_depth > 0
+            and normalized in _IGNORED_TEXT_TAGS
+        ):
+            self._skip_depth -= 1
+
+        self._depth -= 1
+        if self._depth > 0:
+            return
+
+        self._capturing = False
+        value = " ".join(
+            " ".join(self._text).split()
+        )
+        self.description = value or None
+
+    def handle_data(
+        self,
+        data: str,
+    ) -> None:
+        if (
+            not self._capturing
+            or self._skip_depth > 0
+        ):
             return
 
         text = " ".join(data.split())
@@ -1133,22 +1236,24 @@ def _h1_text(html: str) -> str | None:
 def _description_from_html(
     html: str,
 ) -> str | None:
-    for pattern in (
-        r'<span[^>]+class=["\'][^"\']*jobdescription[^"\']*["\'][^>]*>([\s\S]*?)</span>',
-        r'itemprop=["\']description["\'][^>]*>([\s\S]*?)</span>',
-    ):
-        match = re.search(
-            pattern,
-            html,
-            re.IGNORECASE,
-        )
-        if match:
-            value = _strip_html(
-                match.group(1)
-            )
-            if value:
-                return value
-    return None
+    parser = _JobDescriptionParser()
+    parser.feed(html)
+    parser.close()
+    return parser.description
+
+
+def _is_description_container(
+    attributes: dict[str, str],
+) -> bool:
+    class_value = attributes.get("class", "")
+    if "jobdescription" in class_value.casefold():
+        return True
+
+    itemprop = attributes.get("itemprop", "")
+    return "description" in {
+        value.casefold()
+        for value in itemprop.split()
+    }
 
 
 def _location_from_meta(
