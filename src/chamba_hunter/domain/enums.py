@@ -47,6 +47,13 @@ BROAD_JOB_SOURCE_TYPES = frozenset(
     }
 )
 
+JOB_LEAD_SOURCE_TYPES = frozenset(
+    {
+        *BROAD_JOB_SOURCE_TYPES,
+        SourceType.YC,
+    }
+)
+
 
 class AtsProvider(StrEnum):
     GREENHOUSE = "GREENHOUSE"

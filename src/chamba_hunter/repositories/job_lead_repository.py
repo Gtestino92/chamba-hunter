@@ -8,7 +8,7 @@ from chamba_hunter.db.converters import (
     json_to_db,
 )
 from chamba_hunter.domain.enums import (
-    BROAD_JOB_SOURCE_TYPES,
+    JOB_LEAD_SOURCE_TYPES,
     SourceType,
 )
 from chamba_hunter.domain.job_content import (
@@ -37,16 +37,16 @@ class JobLeadRepository:
         jobs: list[JobLead],
         seen_at: datetime,
     ) -> JobLeadUpsertCounts:
-        if source_type not in BROAD_JOB_SOURCE_TYPES:
+        if source_type not in JOB_LEAD_SOURCE_TYPES:
             accepted = ", ".join(
                 sorted(
                     source.value
-                    for source in BROAD_JOB_SOURCE_TYPES
+                    for source in JOB_LEAD_SOURCE_TYPES
                 )
             )
             raise ValueError(
-                "Broad job acquisition only "
-                "accepts configured broad sources: "
+                "Job lead acquisition only "
+                "accepts configured lead sources: "
                 f"{accepted}."
             )
 
