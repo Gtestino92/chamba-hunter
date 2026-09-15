@@ -63,9 +63,21 @@ class JoobleFetchedJob:
 
 
 @dataclass(frozen=True, slots=True)
+class JoobleQueryCoverage:
+    query: str
+    pages_fetched: int
+    jobs_fetched: int
+    total_count: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class JoobleJobsFetch:
     requests_made: int
     jobs: list[JoobleFetchedJob]
+    query_coverages: tuple[
+        JoobleQueryCoverage,
+        ...
+    ]
 
 
 class JoobleJobsClient:
@@ -126,6 +138,9 @@ class JoobleJobsClient:
             list[str],
         ] = {}
         order: list[str] = []
+        query_coverages: list[
+            JoobleQueryCoverage
+        ] = []
 
         with httpx.Client(
             timeout=self.timeout_seconds,
@@ -137,6 +152,10 @@ class JoobleJobsClient:
             },
         ) as client:
             for query in JOOBLE_QUERIES:
+                pages_fetched = 0
+                jobs_fetched = 0
+                total_count: int | None = None
+
                 for page in range(
                     1,
                     max_pages_per_query + 1,
@@ -186,6 +205,16 @@ class JoobleJobsClient:
                         )
                     )
 
+                    pages_fetched += 1
+                    jobs_fetched += len(
+                        payload.jobs
+                    )
+
+                    if payload.total_count is not None:
+                        total_count = (
+                            payload.total_count
+                        )
+
                     for posting in payload.jobs:
                         external_id = str(
                             posting.id
@@ -222,6 +251,19 @@ class JoobleJobsClient:
                     ):
                         break
 
+                query_coverages.append(
+                    JoobleQueryCoverage(
+                        query=query,
+                        pages_fetched=(
+                            pages_fetched
+                        ),
+                        jobs_fetched=(
+                            jobs_fetched
+                        ),
+                        total_count=total_count,
+                    )
+                )
+
         jobs = [
             JoobleFetchedJob(
                 posting=postings_by_id[external_id],
@@ -235,4 +277,7 @@ class JoobleJobsClient:
         return JoobleJobsFetch(
             requests_made=requests_made,
             jobs=jobs,
+            query_coverages=tuple(
+                query_coverages
+            ),
         )

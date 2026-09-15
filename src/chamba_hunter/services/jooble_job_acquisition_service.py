@@ -34,6 +34,7 @@ from chamba_hunter.services.company_import_service import (
 from chamba_hunter.sources.jooble_jobs import (
     JoobleFetchedJob,
     JoobleJobsClient,
+    JoobleQueryCoverage,
 )
 
 
@@ -41,6 +42,10 @@ from chamba_hunter.sources.jooble_jobs import (
 class JoobleAcquisitionSummary:
     run_id: int
     requests_made: int
+    query_coverages: tuple[
+        JoobleQueryCoverage,
+        ...
+    ]
     received: int
     normalized: int
     skipped: int
@@ -123,6 +128,22 @@ class JoobleJobAcquisitionService:
                 items_failed=0,
                 items_skipped=0,
                 metadata={
+                    "query_coverages": [
+                        {
+                            "query": coverage.query,
+                            "pages_fetched": (
+                                coverage.pages_fetched
+                            ),
+                            "jobs_fetched": (
+                                coverage.jobs_fetched
+                            ),
+                            "total_count": (
+                                coverage.total_count
+                            ),
+                        }
+                        for coverage
+                        in summary.query_coverages
+                    ],
                     "requests_made": (
                         summary.requests_made
                     ),
@@ -298,6 +319,9 @@ class JoobleJobAcquisitionService:
             run_id=run_id,
             requests_made=(
                 fetch.requests_made
+            ),
+            query_coverages=(
+                fetch.query_coverages
             ),
             received=len(
                 fetch.jobs

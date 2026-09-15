@@ -53,6 +53,7 @@ from chamba_hunter.services.public_job_acquisition_service import (
     PublicJobAcquisitionService,
 )
 from chamba_hunter.sources.getonboard_jobs import (
+    PER_PAGE as GETONBOARD_PER_PAGE,
     GetOnBoardJobsClient,
 )
 from chamba_hunter.sources.himalayas_incremental_jobs import (
@@ -62,6 +63,7 @@ from chamba_hunter.sources.jobicy_jobs import (
     JobicyJobsClient,
 )
 from chamba_hunter.sources.jooble_jobs import (
+    JOOBLE_RESULTS_PER_PAGE,
     JoobleJobsClient,
 )
 from chamba_hunter.sources.weworkremotely_jobs import (
@@ -226,6 +228,78 @@ def _print_outcome(
             f"{outcome.error_type}: "
             f"{outcome.error_message}"
         )
+
+    print()
+
+
+def getonboard_coverage_warning(
+    *,
+    pages_fetched: int,
+    final_page_size: int,
+    max_pages: int,
+) -> str | None:
+    if (
+        pages_fetched == max_pages
+        and final_page_size
+        >= GETONBOARD_PER_PAGE
+    ):
+        return (
+            "GetOnBoard coverage warning: "
+            "configured page limit reached"
+        )
+
+    return None
+
+
+def jooble_coverage_warnings(
+    *,
+    query_coverages,
+    max_pages_per_query: int,
+) -> list[str]:
+    warnings: list[str] = []
+
+    for coverage in query_coverages:
+        total_count = (
+            coverage.total_count
+        )
+
+        if total_count is None:
+            continue
+
+        configured_limit_count = (
+            max_pages_per_query
+            * JOOBLE_RESULTS_PER_PAGE
+        )
+
+        if (
+            coverage.pages_fetched
+            >= max_pages_per_query
+            and coverage.jobs_fetched
+            < total_count
+            and configured_limit_count
+            < total_count
+        ):
+            warnings.append(
+                f"{coverage.query}: fetched "
+                f"{coverage.jobs_fetched} of "
+                f"{total_count} available"
+            )
+
+    return warnings
+
+
+def _print_coverage_warnings(
+    *,
+    heading: str,
+    warnings: list[str],
+) -> None:
+    if not warnings:
+        return
+
+    print(heading)
+
+    for warning in warnings:
+        print(warning)
 
     print()
 
@@ -534,6 +608,12 @@ def main() -> None:
                         args
                         .getonboard_max_pages
                     ),
+                    "pages_fetched": (
+                        summary.pages_fetched
+                    ),
+                    "final_page_size": (
+                        summary.final_page_size
+                    ),
                     "received": (
                         summary.received
                     ),
@@ -588,6 +668,26 @@ def main() -> None:
         _print_outcome(
             outcome
         )
+
+        if (
+            outcome.status
+            == RunStatus.SUCCESS
+        ):
+            warning = getonboard_coverage_warning(
+                pages_fetched=(
+                    summary.pages_fetched
+                ),
+                final_page_size=(
+                    summary.final_page_size
+                ),
+                max_pages=(
+                    args.getonboard_max_pages
+                ),
+            )
+
+            if warning:
+                print(warning)
+                print()
 
     if (
         args.jobicy_max_jobs > 0
@@ -842,6 +942,22 @@ def main() -> None:
                         args
                         .jooble_max_pages_per_query
                     ),
+                    "query_coverages": [
+                        {
+                            "query": coverage.query,
+                            "pages_fetched": (
+                                coverage.pages_fetched
+                            ),
+                            "jobs_fetched": (
+                                coverage.jobs_fetched
+                            ),
+                            "total_count": (
+                                coverage.total_count
+                            ),
+                        }
+                        for coverage
+                        in summary.query_coverages
+                    ],
                     "requests_made": (
                         summary.requests_made
                     ),
@@ -895,6 +1011,27 @@ def main() -> None:
         _print_outcome(
             outcome
         )
+
+        if (
+            outcome.status
+            == RunStatus.SUCCESS
+        ):
+            _print_coverage_warnings(
+                heading=(
+                    "Jooble coverage warning:"
+                ),
+                warnings=(
+                    jooble_coverage_warnings(
+                        query_coverages=(
+                            summary.query_coverages
+                        ),
+                        max_pages_per_query=(
+                            args
+                            .jooble_max_pages_per_query
+                        ),
+                    )
+                ),
+            )
 
     succeeded = sum(
         1

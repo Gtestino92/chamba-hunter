@@ -87,6 +87,12 @@ Without `--apply`, it previews acquisition changes only; pending migrations may 
 
 New acquisition features should initially be executable independently. Avoid automatically adding expensive or exploratory ingestion to the daily full refresh until its cost and value have been measured.
 
+## Live Refresh And Search Safety
+
+- Do not run `refresh_search --apply`, `refresh_search --apply --deep`, broad source acquisition, ATS discovery, or any other live job-search/acquisition command unless the user explicitly confirms that live searching is allowed in that turn.
+- Prefer plan-only commands such as `python -m chamba_hunter.commands.refresh_search` and `python -m chamba_hunter.commands.refresh_search --deep` for validation unless live mutation is explicitly approved.
+- If a live refresh/search command is accidentally started or interrupted, stop work immediately, verify no process is still running, and report any partial execution that may have occurred.
+
 ## Development Conventions
 
 - Keep source/provider parsing isolated in `sources/`; keep business workflow in `services/`; keep CLI wiring in `commands/`.

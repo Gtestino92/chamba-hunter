@@ -199,25 +199,52 @@ class JobShortlistReportRepository:
 
             if generalized_identity:
                 application_cte = """
-                    WITH ranked_applications AS (
+                    WITH application_aliases AS (
                         SELECT
                             applications.*,
                             applications.record_kind
                                 AS tracking_record_kind,
                             applications.record_id
-                                AS tracking_record_id,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY
-                                    applications.record_kind,
-                                    applications.record_id
-                                ORDER BY
-                                    applications.updated_at DESC,
-                                    applications.id DESC
-                            ) AS tracking_rank
+                                AS tracking_record_id
                         FROM applications
                         WHERE applications.application_type = 'JOB'
                           AND applications.record_kind IS NOT NULL
                           AND applications.record_id IS NOT NULL
+
+                        UNION ALL
+
+                        SELECT
+                            applications.*,
+                            'ATS' AS tracking_record_kind,
+                            job_leads.canonical_job_id
+                                AS tracking_record_id
+                        FROM applications
+                        JOIN job_leads
+                          ON job_leads.id =
+                             applications.record_id
+                        WHERE applications.application_type = 'JOB'
+                          AND applications.record_kind = 'LEAD'
+                          AND applications.record_id IS NOT NULL
+                          AND job_leads.canonical_job_id
+                              IS NOT NULL
+                    ),
+                    ranked_applications AS (
+                        SELECT
+                            application_aliases.*,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY
+                                    tracking_record_kind,
+                                    tracking_record_id
+                                ORDER BY
+                                    CASE
+                                        WHEN applied_at IS NOT NULL
+                                        THEN 0
+                                        ELSE 1
+                                    END,
+                                    updated_at DESC,
+                                    id DESC
+                            ) AS tracking_rank
+                        FROM application_aliases
                     )
                 """
             else:

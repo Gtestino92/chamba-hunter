@@ -12,6 +12,49 @@ class RefreshStep:
     arguments: tuple[str, ...] = ()
 
 
+ROUTINE_DISCOVER_KNOWN_ATS_LIMIT = 25
+DEEP_DISCOVER_KNOWN_ATS_LIMIT = 250
+
+ROUTINE_DISCOVER_BROAD_ATS_LIMIT = 10
+DEEP_DISCOVER_BROAD_ATS_LIMIT = 100
+
+ROUTINE_HIMALAYAS_BACKFILL_DAYS = 30
+DEEP_HIMALAYAS_BACKFILL_DAYS = 30
+
+ROUTINE_HIMALAYAS_OVERLAP_HOURS = 48
+DEEP_HIMALAYAS_OVERLAP_HOURS = 720
+
+ROUTINE_GETONBOARD_MAX_PAGES = 5
+DEEP_GETONBOARD_MAX_PAGES = 25
+
+ROUTINE_JOBICY_MAX_JOBS = 100
+DEEP_JOBICY_MAX_JOBS = 100
+
+ROUTINE_WWR_MAX_JOBS = 300
+DEEP_WWR_MAX_JOBS = 1000
+
+ROUTINE_JOOBLE_MAX_PAGES_PER_QUERY = 2
+DEEP_JOOBLE_MAX_PAGES_PER_QUERY = 10
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshSettings:
+    search_depth: str
+
+    discover_known_ats_limit: int
+    discover_broad_ats_limit: int
+
+    himalayas_backfill_days: int
+    himalayas_overlap_hours: int
+
+    getonboard_max_pages: int
+    jobicy_max_jobs: int
+    wwr_max_jobs: int
+    jooble_max_pages_per_query: int
+
+    discover_broad_include_scanned: bool
+
+
 ATS_SYNC_MODULES = (
     "sync_greenhouse_jobs",
     "sync_lever_jobs",
@@ -41,6 +84,7 @@ def build_plan(
     wwr_max_jobs: int,
     jooble_max_pages_per_query: int,
     output: Path,
+    discover_broad_include_scanned: bool = False,
 ) -> list[RefreshStep]:
     steps: list[
         RefreshStep
@@ -113,6 +157,18 @@ def build_plan(
         )
 
     if discover_broad_ats_limit > 0:
+        broad_ats_arguments = [
+            "--limit",
+            str(
+                discover_broad_ats_limit
+            ),
+        ]
+
+        if discover_broad_include_scanned:
+            broad_ats_arguments.append(
+                "--include-scanned"
+            )
+
         steps.append(
             RefreshStep(
                 name=(
@@ -120,11 +176,8 @@ def build_plan(
                     "companies"
                 ),
                 module="discover_broad_ats",
-                arguments=(
-                    "--limit",
-                    str(
-                        discover_broad_ats_limit
-                    ),
+                arguments=tuple(
+                    broad_ats_arguments
                 ),
             )
         )
@@ -247,6 +300,101 @@ def build_plan(
     return steps
 
 
+def resolve_settings(
+    *,
+    deep: bool,
+    discover_known_ats_limit: int | None,
+    discover_broad_ats_limit: int | None,
+    himalayas_backfill_days: int | None,
+    himalayas_overlap_hours: int | None,
+    getonboard_max_pages: int | None,
+    jobicy_max_jobs: int | None,
+    wwr_max_jobs: int | None,
+    jooble_max_pages_per_query: int | None,
+) -> RefreshSettings:
+    return RefreshSettings(
+        search_depth=(
+            "DEEP"
+            if deep
+            else "ROUTINE"
+        ),
+        discover_known_ats_limit=(
+            discover_known_ats_limit
+            if discover_known_ats_limit is not None
+            else (
+                DEEP_DISCOVER_KNOWN_ATS_LIMIT
+                if deep
+                else ROUTINE_DISCOVER_KNOWN_ATS_LIMIT
+            )
+        ),
+        discover_broad_ats_limit=(
+            discover_broad_ats_limit
+            if discover_broad_ats_limit is not None
+            else (
+                DEEP_DISCOVER_BROAD_ATS_LIMIT
+                if deep
+                else ROUTINE_DISCOVER_BROAD_ATS_LIMIT
+            )
+        ),
+        himalayas_backfill_days=(
+            himalayas_backfill_days
+            if himalayas_backfill_days is not None
+            else (
+                DEEP_HIMALAYAS_BACKFILL_DAYS
+                if deep
+                else ROUTINE_HIMALAYAS_BACKFILL_DAYS
+            )
+        ),
+        himalayas_overlap_hours=(
+            himalayas_overlap_hours
+            if himalayas_overlap_hours is not None
+            else (
+                DEEP_HIMALAYAS_OVERLAP_HOURS
+                if deep
+                else ROUTINE_HIMALAYAS_OVERLAP_HOURS
+            )
+        ),
+        getonboard_max_pages=(
+            getonboard_max_pages
+            if getonboard_max_pages is not None
+            else (
+                DEEP_GETONBOARD_MAX_PAGES
+                if deep
+                else ROUTINE_GETONBOARD_MAX_PAGES
+            )
+        ),
+        jobicy_max_jobs=(
+            jobicy_max_jobs
+            if jobicy_max_jobs is not None
+            else (
+                DEEP_JOBICY_MAX_JOBS
+                if deep
+                else ROUTINE_JOBICY_MAX_JOBS
+            )
+        ),
+        wwr_max_jobs=(
+            wwr_max_jobs
+            if wwr_max_jobs is not None
+            else (
+                DEEP_WWR_MAX_JOBS
+                if deep
+                else ROUTINE_WWR_MAX_JOBS
+            )
+        ),
+        jooble_max_pages_per_query=(
+            jooble_max_pages_per_query
+            if jooble_max_pages_per_query
+            is not None
+            else (
+                DEEP_JOOBLE_MAX_PAGES_PER_QUERY
+                if deep
+                else ROUTINE_JOOBLE_MAX_PAGES_PER_QUERY
+            )
+        ),
+        discover_broad_include_scanned=deep,
+    )
+
+
 def _command(
     step: RefreshStep,
 ) -> list[str]:
@@ -288,6 +436,15 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--deep",
+        action="store_true",
+        help=(
+            "Use bounded deeper search defaults "
+            "for catch-up/recovery scans."
+        ),
+    )
+
+    parser.add_argument(
         "--skip-broad",
         action="store_true",
         help=(
@@ -324,24 +481,26 @@ def main() -> None:
     parser.add_argument(
         "--discover-known-ats-limit",
         type=int,
-        default=25,
+        default=None,
         help=(
             "Scan up to N known companies without "
             "an active ATS before ATS sync. "
             "Never-scanned and least-recently-"
             "scanned companies are prioritized. "
-            "Defaults to 25; use 0 to disable."
+            "Defaults to 25 in routine mode, "
+            "250 in deep mode; use 0 to disable."
         ),
     )
 
     parser.add_argument(
         "--discover-broad-ats-limit",
         type=int,
-        default=10,
+        default=None,
         help=(
             "Additionally run careers/ATS discovery "
             "for up to N broad-source companies "
-            "before ATS sync. Defaults to 10; "
+            "before ATS sync. Defaults to 10 "
+            "in routine mode, 100 in deep mode; "
             "use 0 to disable."
         ),
     )
@@ -349,7 +508,7 @@ def main() -> None:
     parser.add_argument(
         "--himalayas-backfill-days",
         type=int,
-        default=30,
+        default=None,
         help=(
             "Maximum Himalayas historical window. "
             "Defaults to 30 days."
@@ -359,36 +518,37 @@ def main() -> None:
     parser.add_argument(
         "--himalayas-overlap-hours",
         type=int,
-        default=48,
+        default=None,
         help=(
             "Himalayas overlap before the previous "
             "successful source start. "
-            "Defaults to 48 hours."
+            "Defaults to 48 hours in routine "
+            "mode, 720 in deep mode."
         ),
     )
 
     parser.add_argument(
         "--getonboard-max-pages",
         type=int,
-        default=5,
+        default=None,
     )
 
     parser.add_argument(
         "--jobicy-max-jobs",
         type=int,
-        default=100,
+        default=None,
     )
 
     parser.add_argument(
         "--wwr-max-jobs",
         type=int,
-        default=300,
+        default=None,
     )
 
     parser.add_argument(
         "--jooble-max-pages-per-query",
         type=int,
-        default=2,
+        default=None,
     )
 
     parser.add_argument(
@@ -401,8 +561,32 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    settings = resolve_settings(
+        deep=args.deep,
+        discover_known_ats_limit=(
+            args.discover_known_ats_limit
+        ),
+        discover_broad_ats_limit=(
+            args.discover_broad_ats_limit
+        ),
+        himalayas_backfill_days=(
+            args.himalayas_backfill_days
+        ),
+        himalayas_overlap_hours=(
+            args.himalayas_overlap_hours
+        ),
+        getonboard_max_pages=(
+            args.getonboard_max_pages
+        ),
+        jobicy_max_jobs=args.jobicy_max_jobs,
+        wwr_max_jobs=args.wwr_max_jobs,
+        jooble_max_pages_per_query=(
+            args.jooble_max_pages_per_query
+        ),
+    )
+
     if (
-        args.discover_known_ats_limit
+        settings.discover_known_ats_limit
         < 0
     ):
         parser.error(
@@ -411,7 +595,7 @@ def main() -> None:
         )
 
     if (
-        args.discover_broad_ats_limit
+        settings.discover_broad_ats_limit
         < 0
     ):
         parser.error(
@@ -419,41 +603,41 @@ def main() -> None:
             "cannot be negative"
         )
 
-    if args.himalayas_backfill_days < 1:
+    if settings.himalayas_backfill_days < 1:
         parser.error(
             "--himalayas-backfill-days "
             "must be at least 1"
         )
 
-    if args.himalayas_overlap_hours < 0:
+    if settings.himalayas_overlap_hours < 0:
         parser.error(
             "--himalayas-overlap-hours "
             "cannot be negative"
         )
 
-    if args.getonboard_max_pages < 0:
+    if settings.getonboard_max_pages < 0:
         parser.error(
             "--getonboard-max-pages "
             "cannot be negative"
         )
 
     if (
-        args.jobicy_max_jobs < 0
-        or args.jobicy_max_jobs > 100
+        settings.jobicy_max_jobs < 0
+        or settings.jobicy_max_jobs > 100
     ):
         parser.error(
             "--jobicy-max-jobs must "
             "be between 0 and 100"
         )
 
-    if args.wwr_max_jobs < 0:
+    if settings.wwr_max_jobs < 0:
         parser.error(
             "--wwr-max-jobs cannot "
             "be negative"
         )
 
     if (
-        args.jooble_max_pages_per_query
+        settings.jooble_max_pages_per_query
         < 0
     ):
         parser.error(
@@ -464,11 +648,11 @@ def main() -> None:
     if (
         not args.skip_broad
         and args.skip_himalayas
-        and args.getonboard_max_pages == 0
-        and args.jobicy_max_jobs == 0
-        and args.wwr_max_jobs == 0
+        and settings.getonboard_max_pages == 0
+        and settings.jobicy_max_jobs == 0
+        and settings.wwr_max_jobs == 0
         and (
-            args.jooble_max_pages_per_query
+            settings.jooble_max_pages_per_query
             == 0
         )
     ):
@@ -486,28 +670,32 @@ def main() -> None:
         skip_ats=args.skip_ats,
         skip_export=args.skip_export,
         discover_known_ats_limit=(
-            args.discover_known_ats_limit
+            settings.discover_known_ats_limit
         ),
         discover_broad_ats_limit=(
-            args.discover_broad_ats_limit
+            settings.discover_broad_ats_limit
         ),
         himalayas_backfill_days=(
-            args.himalayas_backfill_days
+            settings.himalayas_backfill_days
         ),
         himalayas_overlap_hours=(
-            args.himalayas_overlap_hours
+            settings.himalayas_overlap_hours
         ),
         getonboard_max_pages=(
-            args.getonboard_max_pages
+            settings.getonboard_max_pages
         ),
         jobicy_max_jobs=(
-            args.jobicy_max_jobs
+            settings.jobicy_max_jobs
         ),
         wwr_max_jobs=(
-            args.wwr_max_jobs
+            settings.wwr_max_jobs
         ),
         jooble_max_pages_per_query=(
-            args.jooble_max_pages_per_query
+            settings.jooble_max_pages_per_query
+        ),
+        discover_broad_include_scanned=(
+            settings
+            .discover_broad_include_scanned
         ),
         output=args.output,
     )
@@ -525,6 +713,10 @@ def main() -> None:
             if args.apply
             else "PLAN ONLY"
         ),
+    )
+    print(
+        "Search depth:",
+        settings.search_depth,
     )
     print(
         "Steps:",

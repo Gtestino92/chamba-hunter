@@ -53,6 +53,9 @@ SOURCE_TYPE = SourceType.GETONBOARD
 class GetOnBoardAcquisitionSummary:
     run_id: int
 
+    pages_fetched: int
+    final_page_size: int
+
     received: int
     normalized: int
     skipped: int
@@ -155,6 +158,12 @@ class GetOnBoardJobAcquisitionService:
                 items_failed=0,
                 items_skipped=0,
                 metadata={
+                    "pages_fetched": (
+                        summary.pages_fetched
+                    ),
+                    "final_page_size": (
+                        summary.final_page_size
+                    ),
                     "received": (
                         summary.received
                     ),
@@ -369,6 +378,12 @@ class GetOnBoardJobAcquisitionService:
 
         return GetOnBoardAcquisitionSummary(
             run_id=run_id,
+            pages_fetched=(
+                fetch.pages_fetched
+            ),
+            final_page_size=(
+                fetch.final_page_size
+            ),
             received=len(
                 fetch.jobs
             ),

@@ -30,6 +30,7 @@ class GetOnBoardJobEnrichment:
 @dataclass(frozen=True, slots=True)
 class GetOnBoardJobsFetch:
     pages_fetched: int
+    final_page_size: int
     jobs: list[GetOnBoardJobResource]
     enrichments: dict[
         str,
@@ -178,6 +179,7 @@ class GetOnBoardJobsClient:
 
         seen_ids: set[str] = set()
         pages_fetched = 0
+        final_page_size = 0
 
         with httpx.Client(
             timeout=self.timeout_seconds,
@@ -228,6 +230,7 @@ class GetOnBoardJobsClient:
                 )
 
                 if not payload.data:
+                    final_page_size = 0
                     break
 
                 for job in payload.data:
@@ -258,6 +261,9 @@ class GetOnBoardJobsClient:
                 jobs.extend(
                     payload.data
                 )
+                final_page_size = len(
+                    payload.data
+                )
 
                 if (
                     len(payload.data)
@@ -274,6 +280,7 @@ class GetOnBoardJobsClient:
 
         return GetOnBoardJobsFetch(
             pages_fetched=pages_fetched,
+            final_page_size=final_page_size,
             jobs=jobs,
             enrichments=enrichments,
         )

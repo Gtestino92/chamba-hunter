@@ -6,6 +6,16 @@
 python -m chamba_hunter.commands.refresh_search --apply
 ```
 
+Uso recomendado:
+
+```powershell
+# uso diario normal
+python -m chamba_hunter.commands.refresh_search --apply
+
+# bÃºsqueda mÃ¡s profunda de catch-up/recuperaciÃ³n
+python -m chamba_hunter.commands.refresh_search --apply --deep
+```
+
 Hace, en orden:
 
 - adquisición de ofertas
