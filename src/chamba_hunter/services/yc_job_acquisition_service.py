@@ -71,6 +71,15 @@ class YcJobAcquisitionSummary:
     jobs_created: int = 0
     jobs_updated: int = 0
 
+    requested_slugs: tuple[
+        str,
+        ...
+    ] = ()
+    missing_slugs: tuple[
+        str,
+        ...
+    ] = ()
+
     results: list[
         YcCompanyJobsResult
     ] = field(default_factory=list)
@@ -111,6 +120,7 @@ class YcJobAcquisitionService:
         *,
         limit: int | None = None,
         include_not_hiring: bool = False,
+        slugs: tuple[str, ...] = (),
     ) -> YcJobAcquisitionSummary:
         if limit is not None and limit < 1:
             raise ValueError(
@@ -118,8 +128,12 @@ class YcJobAcquisitionService:
             )
 
         started_at = utc_now()
-        sources = self._target_sources(
+        requested_slugs = _normalize_requested_slugs(
+            slugs
+        )
+        sources, missing_slugs = self._target_sources(
             limit=limit,
+            requested_slugs=requested_slugs,
         )
 
         run = self.tracing_repository.add_run(
@@ -155,6 +169,8 @@ class YcJobAcquisitionService:
             run_id=run.id,
             started_at=started_at,
             companies_considered=len(sources),
+            requested_slugs=requested_slugs,
+            missing_slugs=missing_slugs,
         )
 
         seen_at = utc_now()
@@ -167,7 +183,8 @@ class YcJobAcquisitionService:
                 continue
 
             if (
-                not include_not_hiring
+                not requested_slugs
+                and not include_not_hiring
                 and _is_explicitly_not_hiring(
                     source
                 )
@@ -232,7 +249,11 @@ class YcJobAcquisitionService:
         self,
         *,
         limit: int | None,
-    ) -> list[CompanySource]:
+        requested_slugs: tuple[str, ...],
+    ) -> tuple[
+        list[CompanySource],
+        tuple[str, ...],
+    ]:
         sources = (
             self.company_source_repository
             .list_active_by_source_type(
@@ -246,10 +267,51 @@ class YcJobAcquisitionService:
             if _source_slug(source) is not None
         ]
 
+        missing_slugs: tuple[
+            str,
+            ...
+        ] = ()
+
+        if requested_slugs:
+            requested_keys = {
+                _slug_key(slug)
+                for slug in requested_slugs
+            }
+            found_keys: set[str] = set()
+
+            filtered: list[
+                CompanySource
+            ] = []
+
+            for source in usable:
+                slug = _source_slug(source)
+
+                if slug is None:
+                    continue
+
+                key = _slug_key(slug)
+
+                if key not in requested_keys:
+                    continue
+
+                found_keys.add(key)
+                filtered.append(source)
+
+            missing_slugs = tuple(
+                slug
+                for slug in requested_slugs
+                if _slug_key(slug)
+                not in found_keys
+            )
+            usable = filtered
+
         return (
-            usable[:limit]
-            if limit is not None
-            else usable
+            (
+                usable[:limit]
+                if limit is not None
+                else usable
+            ),
+            missing_slugs,
         )
 
     def _process_company(
@@ -411,6 +473,35 @@ def _source_slug(
     return cleaned or None
 
 
+def _normalize_requested_slugs(
+    slugs: tuple[str, ...],
+) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+
+    for slug in slugs:
+        cleaned = slug.strip()
+
+        if not cleaned:
+            continue
+
+        key = _slug_key(cleaned)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        normalized.append(cleaned)
+
+    return tuple(normalized)
+
+
+def _slug_key(
+    slug: str,
+) -> str:
+    return slug.strip().casefold()
+
+
 def _is_explicitly_not_hiring(
     source: CompanySource,
 ) -> bool:
@@ -443,6 +534,12 @@ def _summary_status(
 def _should_record_success(
     summary: YcJobAcquisitionSummary,
 ) -> bool:
+    if (
+        summary.requested_slugs
+        and summary.companies_considered == 0
+    ):
+        return False
+
     if summary.companies_considered == 0:
         return True
 
@@ -471,6 +568,12 @@ def _summary_metadata(
         ),
         "companies_failed": (
             summary.companies_failed
+        ),
+        "requested_slugs": list(
+            summary.requested_slugs
+        ),
+        "missing_slugs": list(
+            summary.missing_slugs
         ),
         "job_links_discovered": (
             summary.job_links_discovered

@@ -425,6 +425,232 @@ def test_repository_validation_accepts_yc_and_rejects_unsupported(
         )
 
 
+def test_explicit_existing_slug_selects_that_company(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="alpha",
+    )
+    _import_yc_company(
+        database,
+        slug="wasmer",
+    )
+    client = _FakeYcJobsClient(
+        {
+            "wasmer": _empty_fetch(
+                "wasmer"
+            )
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(slugs=(" wasmer ",))
+
+    assert client.called_slugs == [
+        "wasmer"
+    ]
+    assert summary.requested_slugs == (
+        "wasmer",
+    )
+    assert summary.missing_slugs == ()
+    assert summary.companies_considered == 1
+    assert summary.companies_fetched == 1
+
+
+def test_repeated_slug_values_select_multiple_companies(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="wasmer",
+    )
+    _import_yc_company(
+        database,
+        slug="porter",
+    )
+    client = _FakeYcJobsClient(
+        {
+            "wasmer": _empty_fetch(
+                "wasmer"
+            ),
+            "porter": _empty_fetch(
+                "porter"
+            ),
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(slugs=("wasmer", "porter"))
+
+    assert client.called_slugs == [
+        "wasmer",
+        "porter",
+    ]
+    assert summary.companies_considered == 2
+    assert summary.companies_fetched == 2
+
+
+def test_duplicate_requested_slug_is_deduplicated(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="wasmer",
+    )
+    client = _FakeYcJobsClient(
+        {
+            "wasmer": _empty_fetch(
+                "wasmer"
+            )
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(
+        slugs=(
+            "Wasmer",
+            " wasmer ",
+            "WASMER",
+        )
+    )
+
+    assert client.called_slugs == [
+        "wasmer"
+    ]
+    assert summary.requested_slugs == (
+        "Wasmer",
+    )
+    assert summary.companies_considered == 1
+
+
+def test_slug_filtering_occurs_before_limit(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="alpha",
+    )
+    _import_yc_company(
+        database,
+        slug="porter",
+    )
+    client = _FakeYcJobsClient(
+        {
+            "porter": _empty_fetch(
+                "porter"
+            )
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(
+        slugs=("porter",),
+        limit=1,
+    )
+
+    assert client.called_slugs == [
+        "porter"
+    ]
+    assert summary.companies_considered == 1
+    assert summary.missing_slugs == ()
+
+
+def test_explicit_not_hiring_slug_is_still_fetched(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="wasmer",
+        is_hiring=False,
+    )
+    client = _FakeYcJobsClient(
+        {
+            "wasmer": _empty_fetch(
+                "wasmer"
+            )
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(slugs=("wasmer",))
+
+    assert client.called_slugs == [
+        "wasmer"
+    ]
+    assert summary.companies_skipped_not_hiring == 0
+    assert summary.companies_fetched == 1
+
+
+def test_untargeted_not_hiring_skip_behavior_is_preserved(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="wasmer",
+        is_hiring=False,
+    )
+    client = _FakeYcJobsClient({})
+
+    summary = _service(
+        database,
+        client,
+    ).run()
+
+    assert client.called_slugs == []
+    assert summary.companies_considered == 1
+    assert summary.companies_skipped_not_hiring == 1
+    assert summary.companies_fetched == 0
+
+
+def test_nonexistent_slug_does_not_fall_back_to_another_company(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="alpha",
+    )
+    client = _FakeYcJobsClient(
+        {
+            "alpha": _empty_fetch(
+                "alpha"
+            )
+        }
+    )
+
+    summary = _service(
+        database,
+        client,
+    ).run(slugs=("missing",))
+
+    assert client.called_slugs == []
+    assert summary.requested_slugs == (
+        "missing",
+    )
+    assert summary.missing_slugs == (
+        "missing",
+    )
+    assert summary.companies_considered == 0
+    assert summary.companies_fetched == 0
+
+
 def _database(tmp_path) -> Database:
     database = Database(
         tmp_path / "test.db"
@@ -523,6 +749,20 @@ def _posting(
     )
 
 
+def _empty_fetch(
+    slug: str,
+) -> YcCompanyJobsFetch:
+    return YcCompanyJobsFetch(
+        company_slug=slug,
+        listing_url=f"https://yc/{slug}/jobs",
+        job_links_discovered=0,
+        details_fetched=0,
+        detail_failures=0,
+        skipped_invalid=0,
+        jobs=(),
+    )
+
+
 def _job_lead_count(
     database: Database,
 ) -> int:
@@ -562,11 +802,15 @@ class _FakeYcJobsClient:
         fetches: dict[str, YcCompanyJobsFetch],
     ) -> None:
         self.fetches = fetches
+        self.called_slugs: list[str] = []
 
     def fetch_company_jobs(
         self,
         company_slug: str,
     ) -> YcCompanyJobsFetch:
+        self.called_slugs.append(
+            company_slug
+        )
         return self.fetches[
             company_slug
         ]

@@ -53,6 +53,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--slug",
+        action="append",
+        dest="slugs",
+        default=[],
+        help=(
+            "Existing YC company slug to fetch. "
+            "Repeat to target multiple companies."
+        ),
+    )
+    parser.add_argument(
         "--include-not-hiring",
         action="store_true",
         help=(
@@ -155,6 +165,14 @@ def main() -> None:
         )
     )
     print(
+        "Requested slugs:     "
+        + (
+            ", ".join(args.slugs)
+            if args.slugs
+            else "none"
+        )
+    )
+    print(
         "Include not hiring:  "
         f"{args.include_not_hiring}"
     )
@@ -173,7 +191,28 @@ def main() -> None:
         include_not_hiring=(
             args.include_not_hiring
         ),
+        slugs=tuple(args.slugs),
     )
+
+    if summary.missing_slugs:
+        print(
+            "Missing active YC slugs: "
+            + ", ".join(
+                summary.missing_slugs
+            )
+        )
+        print()
+
+    if (
+        summary.requested_slugs
+        and summary.companies_considered == 0
+    ):
+        print(
+            "No requested slugs matched active "
+            "YC company sources. No HTTP "
+            "requests were made."
+        )
+        print()
 
     for result in summary.results:
         print(
@@ -238,6 +277,26 @@ def main() -> None:
     print(
         f"Companies considered:    "
         f"{summary.companies_considered}"
+    )
+    print(
+        "Requested slugs:         "
+        + (
+            ", ".join(
+                summary.requested_slugs
+            )
+            if summary.requested_slugs
+            else "none"
+        )
+    )
+    print(
+        "Missing slugs:           "
+        + (
+            ", ".join(
+                summary.missing_slugs
+            )
+            if summary.missing_slugs
+            else "none"
+        )
     )
     print(
         f"Skipped not hiring:      "
