@@ -31,7 +31,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OPERATIONAL_PRIORITY_V4"
+RULE_VERSION = "OPERATIONAL_PRIORITY_V5"
 PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 MAX_ACTIONABLE_AGE_DAYS = 30
 
@@ -637,6 +637,31 @@ class JobOperationalPriorityService:
                 "first_seen_at": (
                     candidate.first_seen_at
                     .isoformat()
+                ),
+                "source_first_seen_at": (
+                    candidate.source_first_seen_at
+                    .isoformat()
+                ),
+                "canonical_first_seen_at": (
+                    candidate
+                    .canonical_first_seen_at
+                    .isoformat()
+                    if candidate
+                    .canonical_first_seen_at
+                    is not None
+                    else None
+                ),
+                "effective_first_seen_at": (
+                    candidate.first_seen_at
+                    .isoformat()
+                ),
+                "first_seen_inherited_from_canonical_lead": (
+                    candidate.canonical_first_seen_at
+                    is not None
+                    and candidate.first_seen_at
+                    == candidate.canonical_first_seen_at
+                    and candidate.source_first_seen_at
+                    != candidate.first_seen_at
                 ),
                 "last_seen_at": (
                     candidate.last_seen_at

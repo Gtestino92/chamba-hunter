@@ -35,6 +35,8 @@ class OperationalCandidateRow:
 
     published_at: datetime | None
     expires_at: datetime | None
+    source_first_seen_at: datetime
+    canonical_first_seen_at: datetime | None
     first_seen_at: datetime
     last_seen_at: datetime
     last_changed_at: datetime | None
@@ -230,6 +232,15 @@ class JobOperationalPriorityRepository:
         )
 
         current_sql = f"""
+            WITH canonical_lead_history AS (
+                SELECT
+                    canonical_job_id AS job_id,
+                    MIN(first_seen_at)
+                        AS canonical_first_seen_at
+                FROM job_leads
+                WHERE canonical_job_id IS NOT NULL
+                GROUP BY canonical_job_id
+            )
             SELECT
                 pm.record_kind,
                 pm.record_id,
@@ -281,7 +292,22 @@ class JobOperationalPriorityRepository:
                 ) AS public_contact,
                 jc.published_at,
                 jc.expires_at,
-                jc.first_seen_at,
+                jc.first_seen_at
+                    AS source_first_seen_at,
+                canonical_lead_history
+                    .canonical_first_seen_at,
+                CASE
+                    WHEN pm.record_kind = 'ATS'
+                     AND canonical_lead_history
+                         .canonical_first_seen_at
+                         IS NOT NULL
+                     AND canonical_lead_history
+                         .canonical_first_seen_at
+                         < jc.first_seen_at
+                        THEN canonical_lead_history
+                             .canonical_first_seen_at
+                    ELSE jc.first_seen_at
+                END AS first_seen_at,
                 jc.last_seen_at,
                 {last_changed_expression}
                     AS last_changed_at,
@@ -309,6 +335,10 @@ class JobOperationalPriorityRepository:
             LEFT JOIN job_leads
               ON pm.record_kind = 'LEAD'
              AND job_leads.id = pm.record_id
+            LEFT JOIN canonical_lead_history
+              ON pm.record_kind = 'ATS'
+             AND canonical_lead_history.job_id =
+                 pm.record_id
             {previous_join}
             WHERE pm.search_profile_id = ?
               AND jc.is_active = 1
@@ -440,6 +470,22 @@ class JobOperationalPriorityRepository:
             expires_at=_optional_datetime(
                 row["expires_at"]
             ),
+            source_first_seen_at=(
+                datetime_from_db(
+                    str(
+                        row[
+                            "source_first_seen_at"
+                        ]
+                    )
+                )
+            ),
+            canonical_first_seen_at=(
+                _optional_datetime(
+                    row[
+                        "canonical_first_seen_at"
+                    ]
+                )
+            ),
             first_seen_at=datetime_from_db(
                 str(row["first_seen_at"])
             ),
@@ -552,6 +598,8 @@ class JobOperationalPriorityRepository:
         first_seen_at = datetime_from_db(
             str(previous["first_seen_at"])
         )
+        source_first_seen_at = first_seen_at
+        canonical_first_seen_at = None
         last_seen_at = datetime_from_db(
             str(previous["last_seen_at"])
         )
@@ -569,6 +617,17 @@ class JobOperationalPriorityRepository:
                     jobs.apply_url,
                     jobs.published_at,
                     jobs.first_seen_at,
+                    (
+                        SELECT MIN(
+                            historical_leads
+                            .first_seen_at
+                        )
+                        FROM job_leads
+                            historical_leads
+                        WHERE historical_leads
+                            .canonical_job_id =
+                            jobs.id
+                    ) AS canonical_first_seen_at,
                     jobs.last_seen_at,
                     jobs.is_active,
                     jobs.last_changed_at
@@ -631,8 +690,25 @@ class JobOperationalPriorityRepository:
                 published_at = _optional_datetime(
                     row["published_at"]
                 )
-                first_seen_at = datetime_from_db(
+                source_first_seen_at = datetime_from_db(
                     str(row["first_seen_at"])
+                )
+                canonical_first_seen_at = (
+                    _optional_datetime(
+                        row[
+                            "canonical_first_seen_at"
+                        ]
+                    )
+                )
+                first_seen_at = (
+                    canonical_first_seen_at
+                    if (
+                        canonical_first_seen_at
+                        is not None
+                        and canonical_first_seen_at
+                        < source_first_seen_at
+                    )
+                    else source_first_seen_at
                 )
                 last_seen_at = datetime_from_db(
                     str(row["last_seen_at"])
@@ -727,8 +803,12 @@ class JobOperationalPriorityRepository:
                 expires_at = _optional_datetime(
                     row["expires_at"]
                 )
-                first_seen_at = datetime_from_db(
+                source_first_seen_at = datetime_from_db(
                     str(row["first_seen_at"])
+                )
+                canonical_first_seen_at = None
+                first_seen_at = (
+                    source_first_seen_at
                 )
                 last_seen_at = datetime_from_db(
                     str(row["last_seen_at"])
@@ -813,6 +893,12 @@ class JobOperationalPriorityRepository:
             public_contact=public_contact,
             published_at=published_at,
             expires_at=expires_at,
+            source_first_seen_at=(
+                source_first_seen_at
+            ),
+            canonical_first_seen_at=(
+                canonical_first_seen_at
+            ),
             first_seen_at=first_seen_at,
             last_seen_at=last_seen_at,
             last_changed_at=last_changed_at,
