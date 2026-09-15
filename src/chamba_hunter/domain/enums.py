@@ -32,6 +32,7 @@ class SourceType(StrEnum):
     JOBICY = "JOBICY"
     JOOBLE = "JOOBLE"
     WEWORKREMOTELY = "WEWORKREMOTELY"
+    HACKERNEWS = "HACKERNEWS"
     WELLFOUND = "WELLFOUND"
     LATAM_ENTERPRISE = "LATAM_ENTERPRISE"
     OTHER = "OTHER"
@@ -51,6 +52,7 @@ JOB_LEAD_SOURCE_TYPES = frozenset(
     {
         *BROAD_JOB_SOURCE_TYPES,
         SourceType.YC,
+        SourceType.HACKERNEWS,
     }
 )
 
