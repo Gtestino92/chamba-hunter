@@ -74,11 +74,13 @@ python -m chamba_hunter.commands.acquire_latam_enterprise_companies --apply
 python -m chamba_hunter.commands.acquire_latam_enterprise_companies --country Argentina --limit 10
 python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats
 python -m chamba_hunter.commands.fingerprint_latam_enterprise_ats --country Argentina --limit 10
+python -m chamba_hunter.commands.resolve_latam_enterprise_careers
+python -m chamba_hunter.commands.resolve_latam_enterprise_careers --apply
 python -m chamba_hunter.commands.discover_known_ats --company-id 3950
 python -m chamba_hunter.commands.sync_successfactors_jobs --company-id 3950
 ```
 
-The LATAM enterprise ingestion and fingerprinting commands are intentionally isolated and are not part of `refresh_search`; SuccessFactors job sync now runs with the routine ATS sync group.
+The LATAM enterprise ingestion, careers-site resolution, and fingerprinting commands are intentionally isolated and are not part of `refresh_search`; SuccessFactors job sync now runs with the routine ATS sync group.
 Without `--apply`, it previews acquisition changes only; pending migrations may still run at startup.
 
 ## Performance And Workflow
@@ -96,12 +98,13 @@ New acquisition features should initially be executable independently. Avoid aut
 
 ## Current LATAM Expansion Roadmap
 
-Slice 1 company ingestion and Slice 2 ATS fingerprinting are implemented. Use measured fingerprint coverage to choose the next provider implementation.
+Slice 1 company ingestion, Slice 2 ATS fingerprinting, and Slice 3 SAP SuccessFactors support are implemented. Use post-resolution measured fingerprint coverage to choose the next provider implementation.
 
 - Slice 1 — Argentina/LATAM enterprise company universe.
 - Slice 2 — measure ATS fingerprints / unknown providers.
 - Slice 3 — SAP SuccessFactors support.
-- Slice 4 — Workday / Avature based on measured coverage.
-- Slice 5 — decide whether/how regional acquisition enters routine refresh.
+- Slice 4 ? bounded LATAM careers-site resolution for missing `careers_url`.
+- Slice 5 ? next ATS provider implementation based on measured coverage.
+- Slice 6 ? decide whether/how regional acquisition or careers resolution enters routine refresh.
 
-See `docs/latam-enterprise-acquisition.md` for the curated registry workflow, `docs/latam-ats-fingerprinting.md` for measurement workflow, and `docs/successfactors.md` for SuccessFactors sync.
+See `docs/latam-enterprise-acquisition.md` for the curated registry workflow, `docs/latam-careers-resolution.md` for careers-site resolution, `docs/latam-ats-fingerprinting.md` for measurement workflow, and `docs/successfactors.md` for SuccessFactors sync.
