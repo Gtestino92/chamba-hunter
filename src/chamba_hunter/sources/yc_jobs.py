@@ -292,11 +292,29 @@ def parse_yc_job_detail(
             )
         )
 
-    location_text = (
+    structured_location_text = (
         _location_text(structured)
         if structured is not None
         else None
     )
+    location_source = (
+        "json_ld"
+        if structured_location_text is not None
+        else None
+    )
+
+    location_text = structured_location_text
+
+    if location_text is None:
+        location_text = (
+            _visible_header_location(
+                parser.visible_parts,
+                title=title,
+            )
+        )
+        if location_text is not None:
+            location_source = "visible_header"
+
     workplace_type = _workplace_type(
         structured=structured,
         location_text=location_text,
@@ -331,6 +349,11 @@ def parse_yc_job_detail(
         "job_url": job_url,
         "json_ld": structured,
     }
+
+    if location_source is not None:
+        raw_payload["location_source"] = (
+            location_source
+        )
 
     if parser.meta:
         raw_payload["meta"] = dict(
@@ -586,6 +609,90 @@ def _workplace_type(
     return WorkplaceType.UNKNOWN
 
 
+def _visible_header_location(
+    visible_parts: list[str],
+    *,
+    title: str,
+) -> str | None:
+    title_key = _visible_header_key(
+        title
+    )
+
+    if title_key is None:
+        return None
+
+    for index, part in enumerate(
+        visible_parts
+    ):
+        if _visible_header_key(part) != title_key:
+            continue
+
+        location_parts: list[str] = []
+
+        for candidate in visible_parts[
+            index + 1 : index + 7
+        ]:
+            candidate_key = (
+                _visible_header_key(
+                    candidate
+                )
+            )
+
+            if candidate_key == "job type":
+                return _join_unique(
+                    location_parts
+                )
+
+            cleaned = (
+                _clean_visible_location_part(
+                    candidate
+                )
+            )
+
+            if cleaned is not None:
+                location_parts.append(
+                    cleaned
+                )
+
+    return None
+
+
+def _visible_header_key(
+    value: str,
+) -> str | None:
+    cleaned = _clean_text(value)
+
+    if cleaned is None:
+        return None
+
+    return _strip_cosmetic_marks(
+        cleaned
+    ).casefold()
+
+
+def _clean_visible_location_part(
+    value: str,
+) -> str | None:
+    cleaned = _clean_text(value)
+
+    if cleaned is None:
+        return None
+
+    cleaned = _strip_cosmetic_marks(
+        cleaned
+    )
+
+    return cleaned or None
+
+
+def _strip_cosmetic_marks(
+    value: str,
+) -> str:
+    return value.strip(
+        " \t\r\n•·›»→-–—"
+    )
+
+
 def _employment_type(
     structured: dict[str, Any] | None,
 ) -> str | None:
@@ -617,9 +724,9 @@ def _apply_url_from_anchors(
     job_url: str,
 ) -> str | None:
     for anchor in anchors:
-        text = anchor.text.casefold()
-
-        if "apply" not in text:
+        if not _is_role_specific_apply_text(
+            anchor.text
+        ):
             continue
 
         href = _clean_text(anchor.href)
@@ -632,10 +739,59 @@ def _apply_url_from_anchors(
             href,
         )
 
-        if url != job_url:
+        if (
+            url != job_url
+            and not _is_generic_yc_apply_url(
+                url
+            )
+        ):
             return url
 
     return None
+
+
+def _is_role_specific_apply_text(
+    value: str,
+) -> bool:
+    cleaned = _clean_text(value)
+
+    if cleaned is None:
+        return False
+
+    normalized = re.sub(
+        r"[›»→]+",
+        "",
+        cleaned,
+    )
+    normalized = " ".join(
+        normalized.split()
+    ).casefold()
+
+    return normalized in {
+        "apply to role",
+        "apply for this role",
+        "apply for this job",
+    }
+
+
+def _is_generic_yc_apply_url(
+    url: str,
+) -> bool:
+    parsed = urlparse(url)
+    host = (
+        parsed.hostname.casefold()
+        if parsed.hostname is not None
+        else ""
+    )
+
+    return (
+        host in {
+            "ycombinator.com",
+            "www.ycombinator.com",
+        }
+        and parsed.path.rstrip("/")
+        == "/apply"
+    )
 
 
 def _parse_datetime(
@@ -892,6 +1048,7 @@ class _YcHtmlParser(HTMLParser):
             self._title_parts.append(
                 cleaned
             )
+            return
 
         self.visible_parts.append(
             cleaned

@@ -391,6 +391,69 @@ class CompanyRepository:
 
         return updated
 
+    def update_identity(
+        self,
+        company_id: int,
+        name: str,
+        normalized_name: str,
+    ) -> Company:
+        company = self.get_by_id(
+            company_id
+        )
+
+        if company is None:
+            raise ValueError(
+                f"Company does not exist: "
+                f"{company_id}"
+            )
+
+        if not name.strip():
+            raise ValueError(
+                "Company name cannot be empty."
+            )
+
+        if not normalized_name.strip():
+            raise ValueError(
+                "Normalized company name cannot "
+                "be empty."
+            )
+
+        if (
+            company.name == name
+            and company.normalized_name
+            == normalized_name
+        ):
+            return company
+
+        updated = replace(
+            company,
+            name=name,
+            normalized_name=normalized_name,
+            updated_at=utc_now(),
+        )
+
+        with self.database.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE companies
+                SET
+                    name = ?,
+                    normalized_name = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    updated.name,
+                    updated.normalized_name,
+                    datetime_to_db(
+                        updated.updated_at
+                    ),
+                    company_id,
+                ),
+            )
+
+        return updated
+
     def update_enrichment(
         self,
         company_id: int,

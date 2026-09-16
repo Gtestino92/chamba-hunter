@@ -190,6 +190,10 @@ def main() -> None:
         f"{summary.companies_existing}"
     )
     print(
+        f"Company names updated:"
+        f"   {summary.company_names_updated}"
+    )
+    print(
         f"Currently hiring:     "
         f"{summary.currently_hiring}"
     )

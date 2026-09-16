@@ -16,6 +16,8 @@ from chamba_hunter.schemas.inputs import (
 )
 from chamba_hunter.services.company_import_service import (
     CompanyImportService,
+    clean_company_name,
+    normalize_company_name,
 )
 from chamba_hunter.sources.yc_companies import (
     YcDirectoryClient,
@@ -40,6 +42,7 @@ class YcAcquisitionSummary:
 
     companies_created: int
     companies_existing: int
+    company_names_updated: int
 
     product_classified: int
     currently_hiring: int
@@ -87,6 +90,7 @@ class YcCompanyAcquisitionService:
         ] = set()
 
         skipped_import = 0
+        company_names_updated = 0
         product_classified = 0
         currently_hiring = 0
 
@@ -209,6 +213,30 @@ class YcCompanyAcquisitionService:
                         company.id
                     )
 
+                synchronized = (
+                    self._synchronize_yc_name(
+                        company_id=company.id,
+                        yc_name=(
+                            source_company.name
+                        ),
+                    )
+                )
+
+                if synchronized:
+                    company_names_updated += 1
+                    refreshed = (
+                        self.company_repository
+                        .get_by_id(company.id)
+                    )
+
+                    if refreshed is None:
+                        raise RuntimeError(
+                            "YC company disappeared "
+                            "after identity update."
+                        )
+
+                    company = refreshed
+
                 if source_company.is_hiring:
                     currently_hiring += 1
 
@@ -273,6 +301,9 @@ class YcCompanyAcquisitionService:
                 seen_company_ids
                 - created_company_ids
             ),
+            company_names_updated=(
+                company_names_updated
+            ),
             product_classified=(
                 product_classified
             ),
@@ -280,3 +311,41 @@ class YcCompanyAcquisitionService:
                 currently_hiring
             ),
         )
+
+    def _synchronize_yc_name(
+        self,
+        *,
+        company_id: int,
+        yc_name: str,
+    ) -> bool:
+        company = self.company_repository.get_by_id(
+            company_id
+        )
+
+        if company is None:
+            raise RuntimeError(
+                "Imported YC company "
+                "does not exist."
+            )
+
+        name = clean_company_name(
+            yc_name
+        )
+        normalized_name = normalize_company_name(
+            yc_name
+        )
+
+        if (
+            company.normalized_name
+            == normalized_name
+            and company.name == name
+        ):
+            return False
+
+        self.company_repository.update_identity(
+            company_id=company_id,
+            name=name,
+            normalized_name=normalized_name,
+        )
+
+        return True

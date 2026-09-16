@@ -129,6 +129,213 @@ def test_detail_normalizes_backend_remote_argentina() -> None:
         10,
         tzinfo=UTC,
     )
+    assert posting.raw_payload[
+        "location_source"
+    ] == "json_ld"
+
+
+def test_structured_location_wins_over_visible_header() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            location_name="San Francisco, CA",
+            visible_location=(
+                "Remote - North America"
+            ),
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.location_text == (
+        "San Francisco, CA"
+    )
+    assert posting.raw_payload[
+        "location_source"
+    ] == "json_ld"
+
+
+def test_empty_structured_location_falls_back_to_visible_header() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id=(
+                "HQH7Z3O-senior-software-"
+                "engineer-inference"
+            ),
+            title=(
+                "Senior Software Engineer, "
+                "Inference"
+            ),
+            location_name=None,
+            visible_location=(
+                "•Remote - North America"
+            ),
+        ),
+        company_slug="assemblyai",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/assemblyai/jobs/"
+            "HQH7Z3O-senior-software-"
+            "engineer-inference"
+        ),
+    )
+
+    assert posting.location_text == (
+        "Remote - North America"
+    )
+    assert posting.workplace_type == (
+        WorkplaceType.REMOTE
+    )
+    assert posting.raw_payload[
+        "location_source"
+    ] == "visible_header"
+
+
+def test_later_company_hq_is_not_used_as_visible_job_location() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            location_name=None,
+            visible_location=None,
+            body_extra="""
+            <section>
+              <h2>About Acme</h2>
+              <p>Company headquarters: San Francisco, CA</p>
+            </section>
+            """,
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.location_text is None
+    assert posting.workplace_type == (
+        WorkplaceType.UNKNOWN
+    )
+
+
+def test_title_metadata_is_not_used_as_visible_job_header() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            location_name=None,
+            include_body_title=False,
+            visible_location=(
+                "Remote - North America"
+            ),
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.location_text is None
+    assert posting.workplace_type == (
+        WorkplaceType.UNKNOWN
+    )
+
+
+def test_missing_structured_and_visible_location_stays_unknown() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            location_name=None,
+            visible_location=None,
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.location_text is None
+    assert posting.workplace_type == (
+        WorkplaceType.UNKNOWN
+    )
+
+
+def test_role_specific_apply_link_wins_over_generic_yc_apply() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            apply_url=(
+                "https://account.ycombinator.com/"
+                "authenticate?continue=https%3A%2F%2F"
+                "www.workatastartup.com%2Fapplication"
+                "%3Fsignup_job_id%3Dbackend-123"
+            ),
+            include_generic_yc_apply=True,
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.apply_url is not None
+    assert posting.apply_url.startswith(
+        "https://account.ycombinator.com/"
+        "authenticate?"
+    )
+    assert posting.apply_url != (
+        "https://www.ycombinator.com/apply"
+    )
+
+
+def test_only_generic_yc_apply_link_is_rejected() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            include_role_apply=False,
+            include_generic_yc_apply=True,
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.apply_url is None
+
+
+def test_role_specific_external_apply_url_is_preserved() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            apply_url=(
+                "https://jobs.example/apply/"
+                "backend-123"
+            ),
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.apply_url == (
+        "https://jobs.example/apply/"
+        "backend-123"
+    )
 
 
 def test_listing_zero_jobs_is_allowed() -> None:
@@ -326,6 +533,88 @@ def test_missing_job_later_does_not_deactivate_existing_lead(
         database,
         "job-2",
     )["is_active"] == 1
+
+
+def test_distinct_yc_external_ids_with_same_title_remain_distinct(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    _import_yc_company(
+        database,
+        slug="assemblyai",
+    )
+    service = _service(
+        database,
+        _FakeYcJobsClient(
+            {
+                "assemblyai": YcCompanyJobsFetch(
+                    company_slug="assemblyai",
+                    listing_url=(
+                        "https://yc/assemblyai/jobs"
+                    ),
+                    job_links_discovered=2,
+                    details_fetched=2,
+                    detail_failures=0,
+                    skipped_invalid=0,
+                    jobs=(
+                        _posting(
+                            external_id=(
+                                "HQH7Z3O-senior-"
+                                "software-engineer-"
+                                "inference"
+                            ),
+                            company_slug=(
+                                "assemblyai"
+                            ),
+                            title=(
+                                "Senior Software "
+                                "Engineer, Inference"
+                            ),
+                        ),
+                        _posting(
+                            external_id=(
+                                "DkVxJde-senior-"
+                                "software-engineer-"
+                                "inference"
+                            ),
+                            company_slug=(
+                                "assemblyai"
+                            ),
+                            title=(
+                                "Senior Software "
+                                "Engineer, Inference"
+                            ),
+                        ),
+                    ),
+                )
+            }
+        ),
+    )
+
+    summary = service.run()
+
+    assert summary.jobs_created == 2
+    assert _job_lead_count(database) == 2
+    assert _job_lead_row(
+        database,
+        (
+            "HQH7Z3O-senior-software-"
+            "engineer-inference"
+        ),
+    )["title"] == (
+        "Senior Software Engineer, "
+        "Inference"
+    )
+    assert _job_lead_row(
+        database,
+        (
+            "DkVxJde-senior-software-"
+            "engineer-inference"
+        ),
+    )["title"] == (
+        "Senior Software Engineer, "
+        "Inference"
+    )
 
 
 def test_partial_failing_fetch_does_not_deactivate_existing_leads(
@@ -852,6 +1141,12 @@ def _job_detail_html(
     date_posted: str | None = None,
     date_modified: str | None = None,
     apply_url: str = "https://jobs.example/apply",
+    apply_text: str = "Apply to role ›",
+    include_role_apply: bool = True,
+    include_generic_yc_apply: bool = False,
+    include_body_title: bool = True,
+    visible_location: str | None = None,
+    body_extra: str = "",
 ) -> str:
     json_ld = {
         "@context": "https://schema.org",
@@ -859,10 +1154,26 @@ def _job_detail_html(
         "title": title,
         "description": description,
         "employmentType": employment_type,
-        "jobLocation": {
-            "@type": "Place",
-            "name": location_name,
-        },
+        "jobLocation": (
+            {
+                "@type": "Place",
+                "name": location_name,
+            }
+            if location_name is not None
+            else [
+                {
+                    "@type": "Place",
+                    "address": {
+                        "@type": (
+                            "PostalAddress"
+                        ),
+                        "addressLocality": None,
+                        "addressRegion": None,
+                        "addressCountry": None,
+                    },
+                }
+            ]
+        ),
     }
 
     if job_location_type is not None:
@@ -880,6 +1191,27 @@ def _job_detail_html(
             date_modified
         )
 
+    body_title = (
+        f"<h1>{title}</h1>"
+        if include_body_title
+        else ""
+    )
+    body_location = (
+        f"<p>{visible_location}</p>"
+        if visible_location is not None
+        else ""
+    )
+    role_apply = (
+        f'<a href="{apply_url}">{apply_text}</a>'
+        if include_role_apply
+        else ""
+    )
+    generic_apply = (
+        '<a href="https://www.ycombinator.com/apply">Apply</a>'
+        if include_generic_yc_apply
+        else ""
+    )
+
     return f"""
     <html>
       <head>
@@ -889,10 +1221,17 @@ def _job_detail_html(
         </script>
       </head>
       <body>
+        <nav>
+          {generic_apply}
+        </nav>
         <main>
-          <h1>{title}</h1>
-          <a href="{apply_url}">Apply now</a>
+          {body_title}
+          {body_location}
+          <h2>Job type</h2>
+          <p>Full-time</p>
+          {role_apply}
           <p>Job id {job_id}</p>
+          {body_extra}
         </main>
       </body>
     </html>
