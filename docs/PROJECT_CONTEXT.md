@@ -402,24 +402,24 @@ YC public company jobs
 Hacker News "Who is Hiring?"
 ```
 
-YC jobs se obtienen desde compaÃ±Ã­as YC ya persistidas; no crea un universo YC nuevo por fuera de `company_sources`.
+YC jobs se obtienen desde compañías YC ya persistidas; no crea un universo YC nuevo por fuera de `company_sources`.
 
-HN V1 trata cada post top-level de hiring como un `JobLead`. No divide roles dentro del mismo comentario y no clasifica automÃ¡ticamente la empresa como startup.
+HN V1 trata cada post top-level de hiring como un `JobLead`. No divide roles dentro del mismo comentario y no clasifica automáticamente la empresa como startup.
 
 Ambas fuentes son no destructivas e idempotentes.
 
-`refresh_startups` orquesta estas dos adquisiciones y el downstream canÃ³nico existente:
+`refresh_startups` orquesta estas dos adquisiciones y el downstream canónico existente:
 
 ```text
 YC/HN acquisition
-â†’ canonicalization
-â†’ Argentina eligibility
-â†’ occupation
-â†’ skills
-â†’ seniority
-â†’ matching
-â†’ operational priority
-â†’ shortlist XLSX
+→ canonicalization
+→ Argentina eligibility
+→ occupation
+→ skills
+→ seniority
+→ matching
+→ operational priority
+→ shortlist XLSX
 ```
 
 Es separado de `refresh_search`, no ejecuta ATS discovery/sync en V1 y exporta por defecto a `output/chamba-shortlist.xlsx`.
