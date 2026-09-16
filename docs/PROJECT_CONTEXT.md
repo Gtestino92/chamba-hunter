@@ -393,6 +393,44 @@ ats_syncs
 
 ## 6. Fuentes actuales
 
+### Startup / direct-hiring acquisition
+
+Fuentes implementadas:
+
+```text
+YC public company jobs
+Hacker News "Who is Hiring?"
+```
+
+YC jobs se obtienen desde compaÃ±Ã­as YC ya persistidas; no crea un universo YC nuevo por fuera de `company_sources`.
+
+HN V1 trata cada post top-level de hiring como un `JobLead`. No divide roles dentro del mismo comentario y no clasifica automÃ¡ticamente la empresa como startup.
+
+Ambas fuentes son no destructivas e idempotentes.
+
+`refresh_startups` orquesta estas dos adquisiciones y el downstream canÃ³nico existente:
+
+```text
+YC/HN acquisition
+â†’ canonicalization
+â†’ Argentina eligibility
+â†’ occupation
+â†’ skills
+â†’ seniority
+â†’ matching
+â†’ operational priority
+â†’ shortlist XLSX
+```
+
+Es separado de `refresh_search`, no ejecuta ATS discovery/sync en V1 y exporta por defecto a `output/chamba-shortlist.xlsx`.
+
+Bounds de V1:
+
+```text
+routine: YC 50, HN 100
+deep:    YC all, HN all
+```
+
 ### Broad
 
 ```text
@@ -895,6 +933,31 @@ Antes de un refresh real:
 5. recién entonces `--apply`.
 
 No usar full refresh como validación de código.
+
+### Startup refresh
+
+Plan manual:
+
+```powershell
+python -m chamba_hunter.commands.refresh_startups
+```
+
+Real:
+
+```powershell
+python -m chamba_hunter.commands.refresh_startups --apply
+```
+
+V1:
+
+```text
+routine: acquire_yc_jobs --limit 50, acquire_hn_jobs --limit 100
+deep:    acquire_yc_jobs, acquire_hn_jobs
+```
+
+HN descubre automáticamente el thread mensual válido más reciente cuando no se pasa `--thread-id`; `refresh_startups` no hardcodea thread ids.
+
+No forma parte del refresh broad/ATS rutinario y no ejecuta discovery/sync ATS.
 
 ---
 
