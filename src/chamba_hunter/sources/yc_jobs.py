@@ -643,13 +643,11 @@ def _visible_header_location(
                     location_parts
                 )
 
-            cleaned = (
-                _clean_visible_location_part(
+            for cleaned in (
+                _clean_visible_location_parts(
                     candidate
                 )
-            )
-
-            if cleaned is not None:
+            ):
                 location_parts.append(
                     cleaned
                 )
@@ -670,19 +668,63 @@ def _visible_header_key(
     ).casefold()
 
 
-def _clean_visible_location_part(
+def _clean_visible_location_parts(
     value: str,
-) -> str | None:
+) -> tuple[str, ...]:
     cleaned = _clean_text(value)
 
     if cleaned is None:
-        return None
+        return ()
 
     cleaned = _strip_cosmetic_marks(
         cleaned
     )
 
-    return cleaned or None
+    if not cleaned:
+        return ()
+
+    parts: list[str] = []
+
+    for segment in re.split(
+        r"[•·]+",
+        cleaned,
+    ):
+        segment = _strip_cosmetic_marks(
+            segment
+        )
+
+        if (
+            segment
+            and not _looks_like_compensation(
+                segment
+            )
+        ):
+            parts.append(
+                segment
+            )
+
+    return tuple(parts)
+
+
+def _looks_like_compensation(
+    value: str,
+) -> bool:
+    compact = " ".join(
+        value.split()
+    )
+
+    return (
+        re.fullmatch(
+            (
+                r"[$€£]\s*\d[\d,]*(?:\.\d+)?K?"
+                r"\s*[-–—]\s*"
+                r"[$€£]\s*\d[\d,]*(?:\.\d+)?K?"
+            ),
+            compact,
+            flags=re.IGNORECASE,
+        )
+        is not None
+    )
 
 
 def _strip_cosmetic_marks(

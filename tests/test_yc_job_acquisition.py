@@ -195,6 +195,87 @@ def test_empty_structured_location_falls_back_to_visible_header() -> None:
     ] == "visible_header"
 
 
+def test_visible_header_strips_compensation_before_remote_location() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id=(
+                "HQH7Z3O-senior-software-"
+                "engineer-inference"
+            ),
+            title=(
+                "Senior Software Engineer, "
+                "Inference"
+            ),
+            location_name=None,
+            visible_location=(
+                "$190K - $225K•Remote - "
+                "North America"
+            ),
+        ),
+        company_slug="assemblyai",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/assemblyai/jobs/"
+            "HQH7Z3O-senior-software-"
+            "engineer-inference"
+        ),
+    )
+
+    assert posting.location_text == (
+        "Remote - North America"
+    )
+    assert posting.workplace_type == (
+        WorkplaceType.REMOTE
+    )
+
+
+def test_visible_header_strips_alternate_compensation_range() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="design-123",
+            title="Senior Design Engineer",
+            location_name=None,
+            visible_location=(
+                "$180K - $240K•Remote - "
+                "North America"
+            ),
+        ),
+        company_slug="assemblyai",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/assemblyai/jobs/"
+            "design-123"
+        ),
+    )
+
+    assert posting.location_text == (
+        "Remote - North America"
+    )
+
+
+def test_visible_header_compensation_only_is_not_location() -> None:
+    posting = parse_yc_job_detail(
+        _job_detail_html(
+            job_id="backend-123",
+            title="Backend Engineer",
+            location_name=None,
+            visible_location=(
+                "$190K - $225K"
+            ),
+        ),
+        company_slug="acme",
+        job_url=(
+            "https://www.ycombinator.com/"
+            "companies/acme/jobs/backend-123"
+        ),
+    )
+
+    assert posting.location_text is None
+    assert posting.workplace_type == (
+        WorkplaceType.UNKNOWN
+    )
+
+
 def test_later_company_hq_is_not_used_as_visible_job_location() -> None:
     posting = parse_yc_job_detail(
         _job_detail_html(
