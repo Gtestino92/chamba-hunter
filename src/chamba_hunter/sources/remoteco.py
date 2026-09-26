@@ -14,6 +14,8 @@ import re
 import unicodedata
 from typing import Any
 from urllib.parse import (
+    parse_qs,
+    urlencode,
     urljoin,
     urlparse,
     urlunparse,
@@ -1787,13 +1789,32 @@ def _category_page_url(
     ):
         return None
 
+    page_number = _positive_page_query(
+        parsed.query
+    )
+
+    if (
+        path == category_path
+        and parsed.query
+        and page_number is None
+    ):
+        return None
+
+    query = (
+        urlencode({"page": page_number})
+        if page_number is not None
+        and path == category_path
+        and page_number > 1
+        else ""
+    )
+
     return urlunparse(
         (
             "https",
             "remote.co",
             path,
             "",
-            parsed.query,
+            query,
             "",
         )
     )
@@ -1806,6 +1827,15 @@ def _category_page_number(
 ) -> int:
     parsed = urlparse(url)
     path = parsed.path.rstrip("/")
+    query_page = _positive_page_query(
+        parsed.query
+    )
+
+    if (
+        path == category_path
+        and query_page is not None
+    ):
+        return query_page
 
     if path == category_path:
         return 1
@@ -1819,7 +1849,36 @@ def _category_page_number(
     if match is None:
         return 1
 
-    return int(match.group(1))
+    page_number = int(match.group(1))
+
+    return page_number if page_number > 0 else 1
+
+
+def _positive_page_query(
+    query: str,
+) -> int | None:
+    values = parse_qs(
+        query,
+        keep_blank_values=False,
+    ).get("page")
+
+    if not values:
+        return None
+
+    value = values[0]
+
+    if not re.fullmatch(
+        r"\d+",
+        value,
+    ):
+        return None
+
+    page_number = int(value)
+
+    if page_number < 1:
+        return None
+
+    return page_number
 
 
 def _jobposting_json_ld(

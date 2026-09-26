@@ -213,8 +213,8 @@ def test_pagination_next_detected_and_normalized() -> None:
     first = parse_remoteco_listing_page(
         _pagination_html(
             next_href=(
-                "/remote-jobs/full-stack-developer/"
-                "page/2/?utm_source=x#jobs"
+                "/remote-jobs/full-stack-developer"
+                "?page=2&utm_source=x#jobs"
             )
         ),
         page_url=(
@@ -229,13 +229,13 @@ def test_pagination_next_detected_and_normalized() -> None:
     second = parse_remoteco_listing_page(
         _pagination_html(
             next_href=(
-                "/remote-jobs/full-stack-developer/"
-                "page/3/"
+                "/remote-jobs/full-stack-developer"
+                "?page=3"
             )
         ),
         page_url=(
             "https://remote.co/remote-jobs/"
-            "full-stack-developer/page/2"
+            "full-stack-developer?page=2"
         ),
         category_url=(
             "https://remote.co/remote-jobs/"
@@ -245,12 +245,35 @@ def test_pagination_next_detected_and_normalized() -> None:
 
     assert first.next_url == (
         "https://remote.co/remote-jobs/"
-        "full-stack-developer/page/2"
-        "?utm_source=x"
+        "full-stack-developer?page=2"
     )
     assert second.next_url == (
         "https://remote.co/remote-jobs/"
-        "full-stack-developer/page/3"
+        "full-stack-developer?page=3"
+    )
+
+
+def test_legacy_path_pagination_remains_supported() -> None:
+    page = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href=(
+                "/remote-jobs/full-stack-developer/"
+                "page/2/?utm_source=x#jobs"
+            )
+        ),
+        page_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer"
+        ),
+        category_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer"
+        ),
+    )
+
+    assert page.next_url == (
+        "https://remote.co/remote-jobs/"
+        "full-stack-developer/page/2"
     )
 
 
@@ -274,6 +297,34 @@ def test_pagination_ignores_other_category_and_domain() -> None:
     assert other_domain.next_url is None
 
 
+def test_pagination_ignores_malformed_page_query() -> None:
+    malformed_alpha = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href="/remote-jobs/back-end-developer?page=abc"
+        ),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+    malformed_zero = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href="/remote-jobs/back-end-developer?page=0"
+        ),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+    unrelated_query = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href="/remote-jobs/back-end-developer?utm_source=x"
+        ),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+
+    assert malformed_alpha.next_url is None
+    assert malformed_zero.next_url is None
+    assert unrelated_query.next_url is None
+
+
 def test_bounded_pagination_stops_and_warns() -> None:
     def handler(
         request: httpx.Request,
@@ -285,30 +336,30 @@ def test_bounded_pagination_stops_and_warns() -> None:
                 200,
                 text=_pagination_html(
                     next_href=(
-                        "/remote-jobs/back-end-developer/"
-                        "page/2/"
+                        "/remote-jobs/back-end-developer"
+                        "?page=2"
                     )
                 ),
             )
 
-        if url == REMOTECO_CATEGORY_URLS[0] + "/page/2":
+        if url == REMOTECO_CATEGORY_URLS[0] + "?page=2":
             return httpx.Response(
                 200,
                 text=_pagination_html(
                     next_href=(
-                        "/remote-jobs/back-end-developer/"
-                        "page/3/"
+                        "/remote-jobs/back-end-developer"
+                        "?page=3"
                     )
                 ),
             )
 
-        if url == REMOTECO_CATEGORY_URLS[0] + "/page/3":
+        if url == REMOTECO_CATEGORY_URLS[0] + "?page=3":
             return httpx.Response(
                 200,
                 text=_pagination_html(
                     next_href=(
-                        "/remote-jobs/back-end-developer/"
-                        "page/4/"
+                        "/remote-jobs/back-end-developer"
+                        "?page=4"
                     )
                 ),
             )
@@ -343,9 +394,91 @@ def test_bounded_pagination_stops_and_warns() -> None:
             "Reached page limit for "
             f"{REMOTECO_CATEGORY_URLS[0]}; next page "
             "exists: https://remote.co/remote-jobs/"
-            "back-end-developer/page/4"
+            "back-end-developer?page=4"
         )
     ]
+
+
+def test_duplicate_jobs_across_query_pages_deduplicate() -> None:
+    duplicate_slug = (
+        "backend-query-page-"
+        "123e4567-e89b-12d3-a456-426614174000"
+    )
+
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        url = str(request.url).rstrip("/")
+
+        if url == REMOTECO_CATEGORY_URLS[0]:
+            return httpx.Response(
+                200,
+                text=(
+                    _listing_page_for_titles(
+                        [
+                            (
+                                "Backend Engineer",
+                                "Query Co",
+                                duplicate_slug,
+                            )
+                        ]
+                    )
+                    + _pagination_html(
+                        next_href=(
+                            "/remote-jobs/back-end-developer"
+                            "?page=2"
+                        )
+                    )
+                ),
+            )
+
+        if url == REMOTECO_CATEGORY_URLS[0] + "?page=2":
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Backend Engineer",
+                            "Query Co",
+                            duplicate_slug,
+                        )
+                    ]
+                ),
+            )
+
+        if url in {
+            category.rstrip("/")
+            for category in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text="<html><body>No jobs</body></html>",
+            )
+
+        return httpx.Response(
+            200,
+            text=_detail_html(
+                title="Backend Engineer",
+                company="Query Co",
+                remote_work_level="100% Remote Work",
+                location="Remote from Anywhere",
+                date_posted="Today",
+            ),
+        )
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=3,
+        max_jobs=10,
+        detail_workers=1,
+    )
+
+    assert fetch.pages_fetched == 6
+    assert fetch.unique_jobs == 1
+    assert fetch.duplicates_removed == 1
 
 
 def test_canonical_url_prefers_uuid_identity() -> None:
