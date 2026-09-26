@@ -87,6 +87,8 @@ class RemoteCoListingEntry:
 class RemoteCoListingPage:
     entries: list[RemoteCoListingEntry]
     next_url: str | None
+    locations_found: int
+    locations_missing: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,6 +133,8 @@ class RemoteCoFetch:
     categories_configured: int
     pages_fetched: int
     listing_rows: int
+    listing_locations_found: int
+    listing_locations_missing: int
     unique_jobs: int
     duplicates_removed: int
     explicit_geo_rejects: int
@@ -277,6 +281,8 @@ class RemoteCoClient:
             ] = {}
             pages_fetched = 0
             listing_rows = 0
+            listing_locations_found = 0
+            listing_locations_missing = 0
             duplicates_removed = 0
             explicit_geo_rejects = 0
             remote_level_rejects = 0
@@ -315,6 +321,12 @@ class RemoteCoClient:
                     )
                     listing_rows += len(
                         page.entries
+                    )
+                    listing_locations_found += (
+                        page.locations_found
+                    )
+                    listing_locations_missing += (
+                        page.locations_missing
                     )
 
                     for entry in page.entries:
@@ -373,6 +385,18 @@ class RemoteCoClient:
                         break
 
                     page_url = page.next_url
+
+            if (
+                listing_rows >= 10
+                and listing_locations_found
+                < max(1, listing_rows // 10)
+            ):
+                coverage_warnings.append(
+                    "Remote.co listing location "
+                    "extraction appears degraded: "
+                    f"{listing_locations_found}/"
+                    f"{listing_rows} locations found"
+                )
 
             selected_entries = list(
                 unique_entries.values()
@@ -517,6 +541,12 @@ class RemoteCoClient:
                 ),
                 pages_fetched=pages_fetched,
                 listing_rows=listing_rows,
+                listing_locations_found=(
+                    listing_locations_found
+                ),
+                listing_locations_missing=(
+                    listing_locations_missing
+                ),
                 unique_jobs=len(
                     unique_entries
                 ),
@@ -573,6 +603,8 @@ def parse_remoteco_listing_page(
         str,
         RemoteCoListingEntry,
     ] = {}
+    locations_found = 0
+    locations_missing = 0
 
     for anchor in _iter_nodes(root):
         if anchor.tag != "a":
@@ -584,6 +616,9 @@ def parse_remoteco_listing_page(
         )
 
         if canonical is None:
+            continue
+
+        if canonical in entries_by_url:
             continue
 
         external_id = remoteco_external_id(
@@ -611,8 +646,12 @@ def parse_remoteco_listing_page(
         ):
             continue
 
-        entries_by_url.setdefault(
-            canonical,
+        if location_text is None:
+            locations_missing += 1
+        else:
+            locations_found += 1
+
+        entries_by_url[canonical] = (
             RemoteCoListingEntry(
                 external_id=external_id,
                 canonical_url=canonical,
@@ -642,7 +681,7 @@ def parse_remoteco_listing_page(
                 ),
                 source_listing_url=page_url,
                 raw_lines=tuple(lines),
-            ),
+            )
         )
 
     return RemoteCoListingPage(
@@ -654,6 +693,8 @@ def parse_remoteco_listing_page(
             page_url=page_url,
             category_url=category_url,
         ),
+        locations_found=locations_found,
+        locations_missing=locations_missing,
     )
 
 
@@ -1412,32 +1453,62 @@ def _visible_lines(
 def _card_node(
     anchor: _Node,
 ) -> _Node:
+    current_canonical = canonical_remoteco_job_url(
+        anchor.attrs.get("href")
+    )
+    candidate = anchor.parent or anchor
     current = anchor.parent
 
     while current is not None:
-        class_name = current.attrs.get(
-            "class",
-            "",
-        ).casefold()
-
-        if current.tag in {
-            "article",
-            "li",
-        }:
-            return current
+        detail_urls = _node_job_detail_urls(
+            current
+        )
 
         if (
-            current.tag == "div"
-            and re.search(
-                r"\b(job|card|listing|position)\b",
-                class_name,
+            current_canonical is not None
+            and detail_urls
+            and detail_urls != {current_canonical}
+        ):
+            break
+
+        if (
+            current.tag
+            in {
+                "article",
+                "li",
+                "tr",
+                "div",
+                "section",
+            }
+            and (
+                current_canonical is None
+                or current_canonical in detail_urls
             )
         ):
-            return current
+            candidate = current
 
         current = current.parent
 
-    return anchor.parent or anchor
+    return candidate
+
+
+def _node_job_detail_urls(
+    node: _Node,
+) -> set[str]:
+    urls: set[str] = set()
+
+    for candidate in _iter_nodes(node):
+        if candidate.tag != "a":
+            continue
+
+        canonical = canonical_remoteco_job_url(
+            candidate.attrs.get("href")
+        )
+
+        if canonical is not None:
+            urls.add(canonical)
+
+    return urls
 
 
 def _listing_hints(
@@ -1564,15 +1635,45 @@ def _first_location_line(
         if not normalized or normalized == remote_normalized:
             continue
 
-        if re.search(
-            r"^(remote|hybrid remote)(,|\s+in\b)",
-            normalized,
+        if (
+            normalized.startswith("remote ")
+            or re.search(
+                r"^hybrid remote\s+(in|from)\b",
+                normalized,
+            )
         ):
             return line
 
-        if classify_remoteco_geography(
-            line
-        ) != RemoteCoGeoClassification.UNKNOWN:
+        if normalized in {
+            "worldwide",
+            "anywhere",
+            "global",
+            "international",
+            "latin america",
+            "latam",
+            "south america",
+            "argentina",
+            "buenos aires",
+            "canada",
+            "united states",
+            "usa",
+            "us national",
+            "u s national",
+            "united kingdom",
+            "uk",
+            "india",
+            "australia",
+            "new zealand",
+        }:
+            return line
+
+        if (
+            "," in line
+            and classify_remoteco_geography(
+                line
+            )
+            != RemoteCoGeoClassification.UNKNOWN
+        ):
             return line
 
     return None
@@ -1587,6 +1688,11 @@ def _next_page_url(
     category_path = urlparse(
         category_url
     ).path.rstrip("/")
+    current_page = _category_page_number(
+        page_url,
+        category_path=category_path,
+    )
+    numeric_next: str | None = None
 
     for anchor in _iter_nodes(root):
         if anchor.tag != "a":
@@ -1608,56 +1714,112 @@ def _next_page_url(
             _node_text(anchor)
         )
 
-        if not (
+        href = anchor.attrs.get("href")
+        normalized_href = _category_page_url(
+            href,
+            base_url=page_url,
+            category_path=category_path,
+        )
+
+        if normalized_href is None:
+            continue
+
+        is_explicit_next = (
             "next" in rel
             or "next" in class_name
             or "next" in aria
-            or text in {"next", "next page", ">"}
-        ):
-            continue
-
-        href = anchor.attrs.get("href")
-        cleaned = _clean_text(href)
-
-        if cleaned is None:
-            continue
-
-        absolute = urljoin(page_url, cleaned)
-        parsed = urlparse(absolute)
-        host = (
-            parsed.hostname.casefold()
-            if parsed.hostname
-            else ""
+            or text in {
+                "next",
+                "next page",
+                "next posts",
+            }
         )
 
-        if host not in {
+        if is_explicit_next:
+            return normalized_href
+
+        if text.isdigit():
+            page_number = _category_page_number(
+                normalized_href,
+                category_path=category_path,
+            )
+
+            if page_number == current_page + 1:
+                numeric_next = normalized_href
+
+    return numeric_next
+
+
+def _category_page_url(
+    url: str | None,
+    *,
+    base_url: str,
+    category_path: str,
+) -> str | None:
+    cleaned = _clean_text(url)
+
+    if cleaned is None:
+        return None
+
+    absolute = urljoin(base_url, cleaned)
+    parsed = urlparse(absolute)
+    host = (
+        parsed.hostname.casefold()
+        if parsed.hostname
+        else ""
+    )
+
+    if host not in {
+        "remote.co",
+        "www.remote.co",
+    }:
+        return None
+
+    path = parsed.path.rstrip("/")
+
+    if not (
+        path == category_path
+        or re.fullmatch(
+            re.escape(category_path)
+            + r"/page/\d+",
+            path,
+        )
+    ):
+        return None
+
+    return urlunparse(
+        (
+            "https",
             "remote.co",
-            "www.remote.co",
-        }:
-            continue
-
-        path = parsed.path.rstrip("/")
-
-        if not (
-            path == category_path
-            or path.startswith(
-                f"{category_path}/"
-            )
-        ):
-            continue
-
-        return urlunparse(
-            (
-                "https",
-                "remote.co",
-                parsed.path.rstrip("/"),
-                "",
-                parsed.query,
-                "",
-            )
+            path,
+            "",
+            parsed.query,
+            "",
         )
+    )
 
-    return None
+
+def _category_page_number(
+    url: str,
+    *,
+    category_path: str,
+) -> int:
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/")
+
+    if path == category_path:
+        return 1
+
+    match = re.fullmatch(
+        re.escape(category_path)
+        + r"/page/(\d+)",
+        path,
+    )
+
+    if match is None:
+        return 1
+
+    return int(match.group(1))
 
 
 def _jobposting_json_ld(

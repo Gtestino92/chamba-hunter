@@ -240,6 +240,14 @@ def main() -> None:
         f"listing rows:         {summary.listing_rows:5d}"
     )
     print(
+        "listing locations:    "
+        f"{summary.listing_locations_found:5d}"
+    )
+    print(
+        "missing locations:    "
+        f"{summary.listing_locations_missing:5d}"
+    )
+    print(
         f"unique jobs:          {summary.unique_jobs:5d}"
     )
     print(

@@ -61,6 +61,8 @@ class RemoteCoAcquisitionSummary:
     categories_configured: int
     pages_fetched: int
     listing_rows: int
+    listing_locations_found: int
+    listing_locations_missing: int
     unique_jobs: int
     duplicates_removed: int
     explicit_geo_rejects: int
@@ -648,6 +650,12 @@ def _summary_from_fetch(
         ),
         pages_fetched=fetch.pages_fetched,
         listing_rows=fetch.listing_rows,
+        listing_locations_found=(
+            fetch.listing_locations_found
+        ),
+        listing_locations_missing=(
+            fetch.listing_locations_missing
+        ),
         unique_jobs=fetch.unique_jobs,
         duplicates_removed=(
             fetch.duplicates_removed
@@ -747,6 +755,12 @@ def _metadata(
         ),
         "listing_rows": (
             summary.listing_rows
+        ),
+        "listing_locations_found": (
+            summary.listing_locations_found
+        ),
+        "listing_locations_missing": (
+            summary.listing_locations_missing
         ),
         "unique_jobs": summary.unique_jobs,
         "duplicates_removed": (

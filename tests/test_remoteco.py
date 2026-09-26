@@ -101,6 +101,251 @@ def test_listing_parser_extracts_metadata_and_next_page() -> None:
     assert page.entries[2].geo_classification == (
         RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
     )
+    assert page.locations_found == 3
+    assert page.locations_missing == 1
+
+
+def test_listing_parser_associates_split_location_structure() -> None:
+    page = parse_remoteco_listing_page(
+        _split_listing_structure_html(),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+
+    assert [
+        (
+            entry.title_hint,
+            entry.company_hint,
+            entry.location_text,
+            entry.geo_classification,
+        )
+        for entry in page.entries
+    ] == [
+        (
+            "Backend Engineer",
+            "US Co",
+            "Remote, US National",
+            RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE,
+        ),
+        (
+            "Java Developer",
+            "Canada Co",
+            "Remote in Canada",
+            RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE,
+        ),
+        (
+            "Platform Engineer",
+            "Texas Co",
+            "Hybrid Remote in Austin, TX",
+            RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE,
+        ),
+        (
+            "Full Stack Engineer",
+            "Anywhere Co",
+            "Remote from Anywhere",
+            RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE,
+        ),
+        (
+            "Software Engineer",
+            "Argentina Co",
+            "Remote in Argentina",
+            RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE,
+        ),
+        (
+            "API Engineer",
+            "Americas Co",
+            "Remote in Americas",
+            RemoteCoGeoClassification.UNKNOWN,
+        ),
+    ]
+    assert page.locations_found == 6
+    assert page.locations_missing == 0
+
+
+def test_listing_parser_does_not_cross_contaminate_adjacent_jobs() -> None:
+    page = parse_remoteco_listing_page(
+        _split_listing_structure_html(),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+
+    us_job = page.entries[0]
+    argentina_job = page.entries[4]
+
+    assert us_job.company_hint == "US Co"
+    assert us_job.location_text == "Remote, US National"
+    assert argentina_job.company_hint == "Argentina Co"
+    assert argentina_job.location_text == "Remote in Argentina"
+
+
+def test_missing_listing_location_is_allowed_and_counted() -> None:
+    page = parse_remoteco_listing_page(
+        """
+        <html><body>
+          <div class="remote-job-listing">
+            <div class="summary">
+              <a href="/job-details/backend-no-location-f23e4567-e89b-12d3-a456-426614174000">
+                Backend Engineer
+              </a>
+              <span>No Location Co</span>
+              <span>Today</span>
+              <span>100% Remote Work</span>
+              <span>Full-Time</span>
+              <span>Employee</span>
+            </div>
+          </div>
+        </body></html>
+        """,
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+
+    assert len(page.entries) == 1
+    assert page.entries[0].location_text is None
+    assert page.entries[0].geo_classification == (
+        RemoteCoGeoClassification.UNKNOWN
+    )
+    assert page.locations_found == 0
+    assert page.locations_missing == 1
+
+
+def test_pagination_next_detected_and_normalized() -> None:
+    first = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href=(
+                "/remote-jobs/full-stack-developer/"
+                "page/2/?utm_source=x#jobs"
+            )
+        ),
+        page_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer"
+        ),
+        category_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer"
+        ),
+    )
+    second = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href=(
+                "/remote-jobs/full-stack-developer/"
+                "page/3/"
+            )
+        ),
+        page_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer/page/2"
+        ),
+        category_url=(
+            "https://remote.co/remote-jobs/"
+            "full-stack-developer"
+        ),
+    )
+
+    assert first.next_url == (
+        "https://remote.co/remote-jobs/"
+        "full-stack-developer/page/2"
+        "?utm_source=x"
+    )
+    assert second.next_url == (
+        "https://remote.co/remote-jobs/"
+        "full-stack-developer/page/3"
+    )
+
+
+def test_pagination_ignores_other_category_and_domain() -> None:
+    other_category = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href="/remote-jobs/accounting/page/2/"
+        ),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+    other_domain = parse_remoteco_listing_page(
+        _pagination_html(
+            next_href="https://example.com/remote-jobs/back-end-developer/page/2/"
+        ),
+        page_url=REMOTECO_CATEGORY_URLS[0],
+        category_url=REMOTECO_CATEGORY_URLS[0],
+    )
+
+    assert other_category.next_url is None
+    assert other_domain.next_url is None
+
+
+def test_bounded_pagination_stops_and_warns() -> None:
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        url = str(request.url).rstrip("/")
+
+        if url == REMOTECO_CATEGORY_URLS[0]:
+            return httpx.Response(
+                200,
+                text=_pagination_html(
+                    next_href=(
+                        "/remote-jobs/back-end-developer/"
+                        "page/2/"
+                    )
+                ),
+            )
+
+        if url == REMOTECO_CATEGORY_URLS[0] + "/page/2":
+            return httpx.Response(
+                200,
+                text=_pagination_html(
+                    next_href=(
+                        "/remote-jobs/back-end-developer/"
+                        "page/3/"
+                    )
+                ),
+            )
+
+        if url == REMOTECO_CATEGORY_URLS[0] + "/page/3":
+            return httpx.Response(
+                200,
+                text=_pagination_html(
+                    next_href=(
+                        "/remote-jobs/back-end-developer/"
+                        "page/4/"
+                    )
+                ),
+            )
+
+        if url in {
+            category.rstrip("/")
+            for category in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text="<html><body>No jobs</body></html>",
+            )
+
+        return httpx.Response(
+            404,
+            text="unexpected",
+        )
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=3,
+        max_jobs=1,
+        detail_workers=1,
+    )
+
+    assert fetch.pages_fetched == 7
+    assert fetch.coverage_warnings == [
+        (
+            "Reached page limit for "
+            f"{REMOTECO_CATEGORY_URLS[0]}; next page "
+            "exists: https://remote.co/remote-jobs/"
+            "back-end-developer/page/4"
+        )
+    ]
 
 
 def test_canonical_url_prefers_uuid_identity() -> None:
@@ -224,10 +469,10 @@ def test_client_prefilters_before_fetching_details() -> None:
     )
 
     assert fetch.pages_fetched == 6
-    assert fetch.listing_rows == 5
+    assert fetch.listing_rows == 6
     assert fetch.unique_jobs == 2
     assert fetch.duplicates_removed == 1
-    assert fetch.explicit_geo_rejects == 1
+    assert fetch.explicit_geo_rejects == 2
     assert fetch.remote_level_rejects == 1
     assert fetch.unknown_geography == 1
     assert fetch.potentially_eligible == 2
@@ -1084,6 +1329,122 @@ def _listing_page_two() -> str:
       <a class="next page-numbers" href="/remote-jobs/back-end-developer/page/3">
         Next
       </a>
+    </body></html>
+    """
+
+
+def _split_listing_structure_html() -> str:
+    return """
+    <html><body>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/backend-us-g23e4567-e89b-12d3-a456-426614174000">
+              Backend Engineer
+            </a>
+          </h3>
+          <span>US Co</span>
+          <span>Today</span>
+          <span>100% Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Remote, US National</div>
+      </div>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/java-canada-h23e4567-e89b-12d3-a456-426614174000">
+              Java Developer
+            </a>
+          </h3>
+          <span>Canada Co</span>
+          <span>Today</span>
+          <span>100% Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Remote in Canada</div>
+      </div>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/platform-austin-i23e4567-e89b-12d3-a456-426614174000">
+              Platform Engineer
+            </a>
+          </h3>
+          <span>Texas Co</span>
+          <span>Today</span>
+          <span>Hybrid Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Hybrid Remote in Austin, TX</div>
+      </div>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/fullstack-anywhere-j23e4567-e89b-12d3-a456-426614174000">
+              Full Stack Engineer
+            </a>
+          </h3>
+          <span>Anywhere Co</span>
+          <span>Today</span>
+          <span>100% Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Remote from Anywhere</div>
+      </div>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/software-argentina-k23e4567-e89b-12d3-a456-426614174000">
+              Software Engineer
+            </a>
+          </h3>
+          <span>Argentina Co</span>
+          <span>Today</span>
+          <span>100% Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Remote in Argentina</div>
+      </div>
+      <div class="remote-job-listing">
+        <div class="summary">
+          <h3>
+            <a href="/job-details/api-americas-l23e4567-e89b-12d3-a456-426614174000">
+              API Engineer
+            </a>
+          </h3>
+          <span>Americas Co</span>
+          <span>Today</span>
+          <span>100% Remote Work</span>
+          <span>Full-Time</span>
+          <span>Employee</span>
+        </div>
+        <div class="job-location">Remote in Americas</div>
+      </div>
+    </body></html>
+    """
+
+
+def _pagination_html(
+    *,
+    next_href: str,
+) -> str:
+    return f"""
+    <html><body>
+      <nav class="pagination">
+        <a class="prev page-numbers" href="#">prev</a>
+        <a class="page-numbers" href="/remote-jobs/back-end-developer/">
+          1
+        </a>
+        <a class="next page-numbers" href="{next_href}">
+          next
+        </a>
+      </nav>
     </body></html>
     """
 
