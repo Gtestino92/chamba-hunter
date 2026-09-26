@@ -68,6 +68,52 @@ def evaluate_source_recency(
         getonboard,
         dict,
     ):
+        source = getonboard.get(
+            "source"
+        )
+
+        opened_relative = getonboard.get(
+            "opened_relative"
+        )
+
+        if (
+            source == "DYNAMITEJOBS"
+            and isinstance(
+                opened_relative,
+                str,
+            )
+        ):
+            relative = _relative_age_range(
+                opened_relative
+            )
+
+            if relative is not None:
+                (
+                    min_age_days,
+                    max_age_days,
+                ) = relative
+
+                return SourceRecency(
+                    bucket=(
+                        _range_bucket(
+                            min_age_days,
+                            max_age_days,
+                        )
+                    ),
+                    min_age_days=(
+                        min_age_days
+                    ),
+                    max_age_days=(
+                        max_age_days
+                    ),
+                    evidence_type=(
+                        "DYNAMITEJOBS_OPENED_RELATIVE"
+                    ),
+                    evidence_value=(
+                        opened_relative
+                    ),
+                )
+
         published_date = (
             getonboard.get(
                 "published_date"
@@ -219,7 +265,7 @@ def _relative_age_range(
     )
 
     if re.search(
-        r"\b(hoy|today|just posted)\b",
+        r"\b(hoy|today|just posted|new job)\b",
         normalized,
     ):
         return (0, 0)
