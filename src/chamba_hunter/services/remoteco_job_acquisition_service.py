@@ -65,10 +65,13 @@ class RemoteCoAcquisitionSummary:
     duplicates_removed: int
     explicit_geo_rejects: int
     remote_level_rejects: int
+    international_non_tech_rejects: int
     unknown_geography: int
     potentially_eligible: int
     details_attempted: int
     details_succeeded: int
+    details_enriched: int
+    details_partial_gated: int
     details_failed: int
     parse_failures: int
     normalized_jobs: int
@@ -156,6 +159,7 @@ class RemoteCoJobAcquisitionService:
             skipped=(
                 fetch.explicit_geo_rejects
                 + fetch.remote_level_rejects
+                + fetch.international_non_tech_rejects
                 + fetch.details_failed
                 + fetch.parse_failures
             ),
@@ -290,6 +294,7 @@ class RemoteCoJobAcquisitionService:
         skipped = (
             fetch.explicit_geo_rejects
             + fetch.remote_level_rejects
+            + fetch.international_non_tech_rejects
             + fetch.details_failed
             + fetch.parse_failures
         )
@@ -653,6 +658,9 @@ def _summary_from_fetch(
         remote_level_rejects=(
             fetch.remote_level_rejects
         ),
+        international_non_tech_rejects=(
+            fetch.international_non_tech_rejects
+        ),
         unknown_geography=(
             fetch.unknown_geography
         ),
@@ -664,6 +672,12 @@ def _summary_from_fetch(
         ),
         details_succeeded=(
             fetch.details_succeeded
+        ),
+        details_enriched=(
+            fetch.details_enriched
+        ),
+        details_partial_gated=(
+            fetch.details_partial_gated
         ),
         details_failed=fetch.details_failed,
         parse_failures=fetch.parse_failures,
@@ -744,6 +758,9 @@ def _metadata(
         "remote_level_rejects": (
             summary.remote_level_rejects
         ),
+        "international_non_tech_rejects": (
+            summary.international_non_tech_rejects
+        ),
         "unknown_geography": (
             summary.unknown_geography
         ),
@@ -755,6 +772,12 @@ def _metadata(
         ),
         "details_succeeded": (
             summary.details_succeeded
+        ),
+        "details_enriched": (
+            summary.details_enriched
+        ),
+        "details_partial_gated": (
+            summary.details_partial_gated
         ),
         "details_failed": (
             summary.details_failed

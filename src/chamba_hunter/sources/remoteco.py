@@ -29,6 +29,10 @@ REMOTECO_CATEGORY_URLS = (
     "https://remote.co/remote-jobs/java-developer",
     "https://remote.co/remote-jobs/software-engineer",
     "https://remote.co/remote-jobs/full-stack-developer",
+    "https://remote.co/remote-jobs/international",
+)
+REMOTECO_INTERNATIONAL_CATEGORY_URL = (
+    "https://remote.co/remote-jobs/international"
 )
 
 DEFAULT_REMOTECO_MAX_PAGES_PER_CATEGORY = 3
@@ -48,6 +52,13 @@ class RemoteCoGeoClassification(StrEnum):
     POTENTIALLY_ELIGIBLE = "POTENTIALLY_ELIGIBLE"
     EXPLICITLY_INELIGIBLE = "EXPLICITLY_INELIGIBLE"
     UNKNOWN = "UNKNOWN"
+
+
+class RemoteCoDetailStatus(StrEnum):
+    FULL = "FULL"
+    PARTIAL = "PARTIAL"
+    GATED = "GATED"
+    FAILED = "FAILED"
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +112,7 @@ class RemoteCoPosting:
     published_at: datetime | None
     posted_relative: str | None
     source_job_id: str | None
+    detail_status: RemoteCoDetailStatus
 
     raw_payload: dict[str, Any]
 
@@ -123,10 +135,13 @@ class RemoteCoFetch:
     duplicates_removed: int
     explicit_geo_rejects: int
     remote_level_rejects: int
+    international_non_tech_rejects: int
     unknown_geography: int
     potentially_eligible: int
     details_attempted: int
     details_succeeded: int
+    details_enriched: int
+    details_partial_gated: int
     details_failed: int
     parse_failures: int
     normalized_jobs: int
@@ -265,6 +280,7 @@ class RemoteCoClient:
             duplicates_removed = 0
             explicit_geo_rejects = 0
             remote_level_rejects = 0
+            international_non_tech_rejects = 0
             unknown_geography = 0
             potentially_eligible = 0
             coverage_warnings: list[str] = []
@@ -302,6 +318,16 @@ class RemoteCoClient:
                     )
 
                     for entry in page.entries:
+                        if (
+                            category_url
+                            == REMOTECO_INTERNATIONAL_CATEGORY_URL
+                            and not _is_international_tech_relevant(
+                                entry
+                            )
+                        ):
+                            international_non_tech_rejects += 1
+                            continue
+
                         if _remote_level_reject(
                             entry.remote_work_level
                         ):
@@ -355,6 +381,8 @@ class RemoteCoClient:
             jobs: list[RemoteCoPosting] = []
             failures: list[RemoteCoDetailFailure] = []
             parse_failures = 0
+            details_enriched = 0
+            details_partial_gated = 0
 
             def fetch_detail(
                 entry: RemoteCoListingEntry,
@@ -394,9 +422,7 @@ class RemoteCoClient:
                     ]
 
                     try:
-                        jobs.append(
-                            future.result()
-                        )
+                        posting = future.result()
                     except Exception as error:
                         if isinstance(
                             error,
@@ -420,6 +446,35 @@ class RemoteCoClient:
                                 ),
                             )
                         )
+                        jobs.append(
+                            _posting_from_listing(
+                                entry,
+                                detail_status=(
+                                    RemoteCoDetailStatus.FAILED
+                                ),
+                                detail_error={
+                                    "error_type": (
+                                        type(error).__name__
+                                    ),
+                                    "error_message": (
+                                        _concise_error_message(
+                                            error
+                                        )
+                                    ),
+                                },
+                            )
+                        )
+                        continue
+
+                    if (
+                        posting.detail_status
+                        == RemoteCoDetailStatus.FULL
+                    ):
+                        details_enriched += 1
+                    else:
+                        details_partial_gated += 1
+
+                    jobs.append(posting)
 
             if (
                 selected_entries
@@ -432,11 +487,23 @@ class RemoteCoClient:
 
             if len(failures) > max(
                 5,
-                len(jobs),
+                len(selected_entries)
+                - len(failures),
             ):
                 raise RuntimeError(
-                    "Remote.co detail failure rate "
-                    "was too high to persist safely."
+                    _detail_failure_message(
+                        details_attempted=len(
+                            selected_entries
+                        ),
+                        details_succeeded=(
+                            len(selected_entries)
+                            - len(failures)
+                        ),
+                        parse_failures=(
+                            parse_failures
+                        ),
+                        failures=failures,
+                    )
                 )
 
             jobs.sort(
@@ -462,6 +529,9 @@ class RemoteCoClient:
                 remote_level_rejects=(
                     remote_level_rejects
                 ),
+                international_non_tech_rejects=(
+                    international_non_tech_rejects
+                ),
                 unknown_geography=(
                     unknown_geography
                 ),
@@ -471,7 +541,14 @@ class RemoteCoClient:
                 details_attempted=len(
                     selected_entries
                 ),
-                details_succeeded=len(jobs),
+                details_succeeded=(
+                    len(selected_entries)
+                    - len(failures)
+                ),
+                details_enriched=details_enriched,
+                details_partial_gated=(
+                    details_partial_gated
+                ),
                 details_failed=len(
                     failures
                 ),
@@ -526,6 +603,13 @@ def parse_remoteco_listing_page(
         location_text = hints[
             "location_text"
         ]
+        company_hint = hints["company_hint"]
+
+        if (
+            _source_value(title_hint) is None
+            or _source_value(company_hint) is None
+        ):
+            continue
 
         entries_by_url.setdefault(
             canonical,
@@ -534,7 +618,7 @@ def parse_remoteco_listing_page(
                 canonical_url=canonical,
                 title_hint=title_hint,
                 company_hint=(
-                    hints["company_hint"]
+                    company_hint
                 ),
                 posted_relative=(
                     hints["posted_relative"]
@@ -585,23 +669,34 @@ def parse_remoteco_detail(
     json_ld = _jobposting_json_ld(root)
 
     title = (
-        _json_string(json_ld, "title")
-        or entry.title_hint
-        or _heading_text(root, "h1")
+        _source_value(entry.title_hint)
+        or _source_value(
+            _json_string(json_ld, "title")
+        )
+        or _source_value(
+            _heading_text(root, "h1")
+        )
+    )
+    detail_company = (
+        _source_value(
+            _organization_name(
+                json_ld.get(
+                    "hiringOrganization"
+                )
+                if isinstance(json_ld, dict)
+                else None
+            )
+        )
+        or _source_value(
+            _labeled_value(
+                lines,
+                "Company",
+            )
+        )
     )
     company_name = (
-        _organization_name(
-            json_ld.get(
-                "hiringOrganization"
-            )
-            if isinstance(json_ld, dict)
-            else None
-        )
-        or _labeled_value(
-            lines,
-            "Company",
-        )
-        or entry.company_hint
+        _source_value(entry.company_hint)
+        or detail_company
     )
 
     if title is None:
@@ -615,54 +710,66 @@ def parse_remoteco_detail(
         )
 
     description = (
-        _html_to_text(
-            _json_string(
-                json_ld,
-                "description",
+        _source_value(
+            _html_to_text(
+                _json_string(
+                    json_ld,
+                    "description",
+                )
             )
         )
-        or _section_text(
-            lines,
-            "About the Role",
+        or _source_value(
+            _section_text(
+                lines,
+                "About the Role",
+            )
         )
-        or _section_text(
-            lines,
-            "Job Description",
+        or _source_value(
+            _section_text(
+                lines,
+                "Job Description",
+            )
         )
     )
-
-    if description is None:
-        raise RemoteCoParseError(
-            "Remote.co detail page has no "
-            "description."
-        )
 
     date_posted_text = _labeled_value(
         lines,
         "Date Posted",
     )
     remote_work_level = (
-        _labeled_value(
-            lines,
-            "Remote Work Level",
+        _source_value(
+            _labeled_value(
+                lines,
+                "Remote Work Level",
+            )
         )
         or entry.remote_work_level
     )
     location_text = (
-        _location_from_json_ld(json_ld)
-        or _labeled_value(lines, "Location")
+        _source_value(
+            _location_from_json_ld(json_ld)
+        )
+        or _source_value(
+            _labeled_value(lines, "Location")
+        )
         or entry.location_text
     )
     job_schedule = (
-        _labeled_value(
-            lines,
-            "Job Schedule",
+        _source_value(
+            _labeled_value(
+                lines,
+                "Job Schedule",
+            )
         )
         or entry.schedule
     )
     salary_text = (
-        _labeled_value(lines, "Salary")
-        or _salary_from_json_ld(json_ld)
+        _source_value(
+            _labeled_value(lines, "Salary")
+        )
+        or _source_value(
+            _salary_from_json_ld(json_ld)
+        )
         or entry.salary_text
     )
     categories = tuple(
@@ -682,15 +789,21 @@ def parse_remoteco_detail(
         )
     )
     job_type = (
-        _labeled_value(lines, "Job Type")
-        or _employment_type_from_json_ld(
-            json_ld
+        _source_value(
+            _labeled_value(lines, "Job Type")
+        )
+        or _source_value(
+            _employment_type_from_json_ld(
+                json_ld
+            )
         )
         or entry.job_type
     )
-    career_level = _labeled_value(
-        lines,
-        "Career Level",
+    career_level = _source_value(
+        _labeled_value(
+            lines,
+            "Career Level",
+        )
     )
     apply_url = _apply_url(
         root,
@@ -734,40 +847,21 @@ def parse_remoteco_detail(
     source_job_id = _source_job_id(
         json_ld
     )
+    detail_status = _detail_status(
+        description=description,
+        detail_company=detail_company,
+        apply_url=apply_url,
+        company_website_url=company_website_url,
+        source_job_id=source_job_id,
+        categories=categories,
+        career_level=career_level,
+        published_at=published_at,
+    )
 
     raw_payload = {
         "external_id": entry.external_id,
         "canonical_url": entry.canonical_url,
-        "index": {
-            "source_category_url": (
-                entry.source_category_url
-            ),
-            "source_listing_url": (
-                entry.source_listing_url
-            ),
-            "title_hint": entry.title_hint,
-            "company_hint": entry.company_hint,
-            "posted_relative": (
-                entry.posted_relative
-            ),
-            "remote_work_level": (
-                entry.remote_work_level
-            ),
-            "schedule": entry.schedule,
-            "job_type": entry.job_type,
-            "salary_text": (
-                entry.salary_text
-            ),
-            "location_text": (
-                entry.location_text
-            ),
-            "geo_classification": (
-                entry.geo_classification.value
-            ),
-            "raw_lines": list(
-                entry.raw_lines
-            ),
-        },
+        "index": _listing_payload(entry),
         "detail": {
             "structured_json_ld_present": bool(
                 json_ld
@@ -785,6 +879,11 @@ def parse_remoteco_detail(
             "source_job_id": source_job_id,
             "company_website_url": (
                 company_website_url
+            ),
+            "status": detail_status.value,
+            "company_placeholder_rejected": (
+                detail_company is None
+                and _has_placeholder_text(lines)
             ),
         },
         "_chamba_source_enrichment": {
@@ -817,8 +916,241 @@ def parse_remoteco_detail(
         published_at=published_at,
         posted_relative=posted_relative,
         source_job_id=source_job_id,
+        detail_status=detail_status,
         raw_payload=raw_payload,
     )
+
+
+def _posting_from_listing(
+    entry: RemoteCoListingEntry,
+    *,
+    detail_status: RemoteCoDetailStatus,
+    detail_error: dict[str, str] | None = None,
+) -> RemoteCoPosting:
+    title = _source_value(
+        entry.title_hint
+    )
+    company_name = _source_value(
+        entry.company_hint
+    )
+
+    if title is None:
+        raise RemoteCoParseError(
+            "Remote.co listing has no title."
+        )
+
+    if company_name is None:
+        raise RemoteCoParseError(
+            "Remote.co listing has no company."
+        )
+
+    raw_payload = {
+        "external_id": entry.external_id,
+        "canonical_url": entry.canonical_url,
+        "index": _listing_payload(entry),
+        "detail": {
+            "status": detail_status.value,
+            "error": detail_error,
+        },
+        "_chamba_source_enrichment": {
+            "source": "REMOTECO",
+            "posted_relative": (
+                entry.posted_relative
+            ),
+        },
+    }
+
+    return RemoteCoPosting(
+        external_id=entry.external_id,
+        canonical_url=entry.canonical_url,
+        title=title,
+        company_name=company_name,
+        description=None,
+        location_text=entry.location_text,
+        workplace_type_source=(
+            entry.remote_work_level
+        ),
+        employment_type=entry.job_type,
+        job_schedule=entry.schedule,
+        salary_text=entry.salary_text,
+        career_level=None,
+        categories=(),
+        apply_url=None,
+        company_website_url=None,
+        published_at=None,
+        posted_relative=entry.posted_relative,
+        source_job_id=None,
+        detail_status=detail_status,
+        raw_payload=raw_payload,
+    )
+
+
+def _listing_payload(
+    entry: RemoteCoListingEntry,
+) -> dict[str, Any]:
+    return {
+        "source_category_url": (
+            entry.source_category_url
+        ),
+        "source_listing_url": (
+            entry.source_listing_url
+        ),
+        "title_hint": entry.title_hint,
+        "company_hint": entry.company_hint,
+        "posted_relative": (
+            entry.posted_relative
+        ),
+        "remote_work_level": (
+            entry.remote_work_level
+        ),
+        "schedule": entry.schedule,
+        "job_type": entry.job_type,
+        "salary_text": entry.salary_text,
+        "location_text": entry.location_text,
+        "geo_classification": (
+            entry.geo_classification.value
+        ),
+        "raw_lines": list(entry.raw_lines),
+    }
+
+
+def _detail_status(
+    *,
+    description: str | None,
+    detail_company: str | None,
+    apply_url: str | None,
+    company_website_url: str | None,
+    source_job_id: str | None,
+    categories: tuple[str, ...],
+    career_level: str | None,
+    published_at: datetime | None,
+) -> RemoteCoDetailStatus:
+    if description is not None:
+        return RemoteCoDetailStatus.FULL
+
+    if any(
+        value is not None
+        for value in (
+            detail_company,
+            apply_url,
+            company_website_url,
+            source_job_id,
+            career_level,
+            published_at,
+        )
+    ) or bool(categories):
+        return RemoteCoDetailStatus.PARTIAL
+
+    return RemoteCoDetailStatus.GATED
+
+
+def _source_value(
+    value: str | None,
+) -> str | None:
+    cleaned = _clean_text(value)
+
+    if cleaned is None:
+        return None
+
+    normalized = _normalize_text(cleaned)
+
+    if normalized in {
+        "company details here",
+        "company benefits here",
+        "details here",
+        "benefits here",
+    }:
+        return None
+
+    return cleaned
+
+
+def _has_placeholder_text(
+    lines: list[str],
+) -> bool:
+    return any(
+        _source_value(line) is None
+        and _clean_text(line) is not None
+        for line in lines
+    )
+
+
+def _is_international_tech_relevant(
+    entry: RemoteCoListingEntry,
+) -> bool:
+    title = _normalize_text(
+        entry.title_hint
+    )
+    evidence = _normalize_text(
+        " ".join(
+            [
+                entry.title_hint or "",
+                " ".join(entry.raw_lines),
+            ]
+        )
+    )
+
+    if re.search(
+        r"\b(translator|translation|payroll|"
+        r"recruiter|recruiting|seo strategist|"
+        r"clinical trial|business development|"
+        r"sales|account executive|customer support|"
+        r"virtual assistant|bookkeeper)\b",
+        title,
+    ):
+        return False
+
+    return re.search(
+        r"\b(back[\s-]?end|backend|software|"
+        r"full[\s-]?stack|java|platform|postgres|"
+        r"devops|site reliability|sre|"
+        r"infrastructure|api|application engineer|"
+        r"engineering manager|tech lead|"
+        r"technical lead|solutions architect|"
+        r"developer|engineer|architect)\b",
+        evidence,
+    ) is not None
+
+
+def _detail_failure_message(
+    *,
+    details_attempted: int,
+    details_succeeded: int,
+    parse_failures: int,
+    failures: list[RemoteCoDetailFailure],
+) -> str:
+    sample_lines = [
+        "Remote.co detail failure rate was too "
+        "high to persist safely.",
+        f"details attempted: {details_attempted}",
+        f"details succeeded: {details_succeeded}",
+        f"actual failures: {len(failures)}",
+        f"parse failures: {parse_failures}",
+        "sample failures:",
+    ]
+
+    for failure in failures[:5]:
+        sample_lines.append(
+            "  - "
+            f"{failure.url} | "
+            f"{failure.error_type}: "
+            f"{failure.error_message}"
+        )
+
+    return "\n".join(sample_lines)
+
+
+def _concise_error_message(
+    error: Exception,
+) -> str:
+    message = str(error)
+    message = re.sub(
+        r"\s+",
+        " ",
+        message,
+    ).strip()
+
+    return message[:240]
 
 
 def canonical_remoteco_job_url(

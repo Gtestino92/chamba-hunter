@@ -7,7 +7,6 @@ from chamba_hunter.db.connection import Database
 from chamba_hunter.db.converters import json_from_db
 from chamba_hunter.db.migrations import migrate
 from chamba_hunter.domain.enums import (
-    AtsProvider,
     SourceType,
     WorkplaceType,
 )
@@ -40,8 +39,10 @@ from chamba_hunter.services.remoteco_job_acquisition_service import (
     RemoteCoJobAcquisitionService,
 )
 from chamba_hunter.sources.remoteco import (
+    REMOTECO_INTERNATIONAL_CATEGORY_URL,
     REMOTECO_CATEGORY_URLS,
     RemoteCoClient,
+    RemoteCoDetailStatus,
     RemoteCoGeoClassification,
     RemoteCoListingEntry,
     canonical_remoteco_job_url,
@@ -158,6 +159,9 @@ def test_geo_classifier_is_conservative() -> None:
         "Worldwide"
     ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
     assert classify_remoteco_geography(
+        "Remote from Anywhere"
+    ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
+    assert classify_remoteco_geography(
         "Remote in Americas"
     ) == RemoteCoGeoClassification.UNKNOWN
     assert classify_remoteco_geography(
@@ -219,16 +223,18 @@ def test_client_prefilters_before_fetching_details() -> None:
         detail_workers=1,
     )
 
-    assert fetch.pages_fetched == 5
-    assert fetch.listing_rows == 6
+    assert fetch.pages_fetched == 6
+    assert fetch.listing_rows == 5
     assert fetch.unique_jobs == 2
     assert fetch.duplicates_removed == 1
-    assert fetch.explicit_geo_rejects == 2
+    assert fetch.explicit_geo_rejects == 1
     assert fetch.remote_level_rejects == 1
     assert fetch.unknown_geography == 1
     assert fetch.potentially_eligible == 2
     assert fetch.details_attempted == 2
     assert fetch.details_succeeded == 2
+    assert fetch.details_enriched == 2
+    assert fetch.details_partial_gated == 0
     assert len(fetch.coverage_warnings) == 1
     assert all(
         "us-national" not in call
@@ -309,6 +315,144 @@ def test_client_fetches_unknown_geography_details() -> None:
     )
 
 
+def test_detail_without_description_remains_valid_partial_job() -> None:
+    posting = parse_remoteco_detail(
+        _gated_detail_html(
+            title="Backend Engineer",
+            company="Canonical Co",
+            remote_work_level="100% Remote Work",
+            location="Remote from Anywhere",
+            date_posted="Today",
+        ),
+        entry=_entry(
+            title="Backend Engineer",
+            company="Canonical Co",
+        ),
+    )
+
+    assert posting.description is None
+    assert posting.company_name == "Canonical Co"
+    assert posting.location_text == "Remote from Anywhere"
+    assert posting.detail_status in {
+        RemoteCoDetailStatus.PARTIAL,
+        RemoteCoDetailStatus.GATED,
+    }
+
+
+def test_placeholder_company_is_rejected_for_listing_company() -> None:
+    posting = parse_remoteco_detail(
+        _gated_detail_html(
+            title="Backend Engineer",
+            company="Company details here",
+            remote_work_level="100% Remote Work",
+            location="Remote from Anywhere",
+            date_posted="Today",
+        ),
+        entry=_entry(
+            title="Backend Engineer",
+            company="Canonical",
+        ),
+    )
+
+    assert posting.company_name == "Canonical"
+    assert posting.raw_payload["detail"][
+        "company_placeholder_rejected"
+    ] is True
+
+
+def test_gated_detail_is_not_a_failure_or_abort() -> None:
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if str(request.url).rstrip("/") in {
+            url.rstrip("/")
+            for url in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Gated Backend Engineer",
+                            "Gated Co",
+                            "gated-backend-engineer-623e4567-e89b-12d3-a456-426614174000",
+                        )
+                    ]
+                ),
+            )
+
+        return httpx.Response(
+            200,
+            text=_gated_detail_html(
+                title="Gated Backend Engineer",
+                company="Company details here",
+                remote_work_level="100% Remote Work",
+                location="Remote from Anywhere",
+                date_posted="Today",
+            ),
+        )
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=1,
+        max_jobs=5,
+        detail_workers=1,
+    )
+
+    assert fetch.details_failed == 0
+    assert fetch.details_partial_gated == 1
+    assert len(fetch.jobs) == 1
+    assert fetch.jobs[0].detail_status in {
+        RemoteCoDetailStatus.PARTIAL,
+        RemoteCoDetailStatus.GATED,
+    }
+
+
+def test_http_failure_counts_but_keeps_listing_baseline() -> None:
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if str(request.url).rstrip("/") in {
+            url.rstrip("/")
+            for url in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Backend Engineer",
+                            "Failure Co",
+                            "backend-failure-723e4567-e89b-12d3-a456-426614174000",
+                        )
+                    ]
+                ),
+            )
+
+        return httpx.Response(500)
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=1,
+        max_jobs=1,
+        detail_workers=1,
+    )
+
+    assert fetch.details_failed == 1
+    assert fetch.details_succeeded == 0
+    assert fetch.jobs[0].detail_status == (
+        RemoteCoDetailStatus.FAILED
+    )
+    assert fetch.jobs[0].title == "Backend Engineer"
+    assert fetch.jobs[0].company_name == "Failure Co"
+
+
 def test_detail_extracts_structured_fields_and_exact_date() -> None:
     posting = parse_remoteco_detail(
         _detail_html(
@@ -358,6 +502,7 @@ def test_detail_extracts_structured_fields_and_exact_date() -> None:
         20,
         tzinfo=UTC,
     )
+    assert posting.detail_status == RemoteCoDetailStatus.FULL
 
 
 def test_detail_preserves_relative_without_fabricating_date() -> None:
@@ -383,7 +528,158 @@ def test_detail_preserves_relative_without_fabricating_date() -> None:
     ]["posted_relative"] == "New!"
 
 
-def test_apply_persists_remote_source_lead_and_hint(
+def test_international_category_is_configured() -> None:
+    assert REMOTECO_INTERNATIONAL_CATEGORY_URL in (
+        REMOTECO_CATEGORY_URLS
+    )
+    assert len(REMOTECO_CATEGORY_URLS) == 5
+
+
+def test_international_filter_retains_technical_titles() -> None:
+    fetch = _fetch_international_titles(
+        [
+            (
+                "Backend Engineer",
+                "Tech Co",
+                "backend-engineer-823e4567-e89b-12d3-a456-426614174000",
+            ),
+            (
+                "Full-Stack Engineer",
+                "Stack Co",
+                "full-stack-engineer-923e4567-e89b-12d3-a456-426614174000",
+            ),
+            (
+                "Postgres Engineer",
+                "Data Co",
+                "postgres-engineer-a23e4567-e89b-12d3-a456-426614174000",
+            ),
+            (
+                "Translator",
+                "Words Co",
+                "translator-b23e4567-e89b-12d3-a456-426614174000",
+            ),
+            (
+                "Payroll Administrator",
+                "Payroll Co",
+                "payroll-c23e4567-e89b-12d3-a456-426614174000",
+            ),
+            (
+                "Recruiter",
+                "People Co",
+                "recruiter-d23e4567-e89b-12d3-a456-426614174000",
+            ),
+        ]
+    )
+
+    assert fetch.international_non_tech_rejects == 3
+    assert [
+        job.title
+        for job in fetch.jobs
+    ] == [
+        "Backend Engineer",
+        "Full-Stack Engineer",
+        "Postgres Engineer",
+    ]
+
+
+def test_duplicate_across_international_and_technical_is_one_job() -> None:
+    duplicate_slug = (
+        "backend-engineer-e23e4567-e89b-12d3-a456-426614174000"
+    )
+
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        url = str(request.url).rstrip("/")
+
+        if url == REMOTECO_CATEGORY_URLS[0]:
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Backend Engineer",
+                            "Dup Co",
+                            duplicate_slug,
+                        )
+                    ]
+                ),
+            )
+
+        if url == REMOTECO_INTERNATIONAL_CATEGORY_URL:
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Backend Engineer",
+                            "Dup Co",
+                            duplicate_slug,
+                        )
+                    ]
+                ),
+            )
+
+        if url in {
+            category.rstrip("/")
+            for category in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text="<html><body>No jobs</body></html>",
+            )
+
+        return httpx.Response(
+            200,
+            text=_detail_html(
+                title="Backend Engineer",
+                company="Dup Co",
+                remote_work_level="100% Remote Work",
+                location="Remote from Anywhere",
+                date_posted="Today",
+            ),
+        )
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=1,
+        max_jobs=10,
+        detail_workers=1,
+    )
+
+    assert fetch.unique_jobs == 1
+    assert fetch.duplicates_removed == 1
+    assert len(fetch.jobs) == 1
+
+
+def test_preview_mode_performs_zero_persistence(
+    tmp_path,
+) -> None:
+    database = Database(
+        tmp_path / "test.db"
+    )
+    migrate(database)
+    before = _table_counts(database)
+
+    service = RemoteCoJobAcquisitionService(
+        client=_partial_fetch_client()
+    )
+
+    summary = service.preview(
+        max_pages_per_category=1,
+        max_jobs=1,
+        detail_workers=1,
+    )
+
+    assert summary.applied is False
+    assert summary.normalized_jobs == 1
+    assert _table_counts(database) == before
+
+
+def test_apply_with_partial_detail_persists_listing_baseline(
     tmp_path,
 ) -> None:
     database = Database(
@@ -393,7 +689,7 @@ def test_apply_persists_remote_source_lead_and_hint(
 
     service = _service(
         database,
-        _fetch_client(),
+        _partial_fetch_client(),
     )
 
     summary = service.run(
@@ -405,7 +701,8 @@ def test_apply_persists_remote_source_lead_and_hint(
     assert summary.applied is True
     assert summary.companies_created == 1
     assert summary.jobs_created == 1
-    assert summary.ats_hints_created == 1
+    assert summary.ats_hints_created == 0
+    assert summary.details_partial_gated == 1
 
     with database.connection() as connection:
         sources = connection.execute(
@@ -435,13 +732,14 @@ def test_apply_persists_remote_source_lead_and_hint(
     )["_chamba_source_enrichment"][
         "posted_relative"
     ] == "Today"
-    assert len(hints) == 1
-    assert hints[0]["provider"] == (
-        AtsProvider.GREENHOUSE.value
+    assert leads[0]["description"] is None
+    assert json_from_db(
+        leads[0]["raw_payload_json"]
+    )["detail"]["status"] in (
+        RemoteCoDetailStatus.PARTIAL.value,
+        RemoteCoDetailStatus.GATED.value,
     )
-    assert hints[0]["external_identifier"] == (
-        "globex"
-    )
+    assert len(hints) == 0
 
     state = SourceAcquisitionStateRepository(
         database
@@ -537,46 +835,47 @@ def _service(
     )
 
 
-def _fetch_client() -> RemoteCoClient:
+def _partial_fetch_client() -> RemoteCoClient:
     def handler(
         request: httpx.Request,
     ) -> httpx.Response:
+        if (
+            str(request.url).rstrip("/")
+            == REMOTECO_CATEGORY_URLS[0].rstrip("/")
+        ):
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    [
+                        (
+                            "Senior Backend Engineer",
+                            "Globex",
+                            "senior-backend-engineer-123e4567-e89b-12d3-a456-426614174000",
+                        )
+                    ],
+                    location=(
+                        "Remote in Argentina"
+                    ),
+                ),
+            )
+
         if str(request.url).rstrip("/") in {
             url.rstrip("/")
             for url in REMOTECO_CATEGORY_URLS
         }:
             return httpx.Response(
                 200,
-                text="""
-                <article class="job-card">
-                  <a href="/job-details/senior-backend-engineer-123e4567-e89b-12d3-a456-426614174000">
-                    Senior Backend Engineer
-                  </a>
-                  <span>Globex</span>
-                  <span>Today</span>
-                  <span>100% Remote Work</span>
-                  <span>Remote in Argentina</span>
-                  <span>Full-Time</span>
-                  <span>Employee</span>
-                </article>
-                """,
+                text="<html><body>No jobs</body></html>",
             )
 
         return httpx.Response(
             200,
-            text=_detail_html(
+            text=_gated_detail_html(
                 title="Senior Backend Engineer",
-                company="Globex",
+                company="Company details here",
                 remote_work_level="100% Remote Work",
                 location="Remote in Argentina",
                 date_posted="Today",
-                apply_url=(
-                    "https://boards.greenhouse.io/"
-                    "globex/jobs/123"
-                ),
-                company_url=(
-                    "https://www.globex.com"
-                ),
             ),
         )
 
@@ -585,6 +884,87 @@ def _fetch_client() -> RemoteCoClient:
             handler
         )
     )
+
+
+def _fetch_international_titles(
+    titles: list[tuple[str, str, str]],
+):
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        url = str(request.url).rstrip("/")
+
+        if url == REMOTECO_INTERNATIONAL_CATEGORY_URL:
+            return httpx.Response(
+                200,
+                text=_listing_page_for_titles(
+                    titles,
+                    location=(
+                        "Remote from Anywhere"
+                    ),
+                ),
+            )
+
+        if url in {
+            category.rstrip("/")
+            for category in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text="<html><body>No jobs</body></html>",
+            )
+
+        title = "Backend Engineer"
+        company = "Tech Co"
+
+        for candidate_title, candidate_company, slug in titles:
+            if slug in str(request.url):
+                title = candidate_title
+                company = candidate_company
+                break
+
+        return httpx.Response(
+            200,
+            text=_detail_html(
+                title=title,
+                company=company,
+                remote_work_level="100% Remote Work",
+                location="Remote from Anywhere",
+                date_posted="Today",
+            ),
+        )
+
+    return RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=1,
+        max_jobs=10,
+        detail_workers=1,
+    )
+
+
+def _table_counts(
+    database: Database,
+) -> dict[str, int]:
+    tables = [
+        "companies",
+        "company_sources",
+        "job_leads",
+        "job_ats_hints",
+        "runs",
+        "run_steps",
+        "source_acquisition_states",
+    ]
+
+    with database.connection() as connection:
+        return {
+            table: connection.execute(
+                f"SELECT COUNT(*) FROM {table}"
+            ).fetchone()[0]
+            for table in tables
+        }
 
 
 def _entry(
@@ -708,6 +1088,37 @@ def _listing_page_two() -> str:
     """
 
 
+def _listing_page_for_titles(
+    titles: list[tuple[str, str, str]],
+    *,
+    location: str = "Remote from Anywhere",
+) -> str:
+    rows = []
+
+    for title, company, slug in titles:
+        rows.append(
+            f"""
+            <article class="job-card">
+              <a href="/job-details/{slug}">
+                {title}
+              </a>
+              <span>{company}</span>
+              <span>Today</span>
+              <span>100% Remote Work</span>
+              <span>{location}</span>
+              <span>Full-Time</span>
+              <span>Employee</span>
+            </article>
+            """
+        )
+
+    return (
+        "<html><body>"
+        + "\n".join(rows)
+        + "</body></html>"
+    )
+
+
 def _detail_html(
     *,
     title: str,
@@ -768,5 +1179,52 @@ def _detail_html(
       <h2>About the Role</h2>
       <p>Build Python and Java APIs.</p>
       {apply_link}
+    </body></html>
+    """
+
+
+def _gated_detail_html(
+    *,
+    title: str,
+    company: str,
+    remote_work_level: str,
+    location: str,
+    date_posted: str,
+) -> str:
+    json_ld = json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "JobPosting",
+            "title": title,
+            "hiringOrganization": {
+                "@type": "Organization",
+                "name": company,
+            },
+            "datePosted": date_posted,
+            "employmentType": "Employee",
+            "occupationalCategory": [
+                "Software Development",
+            ],
+        }
+    )
+
+    return f"""
+    <html><head>
+      <script type="application/ld+json">
+        {json_ld}
+      </script>
+    </head><body>
+      <h1>{title}</h1>
+      <dl>
+        <dt>Date Posted</dt><dd>{date_posted}</dd>
+        <dt>Remote Work Level</dt><dd>{remote_work_level}</dd>
+        <dt>Location</dt><dd>{location}</dd>
+        <dt>Job Schedule</dt><dd>Full-Time</dd>
+        <dt>Categories</dt><dd>Software Development</dd>
+        <dt>Job Type</dt><dd>Employee</dd>
+        <dt>Career Level</dt><dd>Senior</dd>
+      </dl>
+      <h2>Company details here</h2>
+      <p>Company Benefits here</p>
     </body></html>
     """

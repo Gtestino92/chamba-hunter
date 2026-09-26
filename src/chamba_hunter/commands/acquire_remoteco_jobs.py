@@ -252,6 +252,10 @@ def main() -> None:
         f"remote-level rejects: {summary.remote_level_rejects:5d}"
     )
     print(
+        "international rejects:"
+        f" {summary.international_non_tech_rejects:5d}"
+    )
+    print(
         f"unknown geography:    {summary.unknown_geography:5d}"
     )
     print(
@@ -262,6 +266,12 @@ def main() -> None:
     )
     print(
         f"details fetched:      {summary.details_succeeded:5d}"
+    )
+    print(
+        f"details enriched:     {summary.details_enriched:5d}"
+    )
+    print(
+        f"details partial/gated:{summary.details_partial_gated:5d}"
     )
     print(
         f"detail failures:      {summary.details_failed:5d}"
