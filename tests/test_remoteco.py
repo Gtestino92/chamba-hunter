@@ -137,8 +137,32 @@ def test_geo_classifier_is_conservative() -> None:
         "Remote in Canada or US National"
     ) == RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
     assert classify_remoteco_geography(
+        "Remote in Austin, TX"
+    ) == RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
+    assert classify_remoteco_geography(
         "Hybrid Remote in Austin, TX"
     ) == RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
+    assert classify_remoteco_geography(
+        "Remote in Texas"
+    ) == RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
+    assert classify_remoteco_geography(
+        "Remote in Argentina"
+    ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
+    assert classify_remoteco_geography(
+        "Remote in Argentina, Brazil, Chile"
+    ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
+    assert classify_remoteco_geography(
+        "Remote in South America"
+    ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
+    assert classify_remoteco_geography(
+        "Worldwide"
+    ) == RemoteCoGeoClassification.POTENTIALLY_ELIGIBLE
+    assert classify_remoteco_geography(
+        "Remote in Americas"
+    ) == RemoteCoGeoClassification.UNKNOWN
+    assert classify_remoteco_geography(
+        "Remote in Europe"
+    ) == RemoteCoGeoClassification.UNKNOWN
     assert classify_remoteco_geography(
         "Remote"
     ) == RemoteCoGeoClassification.UNKNOWN
@@ -212,6 +236,75 @@ def test_client_prefilters_before_fetching_details() -> None:
     )
     assert all(
         "onsite" not in call
+        for call in calls
+    )
+
+
+def test_client_fetches_unknown_geography_details() -> None:
+    calls: list[str] = []
+
+    def handler(
+        request: httpx.Request,
+    ) -> httpx.Response:
+        calls.append(str(request.url))
+
+        if (
+            str(request.url).rstrip("/")
+            == REMOTECO_CATEGORY_URLS[0].rstrip("/")
+        ):
+            return httpx.Response(
+                200,
+                text="""
+                <article class="job-card">
+                  <a href="/job-details/americas-engineer-523e4567-e89b-12d3-a456-426614174000">
+                    Americas Engineer
+                  </a>
+                  <span>Ambiguous Co</span>
+                  <span>Today</span>
+                  <span>100% Remote Work</span>
+                  <span>Remote in Americas</span>
+                  <span>Full-Time</span>
+                  <span>Employee</span>
+                </article>
+                """,
+            )
+
+        if str(request.url).rstrip("/") in {
+            url.rstrip("/")
+            for url in REMOTECO_CATEGORY_URLS
+        }:
+            return httpx.Response(
+                200,
+                text="<html><body>No jobs</body></html>",
+            )
+
+        return httpx.Response(
+            200,
+            text=_detail_html(
+                title="Americas Engineer",
+                company="Ambiguous Co",
+                remote_work_level="100% Remote Work",
+                location="Remote in Americas",
+                date_posted="Today",
+            ),
+        )
+
+    fetch = RemoteCoClient(
+        transport=httpx.MockTransport(
+            handler
+        )
+    ).fetch_jobs(
+        max_pages_per_category=1,
+        max_jobs=1,
+        detail_workers=1,
+    )
+
+    assert fetch.explicit_geo_rejects == 0
+    assert fetch.unknown_geography == 1
+    assert fetch.details_attempted == 1
+    assert fetch.details_succeeded == 1
+    assert any(
+        "americas-engineer" in call
         for call in calls
     )
 

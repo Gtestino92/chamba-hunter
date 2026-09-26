@@ -938,7 +938,8 @@ def classify_remoteco_geography(
         )
 
     if _has_us_state_limit(
-        normalized
+        raw_location=location_text,
+        normalized=normalized,
     ):
         return (
             RemoteCoGeoClassification.EXPLICITLY_INELIGIBLE
@@ -1998,19 +1999,11 @@ def _first_matching_text(
 
 
 def _has_us_state_limit(
+    *,
+    raw_location: str | None,
     normalized: str,
 ) -> bool:
     if re.search(
-        r"\b(al|ak|az|ar|ca|co|ct|de|fl|ga|"
-        r"hi|ia|id|il|in|ks|ky|la|ma|md|me|"
-        r"mi|mn|mo|ms|mt|nc|nd|ne|nh|nj|nm|"
-        r"nv|ny|oh|ok|or|pa|ri|sc|sd|tn|tx|"
-        r"ut|va|vt|wa|wi|wv|wy)\b",
-        normalized,
-    ):
-        return True
-
-    return re.search(
         r"\b(alabama|alaska|arizona|arkansas|"
         r"california|colorado|connecticut|delaware|"
         r"florida|georgia|hawaii|idaho|illinois|"
@@ -2024,6 +2017,19 @@ def _has_us_state_limit(
         r"texas|utah|vermont|virginia|washington|"
         r"wisconsin|west virginia|wyoming)\b",
         normalized,
+    ):
+        return True
+
+    if raw_location is None:
+        return False
+
+    return re.search(
+        r",\s*(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|"
+        r"HI|IA|ID|IL|IN|KS|KY|LA|MA|MD|ME|"
+        r"MI|MN|MO|MS|MT|NC|ND|NE|NH|NJ|NM|"
+        r"NV|NY|OH|OK|OR|PA|RI|SC|SD|TN|TX|"
+        r"UT|VA|VT|WA|WI|WV|WY)\b",
+        raw_location,
     ) is not None
 
 
