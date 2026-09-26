@@ -76,6 +76,9 @@ def evaluate_source_recency(
             "opened_relative"
         )
 
+        source_relative = None
+        evidence_type = None
+
         if (
             source == "DYNAMITEJOBS"
             and isinstance(
@@ -83,8 +86,31 @@ def evaluate_source_recency(
                 str,
             )
         ):
+            source_relative = opened_relative
+            evidence_type = (
+                "DYNAMITEJOBS_OPENED_RELATIVE"
+            )
+
+        elif source == "REMOTECO":
+            posted_relative = getonboard.get(
+                "posted_relative"
+            )
+
+            if isinstance(
+                posted_relative,
+                str,
+            ):
+                source_relative = posted_relative
+                evidence_type = (
+                    "REMOTECO_POSTED_RELATIVE"
+                )
+
+        if (
+            source_relative is not None
+            and evidence_type is not None
+        ):
             relative = _relative_age_range(
-                opened_relative
+                source_relative
             )
 
             if relative is not None:
@@ -107,10 +133,10 @@ def evaluate_source_recency(
                         max_age_days
                     ),
                     evidence_type=(
-                        "DYNAMITEJOBS_OPENED_RELATIVE"
+                        evidence_type
                     ),
                     evidence_value=(
-                        opened_relative
+                        source_relative
                     ),
                 )
 
