@@ -198,11 +198,23 @@ def test_publication_date_parsing_and_malformed_dates() -> None:
             _job(
                 id=1,
                 publication_date=(
-                    "2026-09-25T10:11:12Z"
+                    "2026-09-17T13:22:05"
                 ),
             ),
             _job(
                 id=2,
+                publication_date=(
+                    "2026-09-17T13:22:05Z"
+                ),
+            ),
+            _job(
+                id=3,
+                publication_date=(
+                    "2026-09-17T10:22:05-03:00"
+                ),
+            ),
+            _job(
+                id=4,
                 publication_date="not a date",
             ),
         ]
@@ -215,14 +227,32 @@ def test_publication_date_parsing_and_malformed_dates() -> None:
     assert by_id["1"].published_at == datetime(
         2026,
         9,
-        25,
-        10,
-        11,
-        12,
+        17,
+        13,
+        22,
+        5,
         tzinfo=UTC,
     )
-    assert by_id["2"].published_at is None
-    assert fetch.publication_dates_parsed == 1
+    assert by_id["2"].published_at == datetime(
+        2026,
+        9,
+        17,
+        13,
+        22,
+        5,
+        tzinfo=UTC,
+    )
+    assert by_id["3"].published_at == datetime(
+        2026,
+        9,
+        17,
+        13,
+        22,
+        5,
+        tzinfo=UTC,
+    )
+    assert by_id["4"].published_at is None
+    assert fetch.publication_dates_parsed == 3
     assert fetch.publication_dates_missing == 1
 
 

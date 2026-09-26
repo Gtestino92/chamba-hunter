@@ -463,7 +463,9 @@ def _parse_publication_date(
         return None
 
     if parsed.tzinfo is None:
-        return None
+        parsed = parsed.replace(
+            tzinfo=UTC
+        )
 
     return parsed.astimezone(UTC)
 
