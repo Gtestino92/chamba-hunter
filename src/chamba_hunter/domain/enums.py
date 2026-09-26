@@ -29,6 +29,7 @@ class SourceType(StrEnum):
     OPENSTREETMAP = "OPENSTREETMAP"
     DYNAMITEJOBS = "DYNAMITEJOBS"
     REMOTECO = "REMOTECO"
+    REMOTIVE = "REMOTIVE"
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"
@@ -45,6 +46,7 @@ BROAD_JOB_SOURCE_TYPES = frozenset(
         SourceType.GETONBOARD,
         SourceType.DYNAMITEJOBS,
         SourceType.REMOTECO,
+        SourceType.REMOTIVE,
         SourceType.HIMALAYAS,
         SourceType.JOBICY,
         SourceType.JOOBLE,
