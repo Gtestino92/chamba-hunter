@@ -30,6 +30,7 @@ class SourceType(StrEnum):
     DYNAMITEJOBS = "DYNAMITEJOBS"
     REMOTECO = "REMOTECO"
     REMOTIVE = "REMOTIVE"
+    REMOTEOK = "REMOTEOK"
     GETONBOARD = "GETONBOARD"
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"
@@ -47,6 +48,7 @@ BROAD_JOB_SOURCE_TYPES = frozenset(
         SourceType.DYNAMITEJOBS,
         SourceType.REMOTECO,
         SourceType.REMOTIVE,
+        SourceType.REMOTEOK,
         SourceType.HIMALAYAS,
         SourceType.JOBICY,
         SourceType.JOOBLE,
