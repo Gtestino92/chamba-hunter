@@ -91,20 +91,6 @@ def evaluate_source_recency(
                 "DYNAMITEJOBS_OPENED_RELATIVE"
             )
 
-        elif source == "REMOTECO":
-            posted_relative = getonboard.get(
-                "posted_relative"
-            )
-
-            if isinstance(
-                posted_relative,
-                str,
-            ):
-                source_relative = posted_relative
-                evidence_type = (
-                    "REMOTECO_POSTED_RELATIVE"
-                )
-
         if (
             source_relative is not None
             and evidence_type is not None
