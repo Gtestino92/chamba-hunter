@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -83,7 +84,11 @@ class RemoteOkJobsFetch:
     normalized_jobs: int
     unique_companies: int
     publication_dates_parsed: int
+    publication_dates_from_date: int
+    publication_dates_from_epoch_fallback: int
     publication_dates_missing: int
+    top_retained_tags: dict[str, int]
+    top_retained_locations: dict[str, int]
     jobs: list[RemoteOkNormalizedJob]
 
 
@@ -200,6 +205,13 @@ def _normalize_response(
 
         parsed_jobs.append((job, item))
 
+    if metadata_elements_skipped > 0 and not parsed_jobs:
+        raise RemoteOkApiError(
+            "Remote OK response contained metadata "
+            "but no valid job objects; expected at "
+            "least one job object after metadata."
+        )
+
     seen_ids: set[str] = set()
     unique_jobs: list[
         tuple[RemoteOkJobPosting, dict[str, Any]]
@@ -271,16 +283,37 @@ def _normalize_response(
 
     selected = retained[:max_jobs]
     normalized_jobs: list[RemoteOkNormalizedJob] = []
-    publication_dates_parsed = 0
+    publication_dates_from_date = 0
+    publication_dates_from_epoch_fallback = 0
     publication_dates_missing = 0
+    tag_counts: Counter[str] = Counter()
+    location_counts: Counter[str] = Counter()
 
     for job, raw_payload in selected:
-        published_at = _published_at(job)
+        published_at, publication_source = (
+            _published_at_with_source(job)
+        )
 
-        if published_at is None:
-            publication_dates_missing += 1
+        if publication_source == "date":
+            publication_dates_from_date += 1
+        elif publication_source == "epoch_fallback":
+            publication_dates_from_epoch_fallback += 1
         else:
-            publication_dates_parsed += 1
+            publication_dates_missing += 1
+
+        tags = tuple(
+            tag
+            for tag in (
+                _clean_text(value)
+                for value in (job.tags or [])
+            )
+            if tag is not None
+        )
+        tag_counts.update(tags)
+
+        location = _clean_text(job.location)
+        if location is not None:
+            location_counts.update([location])
 
         normalized_jobs.append(
             RemoteOkNormalizedJob(
@@ -296,17 +329,8 @@ def _normalize_response(
                     job.company,
                     "company",
                 ),
-                tags=tuple(
-                    tag
-                    for tag in (
-                        _clean_text(value)
-                        for value in (job.tags or [])
-                    )
-                    if tag is not None
-                ),
-                location_text=_clean_text(
-                    job.location
-                ),
+                tags=tags,
+                location_text=location,
                 job_url=_required_text(
                     job.url,
                     "url",
@@ -351,10 +375,23 @@ def _normalize_response(
             }
         ),
         publication_dates_parsed=(
-            publication_dates_parsed
+            publication_dates_from_date
+            + publication_dates_from_epoch_fallback
+        ),
+        publication_dates_from_date=(
+            publication_dates_from_date
+        ),
+        publication_dates_from_epoch_fallback=(
+            publication_dates_from_epoch_fallback
         ),
         publication_dates_missing=(
             publication_dates_missing
+        ),
+        top_retained_tags=dict(
+            tag_counts.most_common(10)
+        ),
+        top_retained_locations=dict(
+            location_counts.most_common(10)
         ),
         jobs=normalized_jobs,
     )
@@ -370,28 +407,32 @@ def classify_remoteok_geography(
         _html_to_text(description)
     )
 
-    combined = " ".join(
-        part
-        for part in (
-            location_text,
-            description_text,
+    location_restrictive = (
+        _has_restrictive_location_signal(
+            location_text
         )
-        if part
     )
 
-    if _has_compatible_geo_signal(combined):
+    if _has_compatible_location_signal(location_text):
         return (
             RemoteOkGeoClassification.POTENTIALLY_ELIGIBLE
         )
 
-    if _has_restrictive_geo_signal(location_text):
+    if (
+        _has_explicit_positive_description_signal(
+            description_text
+        )
+        and not location_restrictive
+    ):
         return (
-            RemoteOkGeoClassification.EXPLICITLY_INELIGIBLE
+            RemoteOkGeoClassification.POTENTIALLY_ELIGIBLE
         )
 
     if (
-        location_text
-        and _has_restrictive_geo_signal(combined)
+        _has_explicit_restrictive_description_signal(
+            description_text
+        )
+        or location_restrictive
     ):
         return (
             RemoteOkGeoClassification.EXPLICITLY_INELIGIBLE
@@ -508,7 +549,7 @@ def _has_non_target_title(
     ) is not None
 
 
-def _has_compatible_geo_signal(
+def _has_compatible_location_signal(
     normalized_text: str,
 ) -> bool:
     return re.search(
@@ -524,7 +565,7 @@ def _has_compatible_geo_signal(
     ) is not None
 
 
-def _has_restrictive_geo_signal(
+def _has_restrictive_location_signal(
     normalized_text: str,
 ) -> bool:
     if not normalized_text:
@@ -561,9 +602,71 @@ def _has_restrictive_geo_signal(
     ) is not None
 
 
+def _has_explicit_positive_description_signal(
+    normalized_text: str,
+) -> bool:
+    if not normalized_text:
+        return False
+
+    return re.search(
+        r"\b("
+        r"we hire globally|we hire worldwide|"
+        r"open to candidates worldwide|"
+        r"candidates worldwide|remote worldwide|"
+        r"open worldwide|work from anywhere|"
+        r"location worldwide|"
+        r"open to candidates in latin america|"
+        r"open to latam candidates|"
+        r"latam candidates accepted|"
+        r"candidates in the americas"
+        r")\b",
+        normalized_text,
+    ) is not None
+
+
+def _has_explicit_restrictive_description_signal(
+    normalized_text: str,
+) -> bool:
+    if not normalized_text:
+        return False
+
+    return re.search(
+        r"\b("
+        r"must be located in (the )?"
+        r"(us|u s|usa|united states|germany|"
+        r"canada|europe|uk|united kingdom)|"
+        r"(us|u s|usa|united states) residents only|"
+        r"candidates must reside in "
+        r"(germany|canada|europe|uk|"
+        r"united kingdom|us|u s|usa|united states)|"
+        r"only candidates based in "
+        r"(europe|germany|canada|uk|"
+        r"united kingdom|us|u s|usa|united states)|"
+        r"only open to applicants in "
+        r"(the )?(uk|united kingdom|germany|"
+        r"canada|europe|us|u s|usa|united states)"
+        r")\b",
+        normalized_text,
+    ) is not None
+
+
 def _published_at(
     job: RemoteOkJobPosting,
 ) -> datetime | None:
+    published_at, _source = _published_at_with_source(
+        job
+    )
+    return published_at
+
+
+def _published_at_with_source(
+    job: RemoteOkJobPosting,
+) -> tuple[datetime | None, str | None]:
+    date = _parse_iso_datetime(job.date)
+
+    if date is not None:
+        return (date, "date")
+
     epoch = _clean_text(
         str(job.epoch)
         if job.epoch is not None
@@ -572,14 +675,17 @@ def _published_at(
 
     if epoch is not None:
         try:
-            return datetime.fromtimestamp(
-                float(epoch),
-                tz=UTC,
+            return (
+                datetime.fromtimestamp(
+                    float(epoch),
+                    tz=UTC,
+                ),
+                "epoch_fallback",
             )
         except (ValueError, OverflowError):
             pass
 
-    return _parse_iso_datetime(job.date)
+    return (None, None)
 
 
 def _parse_iso_datetime(

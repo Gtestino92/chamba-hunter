@@ -204,12 +204,40 @@ def main() -> None:
         f"{summary.publication_dates_parsed:5d}"
     )
     print(
+        "publication dates from date:  "
+        f"{summary.publication_dates_from_date:5d}"
+    )
+    print(
+        "publication dates from epoch: "
+        f"{summary.publication_dates_from_epoch_fallback:5d}"
+    )
+    print(
         "publication dates missing:    "
         f"{summary.publication_dates_missing:5d}"
     )
     print(
         f"ATS hints detected:           {summary.ats_hints_detected:5d}"
     )
+    print(
+        "jobs skipped during persistence:"
+        f" {summary.jobs_skipped_during_persistence:5d}"
+    )
+
+    if summary.top_retained_tags:
+        print()
+        print("top retained tags:")
+
+        for tag, count in summary.top_retained_tags.items():
+            print(f"  - {tag}: {count}")
+
+    if summary.top_retained_locations:
+        print()
+        print("top retained locations:")
+
+        for location, count in (
+            summary.top_retained_locations.items()
+        ):
+            print(f"  - {location}: {count}")
 
     if summary.applied:
         print()

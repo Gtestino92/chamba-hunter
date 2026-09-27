@@ -240,6 +240,85 @@ def test_global_description_overrides_country_location() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "description",
+    [
+        "We are a global company building APIs.",
+        "We serve global customers.",
+        "Our European customers love the product.",
+        "We have an office in New York.",
+        "We are headquartered in California.",
+        "Our team is based in Germany.",
+    ],
+)
+def test_incidental_description_geography_is_ignored(
+    description: str,
+) -> None:
+    assert classify_remoteok_geography(
+        location=None,
+        description=description,
+    ) == RemoteOkGeoClassification.UNKNOWN
+
+
+def test_incidental_office_in_new_york_does_not_reject() -> None:
+    fetch = _fetch(
+        [
+            _metadata(),
+            _job(
+                id=1,
+                location="Remote",
+                description=(
+                    "Build APIs. We have an office "
+                    "in New York."
+                ),
+            ),
+        ]
+    )
+
+    assert fetch.explicit_geo_rejects == 0
+    assert fetch.unknown_geography == 1
+    assert fetch.normalized_jobs == 1
+
+
+def test_explicit_global_hiring_description_is_eligible() -> None:
+    assert classify_remoteok_geography(
+        location="Germany",
+        description="We hire globally for this role.",
+    ) == (
+        RemoteOkGeoClassification
+        .POTENTIALLY_ELIGIBLE
+    )
+
+
+def test_explicit_candidate_location_restriction_rejects() -> None:
+    assert classify_remoteok_geography(
+        location="Remote",
+        description=(
+            "Candidates must be located in the "
+            "United States."
+        ),
+    ) == (
+        RemoteOkGeoClassification
+        .EXPLICITLY_INELIGIBLE
+    )
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "Germany",
+        "Canada",
+        "Brazil",
+    ],
+)
+def test_bare_foreign_country_location_is_unknown(
+    location: str,
+) -> None:
+    assert classify_remoteok_geography(
+        location=location
+    ) == RemoteOkGeoClassification.UNKNOWN
+
+
 def test_unknown_location_is_retained() -> None:
     fetch = _fetch(
         [
@@ -255,7 +334,30 @@ def test_unknown_location_is_retained() -> None:
     assert fetch.normalized_jobs == 1
 
 
-def test_dates_parse_from_epoch_or_date() -> None:
+def test_date_beats_valid_conflicting_epoch() -> None:
+    fetch = _fetch(
+        [
+            _metadata(),
+            _job(
+                id=1,
+                epoch=1790330400,
+                date="2026-09-26T10:00:00Z",
+            ),
+        ]
+    )
+
+    assert fetch.jobs[0].published_at == datetime(
+        2026,
+        9,
+        26,
+        10,
+        tzinfo=UTC,
+    )
+    assert fetch.publication_dates_from_date == 1
+    assert fetch.publication_dates_from_epoch_fallback == 0
+
+
+def test_epoch_used_only_when_date_missing_or_malformed() -> None:
     fetch = _fetch(
         [
             _metadata(),
@@ -266,8 +368,8 @@ def test_dates_parse_from_epoch_or_date() -> None:
             ),
             _job(
                 id=2,
-                epoch=None,
-                date="2026-09-25T10:00:00Z",
+                epoch=1790330400,
+                date="not a date",
             ),
             _job(
                 id=3,
@@ -297,6 +399,8 @@ def test_dates_parse_from_epoch_or_date() -> None:
     )
     assert by_id["3"].published_at is None
     assert fetch.publication_dates_parsed == 2
+    assert fetch.publication_dates_from_date == 0
+    assert fetch.publication_dates_from_epoch_fallback == 2
     assert fetch.publication_dates_missing == 1
 
 
@@ -347,6 +451,7 @@ def test_preview_performs_zero_persistence() -> None:
 
     assert summary.normalized_jobs == 1
     assert summary.applied is False
+    assert summary.jobs_skipped_during_persistence == 0
 
 
 def test_apply_persists_companies_and_leads(
@@ -453,11 +558,111 @@ def test_repeated_apply_is_idempotent(
     assert second.companies_existing == 1
 
 
+def test_persistence_skip_counter_increments(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    real_import_service = CompanyImportService(
+        CompanyRepository(database),
+        CompanySourceRepository(database),
+    )
+
+    class FailingCompanyImportService:
+        def import_seed(
+            self,
+            seed,
+            *,
+            source_metadata,
+        ):
+            if seed.name == "BadCo":
+                raise ValueError(
+                    "intentional test import failure"
+                )
+
+            return real_import_service.import_seed(
+                seed,
+                source_metadata=source_metadata,
+            )
+
+    service = RemoteOkJobAcquisitionService(
+        client=_client(
+            [
+                _metadata(),
+                _job(id=10, company="GoodCo"),
+                _job(id=11, company="BadCo"),
+            ]
+        ),
+        company_import_service=(
+            FailingCompanyImportService()
+        ),
+        job_lead_repository=JobLeadRepository(
+            database
+        ),
+        tracing_repository=TracingRepository(
+            database
+        ),
+        state_repository=(
+            SourceAcquisitionStateRepository(
+                database
+            )
+        ),
+    )
+
+    summary = service.run(max_jobs=10)
+
+    assert summary.jobs_created == 1
+    assert summary.jobs_skipped_during_persistence == 1
+
+    with database.connection() as connection:
+        state = connection.execute(
+            """
+            SELECT metadata_json
+            FROM source_acquisition_states
+            WHERE source_type = ?
+            """,
+            (SourceType.REMOTEOK.value,),
+        ).fetchone()
+
+    metadata = json_from_db(
+        state["metadata_json"]
+    )
+    assert metadata[
+        "jobs_skipped_during_persistence"
+    ] == 1
+
+
 def test_malformed_api_shape_fails() -> None:
     client = _raw_client({"jobs": []})
 
     with pytest.raises(RemoteOkApiError, match="top-level array"):
         client.fetch_jobs(max_jobs=10)
+
+
+def test_metadata_only_payload_fails() -> None:
+    client = _client([_metadata()])
+
+    with pytest.raises(
+        RemoteOkApiError,
+        match="no valid job objects",
+    ):
+        client.fetch_jobs(max_jobs=10)
+
+
+def test_valid_feed_with_all_jobs_technically_filtered_is_successful() -> None:
+    fetch = _fetch(
+        [
+            _metadata(),
+            _job(
+                id=1,
+                position="Marketing Manager",
+                tags=["remote"],
+            ),
+        ]
+    )
+
+    assert fetch.job_objects_parsed == 1
+    assert fetch.technical_rejects == 1
+    assert fetch.normalized_jobs == 0
 
 
 def test_429_produces_clear_failure() -> None:

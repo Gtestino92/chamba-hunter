@@ -68,7 +68,11 @@ class RemoteOkAcquisitionSummary:
     normalized_jobs: int
     unique_companies: int
     publication_dates_parsed: int
+    publication_dates_from_date: int
+    publication_dates_from_epoch_fallback: int
     publication_dates_missing: int
+    top_retained_tags: dict[str, int]
+    top_retained_locations: dict[str, int]
     ats_hints_detected: int
     max_jobs: int
 
@@ -76,6 +80,7 @@ class RemoteOkAcquisitionSummary:
     companies_existing: int = 0
     jobs_created: int = 0
     jobs_updated: int = 0
+    jobs_skipped_during_persistence: int = 0
 
 
 class RemoteOkJobAcquisitionService:
@@ -178,6 +183,7 @@ class RemoteOkJobAcquisitionService:
                     + summary.duplicates_removed
                     + summary.technical_rejects
                     + summary.explicit_geo_rejects
+                    + summary.jobs_skipped_during_persistence
                 ),
                 metadata=_metadata(summary),
             )
@@ -229,6 +235,7 @@ class RemoteOkJobAcquisitionService:
         leads: list[JobLead] = []
         seen_company_ids: set[int] = set()
         created_company_ids: set[int] = set()
+        jobs_skipped_during_persistence = 0
 
         for source_job in fetch.jobs:
             try:
@@ -294,7 +301,7 @@ class RemoteOkJobAcquisitionService:
                 ValueError,
                 RuntimeError,
             ):
-                continue
+                jobs_skipped_during_persistence += 1
 
         counts = (
             self.job_lead_repository
@@ -320,6 +327,9 @@ class RemoteOkJobAcquisitionService:
             ),
             jobs_created=counts.created,
             jobs_updated=counts.updated,
+            jobs_skipped_during_persistence=(
+                jobs_skipped_during_persistence
+            ),
         )
 
         self.state_repository.record_success(
@@ -415,6 +425,7 @@ def _summary_from_fetch(
     companies_existing: int = 0,
     jobs_created: int = 0,
     jobs_updated: int = 0,
+    jobs_skipped_during_persistence: int = 0,
 ) -> RemoteOkAcquisitionSummary:
     return RemoteOkAcquisitionSummary(
         applied=applied,
@@ -451,8 +462,20 @@ def _summary_from_fetch(
         publication_dates_parsed=(
             fetch.publication_dates_parsed
         ),
+        publication_dates_from_date=(
+            fetch.publication_dates_from_date
+        ),
+        publication_dates_from_epoch_fallback=(
+            fetch.publication_dates_from_epoch_fallback
+        ),
         publication_dates_missing=(
             fetch.publication_dates_missing
+        ),
+        top_retained_tags=dict(
+            fetch.top_retained_tags
+        ),
+        top_retained_locations=dict(
+            fetch.top_retained_locations
         ),
         ats_hints_detected=0,
         max_jobs=max_jobs,
@@ -460,6 +483,9 @@ def _summary_from_fetch(
         companies_existing=companies_existing,
         jobs_created=jobs_created,
         jobs_updated=jobs_updated,
+        jobs_skipped_during_persistence=(
+            jobs_skipped_during_persistence
+        ),
     )
 
 
@@ -517,14 +543,30 @@ def _metadata(
         "publication_dates_parsed": (
             summary.publication_dates_parsed
         ),
+        "publication_dates_from_date": (
+            summary.publication_dates_from_date
+        ),
+        "publication_dates_from_epoch_fallback": (
+            summary
+            .publication_dates_from_epoch_fallback
+        ),
         "publication_dates_missing": (
             summary.publication_dates_missing
+        ),
+        "top_retained_tags": (
+            summary.top_retained_tags
+        ),
+        "top_retained_locations": (
+            summary.top_retained_locations
         ),
         "ats_hints_detected": (
             summary.ats_hints_detected
         ),
         "jobs_created": summary.jobs_created,
         "jobs_updated": summary.jobs_updated,
+        "jobs_skipped_during_persistence": (
+            summary.jobs_skipped_during_persistence
+        ),
         "companies_created": (
             summary.companies_created
         ),
