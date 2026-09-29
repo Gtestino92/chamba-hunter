@@ -32,7 +32,6 @@ class SourceType(StrEnum):
     HIMALAYAS = "HIMALAYAS"
     JOBICY = "JOBICY"
     JOOBLE = "JOOBLE"
-    WEWORKREMOTELY = "WEWORKREMOTELY"
     HACKERNEWS = "HACKERNEWS"
     WELLFOUND = "WELLFOUND"
     LATAM_ENTERPRISE = "LATAM_ENTERPRISE"
@@ -46,7 +45,6 @@ BROAD_JOB_SOURCE_TYPES = frozenset(
         SourceType.HIMALAYAS,
         SourceType.JOBICY,
         SourceType.JOOBLE,
-        SourceType.WEWORKREMOTELY,
     }
 )
 

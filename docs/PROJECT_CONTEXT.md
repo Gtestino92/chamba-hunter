@@ -355,7 +355,7 @@ No hubo migration para:
 geo/recency V2
 batch application tracking
 OpenOffice actions
-A1 Jobicy/WWR
+A1 Jobicy
 A2 Jooble
 B Recruitee value test
 C0 audit
@@ -437,7 +437,6 @@ deep:    YC all, HN all
 HIMALAYAS
 GETONBOARD
 JOBICY
-WEWORKREMOTELY
 JOOBLE
 ```
 
@@ -486,26 +485,26 @@ No implementar Breezy por inercia; reabrir sólo si aumenta el valor marginal.
 
 ---
 
-## 7. A1 — Jobicy + We Work Remotely
+## 7. A1 ? Jobicy
 
 Estado:
 
 ```text
-COMPLETE / PUBLISHED
+COMPLETE / PAID SOURCE RETIRED
 ```
 
 Commit:
 
 ```text
 c716e739c6af1bb21efc676a2bb5ac9170348cb8
-add Jobicy and We Work Remotely acquisition
+add Jobicy acquisition
 ```
 
 ### Jobicy
 
-API pública, sin key.
+API p?blica, sin key.
 
-Configuración:
+Configuraci?n:
 
 ```text
 industry = engineering
@@ -513,46 +512,13 @@ geo = latam
 max jobs default = 100
 ```
 
-Primera adquisición observada:
+Primera adquisici?n observada:
 
 ```text
 66 created
 ```
 
-### We Work Remotely
-
-RSS público:
-
-```text
-Programming
-DevOps / Sysadmin
-```
-
-No detail-page scraping.
-
-Primera adquisición observada:
-
-```text
-76 created
-```
-
-A1 combinado inicial:
-
-```text
-142 acquired
-126 eligible
-7 unknown
-9 ineligible
-
-1 VERY_HIGH
-8 HIGH
-28 MEDIUM
-96 LOW
-9 NO_MATCH
-```
-
 No modificar A1 salvo evidencia nueva.
-
 ---
 
 ## 8. A2 — Jooble Argentina
@@ -896,7 +862,7 @@ Pipeline:
 
 ```text
 acquire Himalayas / Get on Board
-acquire Jobicy / We Work Remotely
+acquire Jobicy
 acquire Jooble
 optional broad ATS discovery
 sync all supported ATS providers

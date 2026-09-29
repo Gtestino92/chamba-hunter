@@ -48,7 +48,6 @@ def _build_plan(
         himalayas_overlap_hours=48,
         getonboard_max_pages=5,
         jobicy_max_jobs=100,
-        wwr_max_jobs=300,
         jooble_max_pages_per_query=2,
         discover_broad_include_scanned=False,
         output=Path(
@@ -147,7 +146,6 @@ def test_routine_settings_preserve_existing_defaults() -> None:
         himalayas_overlap_hours=None,
         getonboard_max_pages=None,
         jobicy_max_jobs=None,
-        wwr_max_jobs=None,
         jooble_max_pages_per_query=None,
     )
 
@@ -158,7 +156,6 @@ def test_routine_settings_preserve_existing_defaults() -> None:
     assert settings.himalayas_overlap_hours == 48
     assert settings.getonboard_max_pages == 5
     assert settings.jobicy_max_jobs == 100
-    assert settings.wwr_max_jobs == 300
     assert settings.jooble_max_pages_per_query == 2
     assert not settings.discover_broad_include_scanned
 
@@ -172,7 +169,6 @@ def test_deep_settings_select_deep_defaults() -> None:
         himalayas_overlap_hours=None,
         getonboard_max_pages=None,
         jobicy_max_jobs=None,
-        wwr_max_jobs=None,
         jooble_max_pages_per_query=None,
     )
 
@@ -183,7 +179,6 @@ def test_deep_settings_select_deep_defaults() -> None:
     assert settings.himalayas_overlap_hours == 720
     assert settings.getonboard_max_pages == 25
     assert settings.jobicy_max_jobs == 100
-    assert settings.wwr_max_jobs == 1000
     assert settings.jooble_max_pages_per_query == 10
     assert settings.discover_broad_include_scanned
 
@@ -197,7 +192,6 @@ def test_explicit_flags_override_deep_defaults() -> None:
         himalayas_overlap_hours=None,
         getonboard_max_pages=None,
         jobicy_max_jobs=None,
-        wwr_max_jobs=None,
         jooble_max_pages_per_query=20,
     )
 
@@ -214,7 +208,6 @@ def test_deep_plan_uses_full_himalayas_actionable_overlap() -> None:
         himalayas_overlap_hours=None,
         getonboard_max_pages=None,
         jobicy_max_jobs=None,
-        wwr_max_jobs=None,
         jooble_max_pages_per_query=None,
     )
 
@@ -239,7 +232,6 @@ def test_deep_plan_uses_full_himalayas_actionable_overlap() -> None:
             settings.getonboard_max_pages
         ),
         jobicy_max_jobs=settings.jobicy_max_jobs,
-        wwr_max_jobs=settings.wwr_max_jobs,
         jooble_max_pages_per_query=(
             settings.jooble_max_pages_per_query
         ),
@@ -267,7 +259,6 @@ def test_deep_jobicy_remains_at_real_client_maximum() -> None:
         himalayas_overlap_hours=None,
         getonboard_max_pages=None,
         jobicy_max_jobs=None,
-        wwr_max_jobs=None,
         jooble_max_pages_per_query=None,
     )
 
@@ -348,7 +339,6 @@ def test_broad_ats_deep_discovery_is_bounded() -> None:
         himalayas_overlap_hours=720,
         getonboard_max_pages=25,
         jobicy_max_jobs=100,
-        wwr_max_jobs=1000,
         jooble_max_pages_per_query=10,
         output=Path(
             "output/chamba-shortlist.xlsx"

@@ -30,9 +30,6 @@ DEEP_GETONBOARD_MAX_PAGES = 25
 ROUTINE_JOBICY_MAX_JOBS = 100
 DEEP_JOBICY_MAX_JOBS = 100
 
-ROUTINE_WWR_MAX_JOBS = 300
-DEEP_WWR_MAX_JOBS = 1000
-
 ROUTINE_JOOBLE_MAX_PAGES_PER_QUERY = 2
 DEEP_JOOBLE_MAX_PAGES_PER_QUERY = 10
 
@@ -49,7 +46,6 @@ class RefreshSettings:
 
     getonboard_max_pages: int
     jobicy_max_jobs: int
-    wwr_max_jobs: int
     jooble_max_pages_per_query: int
 
     discover_broad_include_scanned: bool
@@ -81,7 +77,6 @@ def build_plan(
     himalayas_overlap_hours: int,
     getonboard_max_pages: int,
     jobicy_max_jobs: int,
-    wwr_max_jobs: int,
     jooble_max_pages_per_query: int,
     output: Path,
     discover_broad_include_scanned: bool = False,
@@ -109,10 +104,6 @@ def build_plan(
             "--jobicy-max-jobs",
             str(
                 jobicy_max_jobs
-            ),
-            "--wwr-max-jobs",
-            str(
-                wwr_max_jobs
             ),
             "--jooble-max-pages-per-query",
             str(
@@ -309,7 +300,6 @@ def resolve_settings(
     himalayas_overlap_hours: int | None,
     getonboard_max_pages: int | None,
     jobicy_max_jobs: int | None,
-    wwr_max_jobs: int | None,
     jooble_max_pages_per_query: int | None,
 ) -> RefreshSettings:
     return RefreshSettings(
@@ -370,15 +360,6 @@ def resolve_settings(
                 DEEP_JOBICY_MAX_JOBS
                 if deep
                 else ROUTINE_JOBICY_MAX_JOBS
-            )
-        ),
-        wwr_max_jobs=(
-            wwr_max_jobs
-            if wwr_max_jobs is not None
-            else (
-                DEEP_WWR_MAX_JOBS
-                if deep
-                else ROUTINE_WWR_MAX_JOBS
             )
         ),
         jooble_max_pages_per_query=(
@@ -540,12 +521,6 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--wwr-max-jobs",
-        type=int,
-        default=None,
-    )
-
-    parser.add_argument(
         "--jooble-max-pages-per-query",
         type=int,
         default=None,
@@ -579,7 +554,6 @@ def main() -> None:
             args.getonboard_max_pages
         ),
         jobicy_max_jobs=args.jobicy_max_jobs,
-        wwr_max_jobs=args.wwr_max_jobs,
         jooble_max_pages_per_query=(
             args.jooble_max_pages_per_query
         ),
@@ -630,12 +604,6 @@ def main() -> None:
             "be between 0 and 100"
         )
 
-    if settings.wwr_max_jobs < 0:
-        parser.error(
-            "--wwr-max-jobs cannot "
-            "be negative"
-        )
-
     if (
         settings.jooble_max_pages_per_query
         < 0
@@ -650,7 +618,6 @@ def main() -> None:
         and args.skip_himalayas
         and settings.getonboard_max_pages == 0
         and settings.jobicy_max_jobs == 0
-        and settings.wwr_max_jobs == 0
         and (
             settings.jooble_max_pages_per_query
             == 0
@@ -686,9 +653,6 @@ def main() -> None:
         ),
         jobicy_max_jobs=(
             settings.jobicy_max_jobs
-        ),
-        wwr_max_jobs=(
-            settings.wwr_max_jobs
         ),
         jooble_max_pages_per_query=(
             settings.jooble_max_pages_per_query

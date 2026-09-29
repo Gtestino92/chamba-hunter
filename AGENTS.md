@@ -7,7 +7,7 @@ Chamba Hunter is a local job-search intelligence tool. It discovers companies an
 ## Current Architecture
 
 - Company acquisition populates `companies` and `company_sources`; CESSI, YC, manual import, broad job sources, and the LATAM enterprise registry all reuse `CompanyImportService`.
-- Broad job acquisition creates companies when needed and writes source job leads for Himalayas, GetOnBoard, Jobicy, WeWorkRemotely, and Jooble.
+- Broad job acquisition creates companies when needed and writes source job leads for Himalayas, GetOnBoard, Jobicy, and Jooble.
 - ATS discovery operates on companies, using known `website_url` or `careers_url` entry points and provider hints from broad job evidence.
 - LATAM ATS fingerprinting measures recruiting-platform evidence for `LATAM_ENTERPRISE` companies and stores observations in `ats_fingerprints`; it does not register unsupported providers as syncable ATS integrations.
 - ATS synchronization operates on `company_ats` records and writes canonical first-party `jobs`.
@@ -37,7 +37,6 @@ Implemented broad sources:
 - `HIMALAYAS`
 - `GETONBOARD`
 - `JOBICY`
-- `WEWORKREMOTELY`
 - `JOOBLE`
 
 ## ATS Support

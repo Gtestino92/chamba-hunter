@@ -66,14 +66,10 @@ from chamba_hunter.sources.jooble_jobs import (
     JOOBLE_RESULTS_PER_PAGE,
     JoobleJobsClient,
 )
-from chamba_hunter.sources.weworkremotely_jobs import (
-    WeWorkRemotelyJobsClient,
-)
 
 
 DEFAULT_GETONBOARD_MAX_PAGES = 5
 DEFAULT_JOBICY_MAX_JOBS = 100
-DEFAULT_WWR_MAX_JOBS = 300
 DEFAULT_JOOBLE_MAX_PAGES_PER_QUERY = 2
 
 
@@ -100,10 +96,6 @@ _STATE_SCOPES = {
     SourceType.JOBICY: (
         "ENGINEERING_LATAM",
         "LATEST_100_FEED",
-    ),
-    SourceType.WEWORKREMOTELY: (
-        "PROGRAMMING_DEVOPS",
-        "FULL_RSS_SNAPSHOT",
     ),
     SourceType.JOOBLE: (
         "ARGENTINA_BACKEND_QUERIES",
@@ -360,12 +352,6 @@ def main() -> None:
     )
 
     parser.add_argument(
-        "--wwr-max-jobs",
-        type=int,
-        default=DEFAULT_WWR_MAX_JOBS,
-    )
-
-    parser.add_argument(
         "--jooble-max-pages-per-query",
         type=int,
         default=(
@@ -402,12 +388,6 @@ def main() -> None:
             "be between 0 and 100"
         )
 
-    if args.wwr_max_jobs < 0:
-        parser.error(
-            "--wwr-max-jobs cannot "
-            "be negative"
-        )
-
     if (
         args.jooble_max_pages_per_query
         < 0
@@ -421,7 +401,6 @@ def main() -> None:
         args.skip_himalayas
         and args.getonboard_max_pages == 0
         and args.jobicy_max_jobs == 0
-        and args.wwr_max_jobs == 0
         and (
             args.jooble_max_pages_per_query
             == 0
@@ -689,10 +668,7 @@ def main() -> None:
                 print(warning)
                 print()
 
-    if (
-        args.jobicy_max_jobs > 0
-        or args.wwr_max_jobs > 0
-    ):
+    if args.jobicy_max_jobs > 0:
         started_at = utc_now()
 
         try:
@@ -700,9 +676,6 @@ def main() -> None:
                 PublicJobAcquisitionService(
                     jobicy_client=(
                         JobicyJobsClient()
-                    ),
-                    weworkremotely_client=(
-                        WeWorkRemotelyJobsClient()
                     ),
                     company_import_service=(
                         company_import_service
@@ -717,9 +690,6 @@ def main() -> None:
                 .run(
                     jobicy_max_jobs=(
                         args.jobicy_max_jobs
-                    ),
-                    wwr_max_jobs=(
-                        args.wwr_max_jobs
                     ),
                 )
             )
@@ -737,13 +707,6 @@ def main() -> None:
                     SourceType.JOBICY,
                     (
                         args.jobicy_max_jobs
-                        > 0
-                    ),
-                ),
-                (
-                    SourceType.WEWORKREMOTELY,
-                    (
-                        args.wwr_max_jobs
                         > 0
                     ),
                 ),
@@ -772,15 +735,6 @@ def main() -> None:
                     result.status
                     == RunStatus.SUCCESS
                 ):
-                    max_jobs = (
-                        args.jobicy_max_jobs
-                        if (
-                            source_type
-                            == SourceType.JOBICY
-                        )
-                        else args.wwr_max_jobs
-                    )
-
                     _record_source_success(
                         repository=(
                             state_repository
@@ -796,7 +750,7 @@ def main() -> None:
                         ),
                         metadata={
                             "max_jobs": (
-                                max_jobs
+                                args.jobicy_max_jobs
                             ),
                             "received": (
                                 result.received
@@ -867,13 +821,6 @@ def main() -> None:
                     SourceType.JOBICY,
                     (
                         args.jobicy_max_jobs
-                        > 0
-                    ),
-                ),
-                (
-                    SourceType.WEWORKREMOTELY,
-                    (
-                        args.wwr_max_jobs
                         > 0
                     ),
                 ),

@@ -30,16 +30,13 @@ from chamba_hunter.services.public_job_acquisition_service import (
 from chamba_hunter.sources.jobicy_jobs import (
     JobicyJobsClient,
 )
-from chamba_hunter.sources.weworkremotely_jobs import (
-    WeWorkRemotelyJobsClient,
-)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Acquire broad public job leads "
-            "from Jobicy and We Work Remotely."
+            "from Jobicy."
         )
     )
 
@@ -52,18 +49,6 @@ def main() -> None:
             "jobs requested for LATAM. "
             "Range 1-100; use 0 to disable. "
             "Defaults to 100."
-        ),
-    )
-
-    parser.add_argument(
-        "--wwr-max-jobs",
-        type=int,
-        default=300,
-        help=(
-            "Maximum unique We Work Remotely jobs "
-            "kept across Programming and DevOps "
-            "RSS feeds. Use 0 to disable. "
-            "Defaults to 300."
         ),
     )
 
@@ -80,18 +65,7 @@ def main() -> None:
             "be between 0 and 100"
         )
 
-    if args.wwr_max_jobs < 0:
-        parser.error(
-            "--wwr-max-jobs cannot "
-            "be negative"
-        )
-
-    if (
-        args.jobicy_max_jobs
-        == 0
-        and args.wwr_max_jobs
-        == 0
-    ):
+    if args.jobicy_max_jobs == 0:
         parser.error(
             "At least one source must "
             "be enabled."
@@ -145,9 +119,6 @@ def main() -> None:
             jobicy_client=(
                 JobicyJobsClient()
             ),
-            weworkremotely_client=(
-                WeWorkRemotelyJobsClient()
-            ),
             company_import_service=(
                 company_import_service
             ),
@@ -168,18 +139,9 @@ def main() -> None:
         "Jobicy max jobs:    "
         f"{args.jobicy_max_jobs}"
     )
-    print(
-        "WWR max jobs:        "
-        f"{args.wwr_max_jobs}"
-    )
-    print()
-
     summary = service.run(
         jobicy_max_jobs=(
             args.jobicy_max_jobs
-        ),
-        wwr_max_jobs=(
-            args.wwr_max_jobs
         ),
     )
 

@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 
 from pydantic import ValidationError
@@ -31,10 +30,6 @@ from chamba_hunter.services.company_import_service import (
 from chamba_hunter.sources.jobicy_jobs import (
     JobicyJobPosting,
     JobicyJobsClient,
-)
-from chamba_hunter.sources.weworkremotely_jobs import (
-    WeWorkRemotelyJobPosting,
-    WeWorkRemotelyJobsClient,
 )
 from chamba_hunter.domain.tracing import (
     Run,
@@ -89,9 +84,6 @@ class PublicJobAcquisitionService:
     def __init__(
         self,
         jobicy_client: JobicyJobsClient,
-        weworkremotely_client: (
-            WeWorkRemotelyJobsClient
-        ),
         company_import_service: (
             CompanyImportService
         ),
@@ -104,9 +96,6 @@ class PublicJobAcquisitionService:
     ) -> None:
         self.jobicy_client = (
             jobicy_client
-        )
-        self.weworkremotely_client = (
-            weworkremotely_client
         )
         self.company_import_service = (
             company_import_service
@@ -122,12 +111,10 @@ class PublicJobAcquisitionService:
         self,
         *,
         jobicy_max_jobs: int,
-        wwr_max_jobs: int,
     ) -> PublicAcquisitionSummary:
         enabled_sources = sum(
             (
                 jobicy_max_jobs > 0,
-                wwr_max_jobs > 0,
             )
         )
 
@@ -187,12 +174,6 @@ class PublicJobAcquisitionService:
                 max_jobs=(
                     jobicy_max_jobs
                 ),
-                summary=summary,
-            )
-
-        if wwr_max_jobs > 0:
-            self._run_weworkremotely(
-                max_jobs=wwr_max_jobs,
                 summary=summary,
             )
 
@@ -408,170 +389,6 @@ class PublicJobAcquisitionService:
                 summary=summary,
             )
 
-    def _run_weworkremotely(
-        self,
-        *,
-        max_jobs: int,
-        summary: PublicAcquisitionSummary,
-    ) -> None:
-        source_type = (
-            SourceType
-            .WEWORKREMOTELY
-        )
-
-        try:
-            fetch = (
-                self
-                .weworkremotely_client
-                .fetch_jobs(
-                    max_jobs=max_jobs
-                )
-            )
-
-            leads: list[
-                JobLead
-            ] = []
-
-            seen_company_ids: set[
-                int
-            ] = set()
-            created_company_ids: set[
-                int
-            ] = set()
-
-            skipped = 0
-            seen_at = utc_now()
-
-            for source_job in (
-                fetch.jobs
-            ):
-                try:
-                    import_result = (
-                        self
-                        .company_import_service
-                        .import_seed(
-                            CompanySeedInput(
-                                name=(
-                                    _required_text(
-                                        source_job
-                                        .company_name,
-                                        "company",
-                                    )
-                                ),
-                                source_type=(
-                                    source_type
-                                ),
-                            ),
-                            source_metadata={
-                                (
-                                    "broad_job_"
-                                    "acquisition"
-                                ): True,
-                            },
-                        )
-                    )
-
-                    company = (
-                        import_result.company
-                    )
-
-                    if company.id is None:
-                        raise RuntimeError(
-                            "Imported company "
-                            "must have an id."
-                        )
-
-                    seen_company_ids.add(
-                        company.id
-                    )
-
-                    if (
-                        import_result.created
-                    ):
-                        (
-                            created_company_ids
-                            .add(
-                                company.id
-                            )
-                        )
-
-                    leads.append(
-                        (
-                            _weworkremotely_to_lead(
-                                company_id=(
-                                    company.id
-                                ),
-                                source_job=(
-                                    source_job
-                                ),
-                                seen_at=(
-                                    seen_at
-                                ),
-                            )
-                        )
-                    )
-
-                except (
-                    ValidationError,
-                    ValueError,
-                    RuntimeError,
-                ):
-                    skipped += 1
-
-            counts = (
-                self.job_lead_repository
-                .upsert_source_jobs(
-                    source_type=(
-                        source_type
-                    ),
-                    jobs=leads,
-                    seen_at=seen_at,
-                )
-            )
-
-            result = PublicSourceResult(
-                source_type=(
-                    source_type
-                ),
-                status=(
-                    RunStatus.SUCCESS
-                ),
-                received=len(
-                    fetch.jobs
-                ),
-                normalized=len(
-                    leads
-                ),
-                skipped=skipped,
-                companies_created=len(
-                    created_company_ids
-                ),
-                companies_existing=len(
-                    seen_company_ids
-                    - created_company_ids
-                ),
-                jobs_created=(
-                    counts.created
-                ),
-                jobs_updated=(
-                    counts.updated
-                ),
-            )
-
-            self._record_success(
-                result=result,
-                summary=summary,
-            )
-
-        except Exception as error:
-            self._record_failure(
-                source_type=(
-                    source_type
-                ),
-                error=error,
-                summary=summary,
-            )
-
     @staticmethod
     def _record_success(
         result: PublicSourceResult,
@@ -698,73 +515,6 @@ def _jobicy_to_lead(
     )
 
 
-def _weworkremotely_to_lead(
-    *,
-    company_id: int,
-    source_job: (
-        WeWorkRemotelyJobPosting
-    ),
-    seen_at: datetime,
-) -> JobLead:
-    return JobLead(
-        company_id=company_id,
-        source_type=(
-            SourceType
-            .WEWORKREMOTELY
-        ),
-        external_id=(
-            _required_text(
-                source_job
-                .external_id,
-                "guid/link",
-            )
-        ),
-        title=_required_text(
-            source_job.title,
-            "title",
-        ),
-        description=(
-            _html_to_text(
-                source_job
-                .description_html
-            )
-        ),
-        location_text=_clean_text(
-            source_job.region
-        ),
-        workplace_type=(
-            WorkplaceType.REMOTE
-        ),
-        employment_type=(
-            _clean_text(
-                source_job
-                .employment_type
-            )
-        ),
-        job_url=_clean_text(
-            source_job.link
-        ),
-        apply_url=None,
-        published_at=(
-            _parse_rfc_datetime(
-                source_job.pub_date
-            )
-        ),
-        expires_at=None,
-        first_seen_at=seen_at,
-        last_seen_at=seen_at,
-        is_active=True,
-        raw_payload={
-            "feed_name": (
-                source_job.feed_name
-            ),
-            "fields": (
-                source_job.raw_fields
-            ),
-        },
-    )
-
-
 def _parse_iso_datetime(
     value: str | None,
 ) -> datetime | None:
@@ -790,30 +540,6 @@ def _parse_iso_datetime(
             "Jobicy pubDate must "
             "include timezone information: "
             f"{value}"
-        )
-
-    return parsed.astimezone(
-        UTC
-    )
-
-
-def _parse_rfc_datetime(
-    value: str | None,
-) -> datetime | None:
-    cleaned = _clean_text(
-        value
-    )
-
-    if cleaned is None:
-        return None
-
-    parsed = parsedate_to_datetime(
-        cleaned
-    )
-
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(
-            tzinfo=UTC
         )
 
     return parsed.astimezone(
