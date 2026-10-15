@@ -31,8 +31,189 @@ def classify(
     )
 
 
-def test_rule_version_is_v2() -> None:
-    assert service.RULE_VERSION == "OCCUPATION_V2"
+def test_rule_version_is_v3() -> None:
+    assert service.RULE_VERSION == "OCCUPATION_V3"
+
+
+REAL_WORLD_IDENTITY_BACKEND_DESCRIPTION = (
+    "Write Java application code and build large-scale distributed "
+    "systems. Build backend authentication and authorization "
+    "services and REST APIs with Spring Boot and microservices. "
+    "Design for scalability and reliability using AWS, Azure, "
+    "Docker, Kubernetes, EKS, CI/CD, and observability. OAuth, "
+    "OIDC, and SAML are domain-specific bonuses."
+)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Cloud Java Software Engineer",
+        "IAM Engineer",
+        "Identity Management Consultant",
+    ],
+)
+def test_real_world_identity_backend_title_variants_are_equivalent(
+    title: str,
+) -> None:
+    assert classify(
+        title,
+        REAL_WORLD_IDENTITY_BACKEND_DESCRIPTION,
+    ) == (
+        "SOFTWARE_ENGINEERING",
+        "BACKEND",
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "title",
+        "description",
+    ),
+    [
+        (
+            "Platform Engineer",
+            (
+                "Develop Kotlin and Spring Boot backend services. "
+                "Design REST APIs and microservices for the "
+                "application platform."
+            ),
+        ),
+        (
+            "Cloud Engineer",
+            (
+                "Build Java application code for distributed "
+                "systems and backend services running in AWS."
+            ),
+        ),
+        (
+            "Security Engineer",
+            (
+                "Develop Kotlin authorization services using an "
+                "event-driven architecture and Spring Boot."
+            ),
+        ),
+        (
+            "Integration Engineer",
+            (
+                "Implement Java REST APIs and microservices for "
+                "application-to-application integrations."
+            ),
+        ),
+        (
+            "Application Engineer",
+            (
+                "Write Java application code and build backend "
+                "services exposed through REST APIs."
+            ),
+        ),
+    ],
+)
+def test_ambiguous_titles_are_rescued_by_orthogonal_backend_evidence(
+    title: str,
+    description: str,
+) -> None:
+    assert classify(
+        title,
+        description,
+    ) == (
+        "SOFTWARE_ENGINEERING",
+        "BACKEND",
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "title",
+        "description",
+    ),
+    [
+        (
+            "IAM Engineer",
+            (
+                "Own IAM account provisioning, access reviews, "
+                "identity lifecycle governance, and SailPoint "
+                "administration. Review Java application access."
+            ),
+        ),
+        (
+            "IAM Engineer",
+            (
+                "Develop Java REST API integration services for "
+                "SailPoint. Own provisioning policies, approval "
+                "processes, and access reviews."
+            ),
+        ),
+        (
+            "Identity Management Consultant",
+            (
+                "Configure and administer Okta and Azure AD. "
+                "Maintain SAML policies, IAM access reviews, and "
+                "joiner mover leaver workflows."
+            ),
+        ),
+        (
+            "Platform Engineer",
+            (
+                "Operate Kubernetes clusters, provision Terraform "
+                "infrastructure, and manage cloud landing zones."
+            ),
+        ),
+        (
+            "Cloud Engineer",
+            (
+                "Manage cloud infrastructure, networking, landing "
+                "zones, and Kubernetes operations."
+            ),
+        ),
+        (
+            "Security Engineer",
+            (
+                "Work in the security operations center on SIEM, "
+                "vulnerability management, and incident response."
+            ),
+        ),
+        (
+            "Application Engineer",
+            (
+                "Provide production support, resolve support "
+                "tickets, and monitor application availability."
+            ),
+        ),
+        (
+            "Integration Engineer",
+            (
+                "Configure MuleSoft and SAP Integration Suite. "
+                "Administer integration platform connections."
+            ),
+        ),
+        (
+            "Platform Engineer",
+            (
+                "Coordinate vendor documentation. Java appears in "
+                "one unrelated product brochure."
+            ),
+        ),
+        (
+            "Senior Staff Machine Learning Platform Engineer",
+            (
+                "Build Kotlin distributed systems and event-driven "
+                "services for model training infrastructure."
+            ),
+        ),
+    ],
+)
+def test_operational_and_administration_roles_are_not_rescued(
+    title: str,
+    description: str,
+) -> None:
+    occupation_class, backend_relevance = classify(
+        title,
+        description,
+    )
+
+    assert occupation_class != "SOFTWARE_ENGINEERING"
+    assert backend_relevance == "NOT_APPLICABLE"
 
 
 @pytest.mark.parametrize(

@@ -20,7 +20,7 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 
 
-RULE_VERSION = "OCCUPATION_V2"
+RULE_VERSION = "OCCUPATION_V3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +83,16 @@ class _DescriptionResult:
 class _BackendResult:
     backend_relevance: str
     matches: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SoftwareDevelopmentRescueResult:
+    rescued: bool
+    title_matches: tuple[str, ...]
+    core_matches: tuple[str, ...]
+    responsibility_matches: tuple[str, ...]
+    architecture_matches: tuple[str, ...]
+    exclusion_matches: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,13 +323,22 @@ def _classify(
 
     title_result = _classify_title(title)
 
+    software_rescue = (
+        _classify_software_development_rescue(
+            title=title,
+            description=description,
+            title_result=title_result,
+        )
+    )
+
     description_result = _DescriptionResult(
         occupation_class=None,
         matches=(),
     )
 
     if (
-        title_result.occupation_class is None
+        not software_rescue.rescued
+        and title_result.occupation_class is None
         and _title_allows_description_fallback(
             title
         )
@@ -328,11 +347,14 @@ def _classify(
             _classify_description(description)
         )
 
-    occupation_class = (
-        title_result.occupation_class
-        or description_result.occupation_class
-        or "UNKNOWN"
-    )
+    if software_rescue.rescued:
+        occupation_class = "SOFTWARE_ENGINEERING"
+    else:
+        occupation_class = (
+            title_result.occupation_class
+            or description_result.occupation_class
+            or "UNKNOWN"
+        )
 
     title_backend = (
         title_result.backend_relevance
@@ -341,24 +363,34 @@ def _classify(
         else None
     )
 
-    backend_result = _BackendResult(
-        backend_relevance=(
-            title_backend
-            or (
-                _classify_backend_description(
-                    description
-                ).backend_relevance
-                if occupation_class
-                == "SOFTWARE_ENGINEERING"
-                else "NOT_APPLICABLE"
-            )
-        ),
-        matches=(),
-    )
+    if software_rescue.rescued:
+        backend_result = _BackendResult(
+            backend_relevance="BACKEND",
+            matches=(
+                software_rescue
+                .architecture_matches
+            ),
+        )
+    else:
+        backend_result = _BackendResult(
+            backend_relevance=(
+                title_backend
+                or (
+                    _classify_backend_description(
+                        description
+                    ).backend_relevance
+                    if occupation_class
+                    == "SOFTWARE_ENGINEERING"
+                    else "NOT_APPLICABLE"
+                )
+            ),
+            matches=(),
+        )
 
     if (
         occupation_class == "SOFTWARE_ENGINEERING"
         and title_backend is None
+        and not software_rescue.rescued
     ):
         backend_result = (
             _classify_backend_description(
@@ -372,7 +404,12 @@ def _classify(
             matches=(),
         )
 
-    if title_result.occupation_class is not None:
+    if software_rescue.rescued:
+        method = "TITLE_DESCRIPTION"
+        reason = (
+            "DESCRIPTION_BACKEND_SOFTWARE_RESCUE"
+        )
+    elif title_result.occupation_class is not None:
         if (
             occupation_class == "SOFTWARE_ENGINEERING"
             and title_result.backend_relevance is None
@@ -414,6 +451,27 @@ def _classify(
         "backend_matches": list(
             backend_result.matches
         ),
+        "software_development_rescue": {
+            "rescued": software_rescue.rescued,
+            "title_matches": list(
+                software_rescue.title_matches
+            ),
+            "core_matches": list(
+                software_rescue.core_matches
+            ),
+            "responsibility_matches": list(
+                software_rescue
+                .responsibility_matches
+            ),
+            "architecture_matches": list(
+                software_rescue
+                .architecture_matches
+            ),
+            "exclusion_matches": list(
+                software_rescue
+                .exclusion_matches
+            ),
+        },
     }
 
     return OccupationDecision(
@@ -433,6 +491,82 @@ def _classify(
         reason=reason,
         method=method,
         evidence=evidence,
+    )
+
+
+def _classify_software_development_rescue(
+    *,
+    title: str,
+    description: str,
+    title_result: _TitleResult,
+) -> _SoftwareDevelopmentRescueResult:
+    title_matches = _matches(
+        title,
+        _SOFTWARE_RESCUE_TITLES,
+    )
+
+    title_is_already_software = (
+        title_result.occupation_class
+        == "SOFTWARE_ENGINEERING"
+    )
+
+    if (
+        not title_matches
+        or title_is_already_software
+    ):
+        return _SoftwareDevelopmentRescueResult(
+            rescued=False,
+            title_matches=title_matches,
+            core_matches=(),
+            responsibility_matches=(),
+            architecture_matches=(),
+            exclusion_matches=(),
+        )
+
+    core_matches = _matches(
+        description,
+        _SOFTWARE_RESCUE_APPLICATION_CORE,
+    )
+
+    responsibility_matches = _matches(
+        description,
+        _SOFTWARE_RESCUE_DEVELOPMENT_RESPONSIBILITY,
+    )
+
+    architecture_matches = _matches(
+        description,
+        _SOFTWARE_RESCUE_BACKEND_ARCHITECTURE,
+    )
+
+    exclusion_matches = (
+        *_matches(
+            title,
+            _SOFTWARE_RESCUE_TITLE_EXCLUSIONS,
+        ),
+        *_matches(
+            description,
+            _SOFTWARE_RESCUE_OPERATIONAL_EXCLUSIONS,
+        ),
+    )
+
+    rescued = bool(
+        core_matches
+        and responsibility_matches
+        and architecture_matches
+        and not exclusion_matches
+    )
+
+    return _SoftwareDevelopmentRescueResult(
+        rescued=rescued,
+        title_matches=title_matches,
+        core_matches=core_matches,
+        responsibility_matches=(
+            responsibility_matches
+        ),
+        architecture_matches=(
+            architecture_matches
+        ),
+        exclusion_matches=exclusion_matches,
     )
 
 
@@ -782,6 +916,202 @@ def _normalize_text(
     )
 
     return normalized.strip()
+
+
+_SOFTWARE_RESCUE_TITLES = (
+    _signal(
+        "ambiguous_engineering_title",
+        r"\b("
+        r"iam|identity(?: management)?|"
+        r"authentication|authorization|"
+        r"platform|cloud|security|"
+        r"integration|application|api"
+        r") engineer\b",
+    ),
+    _signal(
+        "identity_management_consultant",
+        r"\bidentity management consultant\b",
+    ),
+)
+
+
+_SOFTWARE_RESCUE_TITLE_EXCLUSIONS = (
+    _signal(
+        "specialized_data_or_ml_platform",
+        r"\b("
+        r"data|machine learning|ml|ai"
+        r") platform engineer\b",
+    ),
+    _signal(
+        "operations_platform_title",
+        r"\b("
+        r"devops|infrastructure|it automation|"
+        r"site reliability|sre"
+        r").{0,30}\bplatform engineer\b",
+    ),
+)
+
+
+_SOFTWARE_RESCUE_APPLICATION_CORE = (
+    _signal(
+        "jvm_application_core",
+        r"\b("
+        r"java|kotlin|spring(?: boot| framework| mvc)?|"
+        r"quarkus|micronaut|ktor"
+        r")\b",
+    ),
+    _signal(
+        "dotnet_application_core",
+        r"(?<!\w)c#(?!\w)|"
+        r"(?<!\w)\.net(?: core)?(?!\w)|"
+        r"\b(asp\.net|dotnet)\b",
+    ),
+    _signal(
+        "node_application_core",
+        r"\b("
+        r"node\.?js|nodejs|nest\.?js|nestjs|typescript"
+        r")\b",
+    ),
+    _signal(
+        "backend_language_or_framework",
+        r"\b("
+        r"golang|python|django|flask|fastapi|"
+        r"ruby|rails|php|laravel|rust|scala|elixir|phoenix"
+        r")\b",
+    ),
+)
+
+
+_SOFTWARE_RESCUE_DEVELOPMENT_RESPONSIBILITY = (
+    _signal(
+        "build_application_software",
+        r"\b("
+        r"build|building|develop|developing|design|designing|"
+        r"implement|implementing|write|writing|create|creating|"
+        r"engineer|engineering|own|owning"
+        r")\b.{0,100}\b("
+        r"application code|software|backend services?|"
+        r"server side services?|apis?|microservices?|"
+        r"distributed systems?|event driven systems?|"
+        r"authentication services?|authorization services?"
+        r")\b",
+    ),
+    _signal(
+        "application_development_responsibility",
+        r"\b("
+        r"responsible for|responsibilities include|"
+        r"you will|you ll|the role will"
+        r")\b.{0,100}\b("
+        r"software development|application development|"
+        r"backend development|api development|"
+        r"development of (backend )?(services?|apis?|applications?)"
+        r")\b",
+    ),
+    _signal(
+        "spanish_application_development_responsibility",
+        r"\b("
+        r"desarrollo de software|desarrollo de aplicaciones|"
+        r"desarrollo backend|desarrollo de apis|"
+        r"desarrollar (servicios|apis|aplicaciones)|"
+        r"escribir codigo"
+        r")\b",
+    ),
+)
+
+
+_SOFTWARE_RESCUE_BACKEND_ARCHITECTURE = (
+    _signal(
+        "backend_services",
+        r"\b("
+        r"back ?end|backend services?|server side services?|"
+        r"authentication services?|authorization services?"
+        r")\b",
+    ),
+    _signal(
+        "rest_api_architecture",
+        r"\b("
+        r"rest(?:ful)? apis?|apis? rest(?:ful)?|"
+        r"rest(?:ful)? services?|api development"
+        r")\b",
+    ),
+    _signal(
+        "microservices_architecture",
+        r"\b(microservices?|microservicios)\b",
+    ),
+    _signal(
+        "distributed_systems_architecture",
+        r"\b(distributed systems?|sistemas distribuidos)\b",
+    ),
+    _signal(
+        "event_driven_architecture",
+        r"\b("
+        r"event driven|event based|"
+        r"arquitectura orientada a eventos|"
+        r"procesamiento de eventos"
+        r")\b",
+    ),
+)
+
+
+_SOFTWARE_RESCUE_OPERATIONAL_EXCLUSIONS = (
+    _signal(
+        "iam_provisioning_governance",
+        r"\b("
+        r"access reviews?|access recertification|"
+        r"identity lifecycle governance|"
+        r"joiner mover leaver|"
+        r"account provisioning|user provisioning|"
+        r"provisioning and deprovisioning|"
+        r"provisioning policies?|approval processes?"
+        r")\b",
+    ),
+    _signal(
+        "identity_platform_administration",
+        r"\b("
+        r"administer|administration|configure|configuration|"
+        r"operate|operations"
+        r")\b.{0,60}\b("
+        r"okta|azure ad|entra id|active directory|"
+        r"sailpoint|identity platform"
+        r")\b",
+    ),
+    _signal(
+        "cloud_platform_operations",
+        r"\b("
+        r"administer|administration|operate|operations|"
+        r"manage|management|provision|provisioning"
+        r")\b.{0,80}\b("
+        r"kubernetes clusters?|cloud infrastructure|"
+        r"landing zones?|networks?|networking|"
+        r"terraform infrastructure"
+        r")\b",
+    ),
+    _signal(
+        "security_operations",
+        r"\b("
+        r"security operations center|soc analyst|siem|"
+        r"vulnerability management|vulnerability scanning|"
+        r"incident response|threat monitoring"
+        r")\b",
+    ),
+    _signal(
+        "production_support_operations",
+        r"\b("
+        r"production support|application support|"
+        r"service desk|ticket resolution|"
+        r"resolve support tickets"
+        r")\b",
+    ),
+    _signal(
+        "integration_platform_configuration",
+        r"\b("
+        r"configure|configuration|administer|administration"
+        r")\b.{0,60}\b("
+        r"mulesoft|sap integration suite|sap cpi|"
+        r"integration platform"
+        r")\b",
+    ),
+)
 
 
 _TITLE_NON_TECHNICAL = (

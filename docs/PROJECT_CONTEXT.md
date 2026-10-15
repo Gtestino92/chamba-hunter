@@ -316,7 +316,7 @@ Versiones publicadas relevantes:
 ```text
 BACKEND_SOFTWARE_V1
 ARGENTINA_V1
-OCCUPATION_V1
+OCCUPATION_V3
 SKILLS_V1
 SENIORITY_V1
 MATCHING_V1
@@ -655,7 +655,7 @@ UNKNOWN / REMOTE_SCOPE_UNKNOWN
 
 No cambiar `ARGENTINA_V1` por peculiaridades aisladas de una fuente sin evidencia suficiente.
 
-### OCCUPATION_V1
+### OCCUPATION_V3
 
 Taxonomía:
 
@@ -676,6 +676,15 @@ NON_BACKEND
 UNKNOWN
 NOT_APPLICABLE
 ```
+
+`OCCUPATION_V3` mantiene la clasificación por título para roles
+claros y agrega un rescate acotado para títulos ambiguos como IAM,
+identity, platform, cloud, security, integration y application
+engineer. El rescate exige evidencia conjunta de un lenguaje o
+framework de aplicación, responsabilidad explícita de desarrollo y
+arquitectura backend. Se bloquea ante evidencia operativa dominante
+de administración IAM/cloud, security operations, production support
+o configuración de plataformas de integración.
 
 ### SKILLS_V1
 
