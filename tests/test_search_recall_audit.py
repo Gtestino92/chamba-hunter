@@ -4,6 +4,8 @@ import sys
 from chamba_hunter.commands import audit_search_recall
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.migrations import migrate
+from chamba_hunter.services.pipeline_snapshot_service import inspect_pipeline_snapshots
+from chamba_hunter.services.search_profile_registry import SSR_SENIOR_PROFILE_NAME
 
 
 def _digest(path) -> str:
@@ -65,7 +67,7 @@ def test_read_only_audit_leaves_database_unchanged(tmp_path, monkeypatch, capsys
     output = capsys.readouterr().out
     assert "strictly read-only" in output
     assert "Candidates: 1" in output
-    assert "MATCHING_V3 + in-memory SKILLS_V3" in output
+    assert "MATCHING_V4 + full in-memory SKILLS_V3" in output
 
 
 def test_read_only_database_rejects_transactions(tmp_path) -> None:
@@ -80,3 +82,33 @@ def test_read_only_database_rejects_transactions(tmp_path) -> None:
         assert "read-only" in str(error)
     else:
         raise AssertionError("Expected read-only transaction rejection")
+
+
+def test_snapshot_audit_detects_missing_upstream_rows(tmp_path) -> None:
+    path = tmp_path / "missing.db"
+    database = Database(path)
+    migrate(database)
+    now = "2026-01-01T00:00:00+00:00"
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO companies (id,name,normalized_name,created_at,updated_at) VALUES (1,'Missing','missing',?,?)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO company_ats (id,company_id,provider,external_identifier,detected_at) VALUES (1,1,'GREENHOUSE','missing',?)",
+            (now,),
+        )
+        connection.execute(
+            "INSERT INTO jobs (id,company_id,company_ats_id,external_id,title,first_seen_at,last_seen_at,is_active) VALUES (1,1,1,'1','Backend Engineer',?,?,1)",
+            (now, now),
+        )
+        connection.execute(
+            "INSERT INTO job_eligibility_classifications (record_kind,record_id,status,reason,method,rule_version,classified_at) VALUES ('ATS',1,'ELIGIBLE','fixture','TITLE','ARGENTINA_V1',?)",
+            (now,),
+        )
+    report = inspect_pipeline_snapshots(
+        Database(path, read_only=True),
+        SSR_SENIOR_PROFILE_NAME,
+    )
+    codes = {issue.code for issue in report.errors}
+    assert {"MISSING_OCCUPATION", "MISSING_SENIORITY", "PROFILE_NOT_PERSISTED"} <= codes

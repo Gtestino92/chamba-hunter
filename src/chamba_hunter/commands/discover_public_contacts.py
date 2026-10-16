@@ -23,11 +23,13 @@ from chamba_hunter.services.public_contact_discovery_service import (
     DEFAULT_MAX_PAGES_PER_COMPANY,
     PublicContactDiscoveryService,
 )
-
-
-DEFAULT_PROFILE = (
-    "BACKEND_SOFTWARE_V1"
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
 )
+
+
+DEFAULT_PROFILE = DEFAULT_PROFILE_NAME
 
 
 def main() -> None:
@@ -50,6 +52,7 @@ def main() -> None:
 
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE,
     )
 

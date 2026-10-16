@@ -1,5 +1,6 @@
 from collections import Counter
 from dataclasses import dataclass, field
+from functools import lru_cache
 import html
 import re
 
@@ -705,7 +706,20 @@ def extract_candidate_skill_keys(
     candidate: SkillCandidateRow,
     rule_version: str = RULE_VERSION,
 ) -> tuple[str, ...]:
-    """Fast evidence-key extraction for non-persisting comparisons."""
+    """Fast, cached evidence-key extraction for non-persisting comparisons."""
+    return _extract_skill_keys_cached(
+        candidate.title,
+        candidate.description or "",
+        rule_version,
+    )
+
+
+@lru_cache(maxsize=16384)
+def _extract_skill_keys_cached(
+    title: str,
+    description: str,
+    rule_version: str,
+) -> tuple[str, ...]:
     if rule_version == RULE_VERSION:
         catalog = SKILL_CATALOG_V2
     elif rule_version == SKILLS_V3_RULE_VERSION:
@@ -717,8 +731,8 @@ def extract_candidate_skill_keys(
 
     text = " ".join(
         (
-            _clean_text(candidate.title),
-            _clean_text(candidate.description),
+            _clean_text(title),
+            _clean_text(description),
         )
     )
     folded = text.casefold()

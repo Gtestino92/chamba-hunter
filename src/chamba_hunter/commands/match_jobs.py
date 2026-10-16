@@ -1,5 +1,6 @@
 import argparse
 from collections import Counter, defaultdict
+from pathlib import Path
 import sys
 
 from chamba_hunter.db.connection import Database
@@ -15,6 +16,7 @@ from chamba_hunter.services.job_matching_service import (
     JobMatchingService,
     MATCHING_PROFILES,
     PROFESSIONAL_RELEVANCE_FLOOR,
+    SENIOR_BACKEND_SOFTWARE_V1,
     get_matching_profile,
 )
 
@@ -44,6 +46,13 @@ def main() -> None:
             "Matching profile to evaluate. The operational default remains "
             "BACKEND_SOFTWARE_V1."
         ),
+    )
+
+    parser.add_argument(
+        "--database",
+        type=Path,
+        default=None,
+        help="Optional SQLite database path for isolated rollout validation.",
     )
 
     parser.add_argument(
@@ -78,10 +87,9 @@ def main() -> None:
     args = parser.parse_args()
     profile = get_matching_profile(args.profile)
 
-    if args.apply and profile is not BACKEND_SOFTWARE_V1:
+    if args.apply and profile is SENIOR_BACKEND_SOFTWARE_V1:
         parser.error(
-            "--apply is disabled for SENIOR_BACKEND_SOFTWARE_V1 until the "
-            "rollout slice."
+            "--apply remains disabled for the historical SENIOR_BACKEND_SOFTWARE_V1."
         )
 
     if args.top < 0:
@@ -95,7 +103,8 @@ def main() -> None:
         )
 
     database = Database(
-        read_only=not args.apply
+        args.database if args.database is not None else Database().path,
+        read_only=not args.apply,
     )
 
     if args.apply:

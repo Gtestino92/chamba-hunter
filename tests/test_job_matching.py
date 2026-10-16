@@ -14,6 +14,10 @@ STRONG_SKILLS = (
     "KUBERNETES",
     "GITHUB_ACTIONS",
 )
+V4_STRONG_DESCRIPTION = (
+    "Build Java Spring Boot REST APIs and distributed systems with PostgreSQL, "
+    "AWS, Kubernetes and GitHub Actions."
+)
 
 
 def candidate(
@@ -47,10 +51,61 @@ def v3(item: MatchingCandidateRow) -> service.MatchDecision:
     return service._match(item, profile=service.SENIOR_BACKEND_SOFTWARE_V1)
 
 
+def v4(item: MatchingCandidateRow) -> service.MatchDecision:
+    enriched = service.candidate_with_profile_evidence(
+        item,
+        service.SSR_SENIOR_BACKEND_SOFTWARE_V1,
+    )
+    return service._match(enriched, profile=service.SSR_SENIOR_BACKEND_SOFTWARE_V1)
+
+
 def test_profile_versions_and_floor_are_explicit() -> None:
     assert service.BACKEND_SOFTWARE_V1.rule_version == "MATCHING_V2"
     assert service.SENIOR_BACKEND_SOFTWARE_V1.rule_version == "MATCHING_V3"
+    assert service.SSR_SENIOR_BACKEND_SOFTWARE_V1.rule_version == "MATCHING_V4"
     assert service.PROFESSIONAL_RELEVANCE_FLOOR == 50.0
+
+
+def test_ssr_and_senior_are_joint_primary_targets() -> None:
+    mid = v4(candidate(seniority="MID", description=V4_STRONG_DESCRIPTION))
+    senior = v4(candidate(seniority="SENIOR", description=V4_STRONG_DESCRIPTION))
+    assert mid.match_level == "VERY_HIGH"
+    assert senior.match_level == "VERY_HIGH"
+    assert senior.score - mid.score == 1.0
+
+
+def test_stronger_ssr_can_outrank_less_compatible_senior() -> None:
+    strong_mid = v4(candidate(seniority="MID", description=V4_STRONG_DESCRIPTION))
+    weaker_senior = v4(
+        candidate(
+            seniority="SENIOR",
+            skills=("JAVA",),
+            description="Maintain Java backend application code.",
+        )
+    )
+    assert strong_mid.score > weaker_senior.score
+
+
+def test_v4_unknown_staff_and_lead_remain_viable() -> None:
+    for seniority in ("UNKNOWN", "STAFF", "LEAD"):
+        assert v4(candidate(seniority=seniority, description=V4_STRONG_DESCRIPTION)).score >= 65
+
+
+def test_v4_recomputes_full_skills_v3_instead_of_using_persisted_tuple() -> None:
+    item = candidate(
+        skills=(),
+        description=(
+            "Build Java Spring Boot REST APIs and distributed systems with "
+            "idempotency, retries, cloud CI/CD and observability."
+        ),
+    )
+    enriched = service.candidate_with_profile_evidence(
+        item,
+        service.SSR_SENIOR_BACKEND_SOFTWARE_V1,
+    )
+    assert {"JAVA", "SPRING_BOOT", "REST", "DISTRIBUTED_SYSTEMS", "IDEMPOTENCY"} <= set(enriched.skills)
+    decision = service._match(enriched, profile=service.SSR_SENIOR_BACKEND_SOFTWARE_V1)
+    assert decision.reasons["skill_evidence_version"] == "SKILLS_V3_IN_MEMORY"
 
 
 def test_new_profile_apply_is_explicitly_disabled() -> None:

@@ -4,6 +4,11 @@ from pathlib import Path
 import subprocess
 import sys
 
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class OutreachStep:
@@ -12,7 +17,7 @@ class OutreachStep:
     arguments: tuple[str, ...] = ()
 
 
-DEFAULT_PROFILE = "BACKEND_SOFTWARE_V1"
+DEFAULT_PROFILE = DEFAULT_PROFILE_NAME
 
 
 def _command(
@@ -51,6 +56,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE,
     )
     parser.add_argument(

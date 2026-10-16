@@ -28,6 +28,7 @@ from chamba_hunter.services.jooble_job_acquisition_service import (
 from chamba_hunter.sources.jooble_jobs import (
     JOOBLE_LOCATION,
     JOOBLE_QUERIES,
+    JOOBLE_QUERY_SETS,
     JOOBLE_RESULTS_PER_PAGE,
     JoobleJobsClient,
 )
@@ -52,6 +53,13 @@ def main() -> None:
             "leads for the configured backend "
             "search queries."
         )
+    )
+
+    parser.add_argument(
+        "--query-set",
+        choices=tuple(JOOBLE_QUERY_SETS),
+        default="JOOBLE_QUERY_SET_V1",
+        help="Versioned query set; V2 is an explicit bounded experiment.",
     )
 
     parser.add_argument(
@@ -106,7 +114,7 @@ def main() -> None:
     print(f"Location:          {JOOBLE_LOCATION}")
     print(
         "Queries:           "
-        + ", ".join(JOOBLE_QUERIES)
+        + ", ".join(JOOBLE_QUERY_SETS[args.query_set])
     )
     print(
         "Results per page:  "
@@ -121,7 +129,8 @@ def main() -> None:
     summary = service.run(
         max_pages_per_query=(
             args.max_pages_per_query
-        )
+        ),
+        queries=JOOBLE_QUERY_SETS[args.query_set],
     )
 
     print("Jooble acquisition finished")

@@ -15,6 +15,13 @@ from chamba_hunter.services.openoffice_shortlist_actions import (
     OPENOFFICE_ACTIONS_VERSION,
     add_openoffice_application_actions,
 )
+from chamba_hunter.services.pipeline_snapshot_service import (
+    inspect_pipeline_snapshots,
+    require_complete,
+)
+from chamba_hunter.services.search_profile_registry import (
+    ROLLOUT_PROFILE_NAMES,
+)
 
 
 DEFAULT_OUTPUT = Path(
@@ -51,6 +58,7 @@ def main() -> None:
 
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE_NAME,
         help=(
             "Search profile to export. "
@@ -72,12 +80,19 @@ def main() -> None:
 
     database = (
         Database(
-            args.database
+            args.database,
+            read_only=True,
         )
         if args.database
         is not None
-        else Database()
+        else Database(read_only=True)
     )
+
+    preflight = inspect_pipeline_snapshots(database, args.profile)
+    for issue in preflight.issues:
+        print(f"Preflight {issue.severity}: {issue.code}={issue.count} - {issue.detail}")
+    if args.profile != DEFAULT_PROFILE_NAME:
+        require_complete(preflight, "shortlist export")
 
     repository = (
         JobShortlistReportRepository(

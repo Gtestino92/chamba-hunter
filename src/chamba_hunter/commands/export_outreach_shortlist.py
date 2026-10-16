@@ -26,11 +26,17 @@ from chamba_hunter.services.outreach_shortlist_report_service import (
     REPORT_VERSION,
     OutreachShortlistReportService,
 )
-
-
-DEFAULT_PROFILE = (
-    "BACKEND_SOFTWARE_V1"
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
 )
+from chamba_hunter.services.pipeline_snapshot_service import (
+    inspect_pipeline_snapshots,
+    require_complete,
+)
+
+
+DEFAULT_PROFILE = DEFAULT_PROFILE_NAME
 
 
 def main() -> None:
@@ -52,6 +58,7 @@ def main() -> None:
 
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE,
     )
 
@@ -130,6 +137,11 @@ def main() -> None:
     migrate(
         database
     )
+    if args.profile != DEFAULT_PROFILE_NAME:
+        require_complete(
+            inspect_pipeline_snapshots(database, args.profile),
+            "outreach export",
+        )
 
     contact_repository = (
         PublicContactRepository(

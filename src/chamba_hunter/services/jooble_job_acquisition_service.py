@@ -32,6 +32,7 @@ from chamba_hunter.services.company_import_service import (
     CompanyImportService,
 )
 from chamba_hunter.sources.jooble_jobs import (
+    JOOBLE_QUERY_SET_V1,
     JoobleFetchedJob,
     JoobleJobsClient,
     JoobleQueryCoverage,
@@ -78,6 +79,7 @@ class JoobleJobAcquisitionService:
         self,
         *,
         max_pages_per_query: int,
+        queries: tuple[str, ...] = JOOBLE_QUERY_SET_V1,
     ) -> JoobleAcquisitionSummary:
         run = (
             self.tracing_repository
@@ -119,6 +121,7 @@ class JoobleJobAcquisitionService:
                 max_pages_per_query=(
                     max_pages_per_query
                 ),
+                queries=queries,
             )
 
             self.tracing_repository.finish_run_step(
@@ -207,15 +210,17 @@ class JoobleJobAcquisitionService:
         *,
         run_id: int,
         max_pages_per_query: int,
+        queries: tuple[str, ...] = JOOBLE_QUERY_SET_V1,
     ) -> JoobleAcquisitionSummary:
-        fetch = (
-            self.jooble_client
-            .fetch_jobs(
-                max_pages_per_query=(
-                    max_pages_per_query
-                )
+        if queries == JOOBLE_QUERY_SET_V1:
+            fetch = self.jooble_client.fetch_jobs(
+                max_pages_per_query=max_pages_per_query,
             )
-        )
+        else:
+            fetch = self.jooble_client.fetch_jobs(
+                max_pages_per_query=max_pages_per_query,
+                queries=queries,
+            )
 
         source_type = (
             SourceType.JOOBLE

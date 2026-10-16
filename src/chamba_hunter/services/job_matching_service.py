@@ -1,5 +1,5 @@
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import re
 from types import MappingProxyType
 
@@ -17,11 +17,22 @@ from chamba_hunter.repositories.job_matching_repository import (
 from chamba_hunter.repositories.tracing_repository import (
     TracingRepository,
 )
+from chamba_hunter.repositories.job_skill_repository import SkillCandidateRow
+from chamba_hunter.services.job_skill_classification_service import (
+    SKILLS_V3_RULE_VERSION,
+    extract_candidate_skill_keys,
+    extract_v3_domain_evidence,
+)
+from chamba_hunter.services.search_profile_registry import (
+    HISTORICAL_SENIOR_PROFILE_NAME,
+    LEGACY_PROFILE_NAME,
+    SSR_SENIOR_PROFILE_NAME,
+)
 
 
 RULE_VERSION = "MATCHING_V2"
 PROFESSIONAL_RELEVANCE_FLOOR = 50.0
-PROFILE_NAME = "BACKEND_SOFTWARE_V1"
+PROFILE_NAME = LEGACY_PROFILE_NAME
 PROFILE_DESCRIPTION = (
     "Backend Software Engineer search profile calibrated "
     "for the current Chamba Hunter search."
@@ -51,6 +62,8 @@ class MatchingProfile:
     seniority_scores: tuple[tuple[str, float], ...]
     seniority_score_ceilings: tuple[tuple[str, float], ...]
     skill_groups: tuple[SkillGroup, ...]
+    skill_evidence_version: str
+    recompute_skill_evidence: bool = False
     conditional_architect_handling: bool = False
 
 
@@ -754,10 +767,11 @@ BACKEND_SOFTWARE_V1 = MatchingProfile(
     seniority_scores=tuple(SENIORITY_SCORES.items()),
     seniority_score_ceilings=tuple(SENIORITY_SCORE_CEILINGS.items()),
     skill_groups=SKILL_GROUPS,
+    skill_evidence_version="SKILLS_V2_PERSISTED",
 )
 
 SENIOR_BACKEND_SOFTWARE_V1 = MatchingProfile(
-    name="SENIOR_BACKEND_SOFTWARE_V1",
+    name=HISTORICAL_SENIOR_PROFILE_NAME,
     description=(
         "Senior backend software engineering profile for hands-on IC roles, "
         "with selective Staff, Lead, Principal, and implementation-owning architects."
@@ -782,12 +796,46 @@ SENIOR_BACKEND_SOFTWARE_V1 = MatchingProfile(
         ("PRINCIPAL", 79.0),
     ),
     skill_groups=SENIOR_SKILL_GROUPS,
+    skill_evidence_version="SKILLS_V2_PERSISTED",
+    conditional_architect_handling=True,
+)
+
+SSR_SENIOR_BACKEND_SOFTWARE_V1 = MatchingProfile(
+    name=SSR_SENIOR_PROFILE_NAME,
+    description=(
+        "Semi Senior and Senior backend software engineering profile for "
+        "hands-on IC roles, with selective Staff, Lead, Principal, and "
+        "implementation-owning architects."
+    ),
+    rule_version="MATCHING_V4",
+    seniority_target="semi senior / senior hands-on backend software IC",
+    seniority_scores=(
+        ("SENIOR", 15.0),
+        ("MID", 14.0),
+        ("UNKNOWN", 12.0),
+        ("STAFF", 10.0),
+        ("LEAD", 9.0),
+        ("PRINCIPAL", 7.0),
+        ("JUNIOR", 4.0),
+        ("ENTRY", 2.0),
+        ("INTERN", 0.0),
+    ),
+    seniority_score_ceilings=(
+        ("INTERN", 45.0),
+        ("ENTRY", 55.0),
+        ("JUNIOR", 64.0),
+        ("PRINCIPAL", 79.0),
+    ),
+    skill_groups=SENIOR_SKILL_GROUPS,
+    skill_evidence_version="SKILLS_V3_IN_MEMORY",
+    recompute_skill_evidence=True,
     conditional_architect_handling=True,
 )
 
 MATCHING_PROFILES = MappingProxyType({
     BACKEND_SOFTWARE_V1.name: BACKEND_SOFTWARE_V1,
     SENIOR_BACKEND_SOFTWARE_V1.name: SENIOR_BACKEND_SOFTWARE_V1,
+    SSR_SENIOR_BACKEND_SOFTWARE_V1.name: SSR_SENIOR_BACKEND_SOFTWARE_V1,
 })
 
 
@@ -877,6 +925,45 @@ def get_matching_profile(
         ) from error
 
 
+def candidate_with_profile_evidence(
+    candidate: MatchingCandidateRow,
+    profile: MatchingProfile,
+) -> MatchingCandidateRow:
+    if not profile.recompute_skill_evidence:
+        return candidate
+
+    skill_candidate = SkillCandidateRow(
+        record_kind=candidate.record_kind,
+        record_id=candidate.record_id,
+        source_type=candidate.source_type,
+        origin=candidate.origin,
+        company_name=candidate.company_name,
+        eligibility_status=candidate.eligibility_status,
+        occupation_class=candidate.occupation_class,
+        backend_relevance=candidate.backend_relevance,
+        title=candidate.title,
+        description=candidate.description,
+    )
+    skills = set(
+        extract_candidate_skill_keys(
+            skill_candidate,
+            rule_version=SKILLS_V3_RULE_VERSION,
+        )
+    )
+    skills.update(extract_v3_domain_evidence(skill_candidate))
+    return replace(candidate, skills=tuple(sorted(skills)))
+
+
+def evaluate_candidate(
+    candidate: MatchingCandidateRow,
+    profile: MatchingProfile,
+) -> MatchDecision:
+    return _match(
+        candidate_with_profile_evidence(candidate, profile),
+        profile=profile,
+    )
+
+
 def _role_responsibility_assessment(
     candidate: MatchingCandidateRow,
 ) -> RoleResponsibilityAssessment:
@@ -958,6 +1045,7 @@ def profile_rules(
     return {
         "profile_name": profile.name,
         "rule_version": profile.rule_version,
+        "skill_evidence_version": profile.skill_evidence_version,
         "score_components": {
             "role_max": 45,
             "skills_max": 30,
@@ -1017,10 +1105,24 @@ class JobMatchingService:
         self,
         apply: bool = False,
     ) -> MatchingSummary:
-        if apply and self.profile is not BACKEND_SOFTWARE_V1:
+        if apply and self.profile is SENIOR_BACKEND_SOFTWARE_V1:
             raise ValueError(
                 "SENIOR_BACKEND_SOFTWARE_V1 is evaluation-only until the "
-                "rollout slice; --apply is disabled."
+                "end of its historical compatibility window; --apply is disabled."
+            )
+
+        if apply and self.profile is SSR_SENIOR_BACKEND_SOFTWARE_V1:
+            from chamba_hunter.services.pipeline_snapshot_service import (
+                inspect_pipeline_snapshots,
+                require_matching_upstream,
+            )
+
+            require_matching_upstream(
+                inspect_pipeline_snapshots(
+                    self.repository.database,
+                    self.profile.name,
+                ),
+                "new-profile matching apply",
             )
 
         candidates = (
@@ -1033,7 +1135,7 @@ class JobMatchingService:
         )
 
         summary.decisions = [
-            _match(candidate, profile=self.profile)
+            evaluate_candidate(candidate, self.profile)
             for candidate in candidates
         ]
 
@@ -1335,6 +1437,7 @@ def _match(
     reasons: JsonObject = {
         "profile_name": profile.name,
         "rule_version": profile.rule_version,
+        "skill_evidence_version": profile.skill_evidence_version,
         "candidate": {
             "source_type": candidate.source_type,
             "origin": candidate.origin,

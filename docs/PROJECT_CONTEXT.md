@@ -311,15 +311,18 @@ English C1
 seniority objetivo: semisenior / mid-level
 ```
 
-Profile disponible sólo para evaluación read-only:
+Profile final opt-in (el default operacional legacy no cambia):
 
 ```text
-SENIOR_BACKEND_SOFTWARE_V1 / MATCHING_V3 / SKILLS_V3
+SSR_SENIOR_BACKEND_SOFTWARE_V1 / MATCHING_V4 / SKILLS_V3_IN_MEMORY
 
-target primario: Senior Backend / Senior Software Engineer hands-on IC
+target primario: Semi Senior / SSR / MID y Senior / SR Backend Software Engineer hands-on IC
 target secundario: Staff / Lead / Principal IC y architect hands-on selectivos
 no target: people management, infrastructure/DevOps-only, governance/presales
 ```
+
+`SENIOR_BACKEND_SOFTWARE_V1 / MATCHING_V3` se conserva como profile histórico
+de evaluación; no se redefine ni admite `--apply`.
 
 Versiones publicadas relevantes:
 
@@ -332,6 +335,7 @@ SKILLS_V3 (evaluación in-memory; no apply)
 SENIORITY_V1
 MATCHING_V2 (BACKEND_SOFTWARE_V1, default operacional)
 MATCHING_V3 (SENIOR_BACKEND_SOFTWARE_V1, no apply)
+MATCHING_V4 (SSR_SENIOR_BACKEND_SOFTWARE_V1, opt-in)
 JOB_CONTENT_V1
 OPERATIONAL_PRIORITY_V2
 SHORTLIST_REPORT_V2
@@ -759,18 +763,18 @@ No cambiar thresholds por una fuente nueva sin evidencia suficiente.
 
 `BACKEND_SOFTWARE_V1 / MATCHING_V2` mantiene exactamente la calibración
 legacy y continúa como default operacional. `SENIOR_BACKEND_SOFTWARE_V1 /
-MATCHING_V3` es seleccionable sólo para dry-run/read-only y no admite
-`--apply` hasta el slice de rollout.
+MATCHING_V3` queda histórico y read-only. El profile corregido es
+`SSR_SENIOR_BACKEND_SOFTWARE_V1 / MATCHING_V4`.
 
-Seniority V3:
+Seniority calibration for MATCHING_V4:
 
 ```text
-SENIOR 15   MID 10       UNKNOWN 11
+SENIOR 15   MID 14       UNKNOWN 12
 STAFF 10    LEAD 9       PRINCIPAL 7
 JUNIOR 4    ENTRY 2      INTERN 0
 ```
 
-Ceilings V3:
+Ceilings for MATCHING_V4:
 
 ```text
 INTERN 45   ENTRY 55     JUNIOR 64
@@ -778,11 +782,13 @@ PRINCIPAL 79
 MANAGER 60  DIRECTOR 55  HEAD 50  VP/C_LEVEL 45
 ```
 
-Staff y Lead no tienen ceiling por seniority; leadership permanece separado.
+SSR y Senior son targets primarios sin ceiling; Senior sólo recibe un punto
+más que un SSR equivalente. Staff y Lead no tienen ceiling por seniority;
+leadership permanece separado.
 Principal puede llegar a HIGH pero queda en 79. Los ceilings de ocupación,
 non-backend, title-role mismatch y alternate stack siguen vigentes.
 
-Architect en V3 deja de tener un cap blanket. Para tratarse como hands-on
+Architect en MATCHING_V4 deja de tener un cap blanket. Para tratarse como hands-on
 exige simultáneamente: stack de aplicación compatible, desarrollo explícito,
 arquitectura backend/application y ownership de entrega/implementación. La
 evidencia de governance, infraestructura/cloud operations, presales o security
@@ -792,15 +798,67 @@ los demás conservan cap 64.
 Auditoría reproducible y sin mutación:
 
 ```powershell
-python -m chamba_hunter.commands.match_jobs --profile SENIOR_BACKEND_SOFTWARE_V1
-python -m chamba_hunter.commands.audit_search_recall --db data/chamba-hunter.db --profile SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.audit_pipeline_snapshots --db data/chamba-hunter.db --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.match_jobs --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.audit_search_recall --db data/chamba-hunter.db --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
 ```
 
 `audit_search_recall` abre SQLite con `mode=ro`, no migra ni crea tracing, y
-separa A) V2 + skills persistidas, B) V3 + skills persistidas, y C) V3 + las
-adiciones SKILLS_V3 recomputadas en memoria. Debe advertir snapshots upstream
+separa A) MATCHING_V2 + skills persistidas, B) MATCHING_V4 + skills persistidas,
+y C) MATCHING_V4 + las
+SKILLS_V3 completo recomputado en memoria. Debe advertir snapshots upstream
 stale; no usar esa comparación como baseline representativo hasta recalcular
 OCCUPATION_V3 en un rollout autorizado.
+
+### Integración y rollout del profile SSR/Senior
+
+La selección de profile se propaga explícitamente por `match_jobs`,
+`prioritize_jobs`, `refresh_search`, shortlist y outreach. Nunca se debe usar
+priority/export de un profile distinto del matching seleccionado. Los comandos
+de export del profile nuevo ejecutan preflight y fallan ante matching/priority
+stale o incompatible.
+
+La tabla `job_skill_classifications` sigue siendo el snapshot operacional
+legacy SKILLS_V2. MATCHING_V4 recompone SKILLS_V3 completo desde title y
+description, sin escribir ni borrar filas V2. Los reasons persistidos incluyen
+profile, matching rule, skill evidence version, componentes y ceilings.
+
+Comandos read-only seguros:
+
+```powershell
+python -m chamba_hunter.commands.audit_pipeline_snapshots --db data/chamba-hunter.db --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.audit_search_recall --db data/chamba-hunter.db --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.match_jobs --profile SSR_SENIOR_BACKEND_SOFTWARE_V1 --top 100
+```
+
+Secuencia futura que modifica SQLite y requiere autorización explícita:
+
+```powershell
+python -m chamba_hunter.commands.classify_argentina_eligibility --apply
+python -m chamba_hunter.commands.classify_job_occupations --apply
+python -m chamba_hunter.commands.classify_job_skills --apply
+python -m chamba_hunter.commands.classify_job_seniority --apply
+python -m chamba_hunter.commands.match_jobs --profile SSR_SENIOR_BACKEND_SOFTWARE_V1 --apply
+python -m chamba_hunter.commands.prioritize_jobs --profile SSR_SENIOR_BACKEND_SOFTWARE_V1 --apply
+python -m chamba_hunter.commands.export_shortlist --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.prioritize_outreach --profile SSR_SENIOR_BACKEND_SOFTWARE_V1 --apply
+python -m chamba_hunter.commands.export_outreach_shortlist --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.prepare_outreach_batch --profile SSR_SENIOR_BACKEND_SOFTWARE_V1
+```
+
+Rollback no destructivo: volver a ejecutar priority/export con
+`--profile BACKEND_SOFTWARE_V1`; las filas de ambos profiles coexisten por
+`search_profile_id`.
+
+### JOOBLE_QUERY_SET_V2
+
+El query set experimental V2 está implementado pero deshabilitado por default.
+Se selecciona únicamente con `acquire_jooble_jobs --query-set
+JOOBLE_QUERY_SET_V2` y nunca se ejecuta desde routine refresh. Conserva queries
+ancladas a Java/Kotlin para platform, integration, identity, payments, cloud
+software, application y authentication; no incluye IAM/security/cloud genérico.
+Su evaluación futura debe medir jobs por query, únicos, overlap con V1, ruido y
+yield marginal HIGH/VERY_HIGH. No existe medición real todavía.
 
 ### Estado observado después de C2
 

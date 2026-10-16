@@ -16,9 +16,12 @@ from chamba_hunter.repositories.tracing_repository import (
 )
 from chamba_hunter.services.job_operational_priority_service import (
     JobOperationalPriorityService,
-    PROFILE_NAME,
     RULE_VERSION,
     operational_sort_key,
+)
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
 )
 
 
@@ -38,6 +41,13 @@ def main() -> None:
             "priority for the current backend "
             "software search profile."
         )
+    )
+
+    parser.add_argument(
+        "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
+        default=DEFAULT_PROFILE_NAME,
+        help="Search profile whose professional matches will be prioritized.",
     )
 
     parser.add_argument(
@@ -79,10 +89,10 @@ def main() -> None:
         )
 
     database = (
-        Database(args.database)
+        Database(args.database, read_only=not args.apply)
         if args.database
         is not None
-        else Database()
+        else Database(read_only=not args.apply)
     )
 
     if args.apply:
@@ -121,6 +131,7 @@ def main() -> None:
                 database
             )
         ),
+        profile_name=args.profile,
     )
 
     summary = service.run(
@@ -165,7 +176,7 @@ def main() -> None:
     )
     print(
         "Search profile:",
-        PROFILE_NAME,
+        args.profile,
     )
     print(
         "Mode:          ",

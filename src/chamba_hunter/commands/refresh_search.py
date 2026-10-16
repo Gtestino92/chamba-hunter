@@ -4,6 +4,11 @@ from pathlib import Path
 import subprocess
 import sys
 
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class RefreshStep:
@@ -80,6 +85,7 @@ def build_plan(
     jooble_max_pages_per_query: int,
     output: Path,
     discover_broad_include_scanned: bool = False,
+    profile_name: str = DEFAULT_PROFILE_NAME,
 ) -> list[RefreshStep]:
     steps: list[
         RefreshStep
@@ -254,6 +260,8 @@ def build_plan(
                 module="match_jobs",
                 arguments=(
                     "--apply",
+                    "--profile",
+                    profile_name,
                     "--top",
                     "0",
                 ),
@@ -265,6 +273,8 @@ def build_plan(
                 module="prioritize_jobs",
                 arguments=(
                     "--apply",
+                    "--profile",
+                    profile_name,
                     "--top",
                     "0",
                 ),
@@ -280,6 +290,8 @@ def build_plan(
                 ),
                 module="export_shortlist",
                 arguments=(
+                    "--profile",
+                    profile_name,
                     "--output",
                     str(
                         output
@@ -405,6 +417,13 @@ def main() -> None:
             "Plan or execute the routine Chamba "
             "Hunter end-to-end search refresh."
         )
+    )
+
+    parser.add_argument(
+        "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
+        default=DEFAULT_PROFILE_NAME,
+        help="Profile propagated through matching, priority, and export.",
     )
 
     parser.add_argument(
@@ -662,6 +681,7 @@ def main() -> None:
             .discover_broad_include_scanned
         ),
         output=args.output,
+        profile_name=args.profile,
     )
 
     print(

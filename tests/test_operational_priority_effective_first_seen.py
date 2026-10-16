@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from chamba_hunter.db.connection import (
     Database,
 )
@@ -26,6 +28,7 @@ from chamba_hunter.services.job_operational_priority_service import (
     JobOperationalPriorityService,
     RULE_VERSION,
 )
+from chamba_hunter.services import job_operational_priority_service
 from chamba_hunter.services.job_shortlist_report_service import (
     build_summary,
 )
@@ -63,6 +66,15 @@ OLD_LEAD_SEEN = datetime(
     0,
     tzinfo=UTC,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fixed_operational_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        job_operational_priority_service,
+        "utc_now",
+        lambda: datetime(2026, 9, 15, 12, 0, tzinfo=UTC),
+    )
 
 
 def _db_time(

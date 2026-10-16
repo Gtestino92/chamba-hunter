@@ -29,10 +29,11 @@ from chamba_hunter.repositories.job_operational_priority_repository import (
 from chamba_hunter.repositories.tracing_repository import (
     TracingRepository,
 )
+from chamba_hunter.services.search_profile_registry import DEFAULT_PROFILE_NAME
 
 
 RULE_VERSION = "OPERATIONAL_PRIORITY_V5"
-PROFILE_NAME = "BACKEND_SOFTWARE_V1"
+PROFILE_NAME = DEFAULT_PROFILE_NAME
 MAX_ACTIONABLE_AGE_DAYS = 30
 
 
@@ -431,6 +432,7 @@ class JobOperationalPriorityService:
         tracing_repository: (
             TracingRepository
         ),
+        profile_name: str = DEFAULT_PROFILE_NAME,
     ) -> None:
         self.repository = repository
         self.freshness_repository = (
@@ -439,12 +441,27 @@ class JobOperationalPriorityService:
         self.tracing_repository = (
             tracing_repository
         )
+        self.profile_name = profile_name
 
     def run(
         self,
         *,
         apply: bool = False,
     ) -> OperationalPrioritySummary:
+        if apply and self.profile_name != DEFAULT_PROFILE_NAME:
+            from chamba_hunter.services.pipeline_snapshot_service import (
+                inspect_pipeline_snapshots,
+                require_complete,
+            )
+
+            require_complete(
+                inspect_pipeline_snapshots(
+                    self.repository.database,
+                    self.profile_name,
+                ),
+                "operational priority apply",
+            )
+
         freshness_baseline = None
 
         if apply:
@@ -456,7 +473,7 @@ class JobOperationalPriorityService:
         search_profile_id = (
             self.repository
             .get_search_profile_id(
-                PROFILE_NAME
+                self.profile_name
             )
         )
 
@@ -600,7 +617,7 @@ class JobOperationalPriorityService:
 
         reasons: JsonObject = {
             "rule_version": RULE_VERSION,
-            "search_profile": PROFILE_NAME,
+            "search_profile": self.profile_name,
             "operational_state": (
                 operational_state
             ),
@@ -957,7 +974,7 @@ class JobOperationalPriorityService:
 
             metadata = {
                 "rule_version": RULE_VERSION,
-                "search_profile": PROFILE_NAME,
+                "search_profile": self.profile_name,
                 "search_profile_id": (
                     summary.search_profile_id
                 ),
@@ -1027,7 +1044,7 @@ class JobOperationalPriorityService:
                 items_skipped=summary.total,
                 metadata={
                     "rule_version": RULE_VERSION,
-                    "search_profile": PROFILE_NAME,
+                    "search_profile": self.profile_name,
                 },
                 error_message=str(error),
             )

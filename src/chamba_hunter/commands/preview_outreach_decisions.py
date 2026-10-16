@@ -17,13 +17,17 @@ from chamba_hunter.services.outreach_decision_service import (
     DECISION_VERSION,
     decide_outreach,
 )
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
+)
 from chamba_hunter.services.outreach_eligibility_service import (
     ELIGIBILITY_VERSION,
     OutreachEligibilityService,
 )
 
 
-DEFAULT_PROFILE = "BACKEND_SOFTWARE_V1"
+DEFAULT_PROFILE = DEFAULT_PROFILE_NAME
 DEFAULT_MIN_SCORE = 35.0
 DEFAULT_TOP = 20
 
@@ -47,6 +51,7 @@ def main() -> None:
 
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE,
     )
 

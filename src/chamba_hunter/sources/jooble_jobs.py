@@ -15,11 +15,27 @@ JOOBLE_ARGENTINA_API_BASE = (
 )
 JOOBLE_LOCATION = "Argentina"
 JOOBLE_RESULTS_PER_PAGE = 50
-JOOBLE_QUERIES = (
+JOOBLE_QUERY_SET_V1 = (
     "backend",
     "java developer",
     "spring boot",
 )
+JOOBLE_QUERY_SET_V2 = (
+    "java engineer",
+    "kotlin engineer",
+    "platform engineer java",
+    "integration engineer java",
+    "identity engineer java",
+    "payments engineer java",
+    "cloud software engineer java",
+    "application engineer java",
+    "authentication engineer java",
+)
+JOOBLE_QUERY_SETS = {
+    "JOOBLE_QUERY_SET_V1": JOOBLE_QUERY_SET_V1,
+    "JOOBLE_QUERY_SET_V2": JOOBLE_QUERY_SET_V2,
+}
+JOOBLE_QUERIES = JOOBLE_QUERY_SET_V1
 
 
 class JoobleJobPosting(BaseModel):
@@ -117,6 +133,7 @@ class JoobleJobsClient:
         self,
         *,
         max_pages_per_query: int,
+        queries: tuple[str, ...] = JOOBLE_QUERY_SET_V1,
     ) -> JoobleJobsFetch:
         if max_pages_per_query <= 0:
             raise ValueError(
@@ -151,7 +168,7 @@ class JoobleJobsClient:
                 "User-Agent": "chamba-hunter/0.1",
             },
         ) as client:
-            for query in JOOBLE_QUERIES:
+            for query in queries:
                 pages_fetched = 0
                 jobs_fetched = 0
                 total_count: int | None = None

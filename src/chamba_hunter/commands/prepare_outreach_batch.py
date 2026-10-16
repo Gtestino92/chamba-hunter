@@ -14,9 +14,13 @@ from chamba_hunter.services.outreach_batch_service import (
     BATCH_VERSION,
     prepare_generic_outreach_batch,
 )
+from chamba_hunter.services.search_profile_registry import (
+    DEFAULT_PROFILE_NAME,
+    ROLLOUT_PROFILE_NAMES,
+)
 
 
-DEFAULT_PROFILE = "BACKEND_SOFTWARE_V1"
+DEFAULT_PROFILE = DEFAULT_PROFILE_NAME
 DEFAULT_MIN_SCORE = 35.0
 DEFAULT_LIMIT = 20
 DEFAULT_OUTPUT = Path(
@@ -46,6 +50,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--profile",
+        choices=ROLLOUT_PROFILE_NAMES,
         default=DEFAULT_PROFILE,
     )
     parser.add_argument(

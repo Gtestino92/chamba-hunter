@@ -36,10 +36,10 @@ from chamba_hunter.services.job_operational_priority_service import (
     MATCH_LEVEL_RANK,
     STATE_RANK,
 )
+from chamba_hunter.services.search_profile_registry import DEFAULT_PROFILE_NAME
 
 
 REPORT_VERSION = "SHORTLIST_REPORT_V3"
-DEFAULT_PROFILE_NAME = "BACKEND_SOFTWARE_V1"
 
 
 _LEVEL_FILLS = {

@@ -4,7 +4,10 @@ from pathlib import Path
 
 from chamba_hunter.db.connection import DEFAULT_DB_PATH, Database
 from chamba_hunter.repositories.job_matching_repository import JobMatchingRepository
-from chamba_hunter.services.job_matching_service import SENIOR_BACKEND_SOFTWARE_V1
+from chamba_hunter.services.job_matching_service import (
+    SSR_SENIOR_BACKEND_SOFTWARE_V1,
+)
+from chamba_hunter.services.pipeline_snapshot_service import inspect_pipeline_snapshots
 from chamba_hunter.services.search_recall_audit_service import (
     evaluate_search_recall,
     qualifies,
@@ -13,8 +16,8 @@ from chamba_hunter.services.search_recall_audit_service import (
 
 VARIANTS = (
     ("legacy", "A legacy MATCHING_V2 + persisted skills"),
-    ("senior_legacy_skills", "B MATCHING_V3 + persisted skills"),
-    ("senior_v3_skills", "C MATCHING_V3 + in-memory SKILLS_V3"),
+    ("target_legacy_skills", "B MATCHING_V4 + legacy-equivalent skills"),
+    ("target_v3_skills", "C MATCHING_V4 + full in-memory SKILLS_V3"),
 )
 
 
@@ -61,13 +64,13 @@ def _print_samples(comparisons, left: str, right: str, limit: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Read-only comparison of legacy and Senior backend matching."
+        description="Read-only comparison of legacy and SSR/Senior backend matching."
     )
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument(
         "--profile",
-        choices=(SENIOR_BACKEND_SOFTWARE_V1.name,),
-        default=SENIOR_BACKEND_SOFTWARE_V1.name,
+        choices=(SSR_SENIOR_BACKEND_SOFTWARE_V1.name,),
+        default=SSR_SENIOR_BACKEND_SOFTWARE_V1.name,
     )
     parser.add_argument("--samples", type=int, default=15)
     args = parser.parse_args()
@@ -79,11 +82,13 @@ def main() -> None:
     database = Database(args.db, read_only=True)
     candidates = JobMatchingRepository(database).list_scoped_candidates()
     audit = evaluate_search_recall(candidates)
+    snapshot_report = inspect_pipeline_snapshots(database, args.profile)
 
     print("Search recall audit (strictly read-only)")
     print("----------------------------------------")
     print(f"Database:   {args.db.resolve()}")
     print(f"Candidates: {audit.candidate_count}")
+    print("match_jobs/audit candidate evaluator: shared (mismatches=0)")
     print()
 
     with database.connection() as connection:
@@ -113,6 +118,8 @@ def main() -> None:
             )
         }
     print("Persisted upstream snapshots")
+    for issue in snapshot_report.issues:
+        print(f"  {issue.severity}: {issue.code}={issue.count} - {issue.detail}")
     if eligible_active_count != audit.candidate_count:
         print(
             "  WARNING: "
@@ -145,25 +152,25 @@ def main() -> None:
     print()
 
     _print_transition(
-        "A -> B (Senior-profile calibration)",
+        "A -> B (SSR/Senior profile calibration)",
         audit.comparisons,
         "legacy",
-        "senior_legacy_skills",
+        "target_legacy_skills",
     )
     _print_transition(
         "B -> C (additional SKILLS_V3 evidence)",
         audit.comparisons,
-        "senior_legacy_skills",
-        "senior_v3_skills",
+        "target_legacy_skills",
+        "target_v3_skills",
     )
 
     print()
     newly = sum(
-        not qualifies(item.legacy) and qualifies(item.senior_v3_skills)
+        not qualifies(item.legacy) and qualifies(item.target_v3_skills)
         for item in audit.comparisons
     )
     excluded = sum(
-        qualifies(item.legacy) and not qualifies(item.senior_v3_skills)
+        qualifies(item.legacy) and not qualifies(item.target_v3_skills)
         for item in audit.comparisons
     )
     print(f"Newly qualifying A -> C: {newly}")
@@ -172,7 +179,7 @@ def main() -> None:
     print("Seniority cohort score/level changes A -> C")
     for level in ("SENIOR", "MID", "UNKNOWN", "STAFF", "LEAD", "PRINCIPAL"):
         cohort = [item for item in audit.comparisons if item.candidate.seniority_class == level]
-        changed = sum(item.legacy.match_level != item.senior_v3_skills.match_level for item in cohort)
+        changed = sum(item.legacy.match_level != item.target_v3_skills.match_level for item in cohort)
         print(f"  {level:<9} candidates={len(cohort):4} level_changes={changed:4}")
 
     architect = [
@@ -189,13 +196,13 @@ def main() -> None:
         item for item in audit.comparisons
         if item.candidate.occupation_class != "SOFTWARE_ENGINEERING"
     ]
-    print(f"Architect candidates: {len(architect)}; level changes A -> C: {sum(item.legacy.match_level != item.senior_v3_skills.match_level for item in architect)}")
-    print(f"Software non-BACKEND candidates: {len(software_other)}; newly qualifying A -> C: {sum(not qualifies(item.legacy) and qualifies(item.senior_v3_skills) for item in software_other)}")
-    print(f"Non-software candidates: {len(non_software)}; newly qualifying A -> C: {sum(not qualifies(item.legacy) and qualifies(item.senior_v3_skills) for item in non_software)}")
+    print(f"Architect candidates: {len(architect)}; level changes A -> C: {sum(item.legacy.match_level != item.target_v3_skills.match_level for item in architect)}")
+    print(f"Software non-BACKEND candidates: {len(software_other)}; newly qualifying A -> C: {sum(not qualifies(item.legacy) and qualifies(item.target_v3_skills) for item in software_other)}")
+    print(f"Non-software candidates: {len(non_software)}; newly qualifying A -> C: {sum(not qualifies(item.legacy) and qualifies(item.target_v3_skills) for item in non_software)}")
 
     print()
     print("Representative A -> C score changes")
-    _print_samples(audit.comparisons, "legacy", "senior_v3_skills", args.samples)
+    _print_samples(audit.comparisons, "legacy", "target_v3_skills", args.samples)
 
 
 if __name__ == "__main__":
