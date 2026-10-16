@@ -10,13 +10,21 @@ DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "chamba-hunter.db"
 
 
 class Database:
-    def __init__(self, path: Path | str = DEFAULT_DB_PATH) -> None:
+    def __init__(
+        self,
+        path: Path | str = DEFAULT_DB_PATH,
+        read_only: bool = False,
+    ) -> None:
         self.path = Path(path)
+        self.read_only = read_only
 
     def _open(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-
-        connection = sqlite3.connect(self.path)
+        if self.read_only:
+            uri = self.path.resolve().as_uri() + "?mode=ro"
+            connection = sqlite3.connect(uri, uri=True)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            connection = sqlite3.connect(self.path)
 
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
@@ -34,6 +42,10 @@ class Database:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        if self.read_only:
+            raise RuntimeError(
+                "Transactions are disabled for a read-only database."
+            )
         connection = self._open()
 
         try:

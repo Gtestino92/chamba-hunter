@@ -281,7 +281,7 @@ No mezclar estas capas.
 
 ## 4. Search profile y versiones vigentes
 
-Profile:
+Profile operacional (sin cambios):
 
 ```text
 BACKEND_SOFTWARE_V1
@@ -311,22 +311,34 @@ English C1
 seniority objetivo: semisenior / mid-level
 ```
 
+Profile disponible sólo para evaluación read-only:
+
+```text
+SENIOR_BACKEND_SOFTWARE_V1 / MATCHING_V3 / SKILLS_V3
+
+target primario: Senior Backend / Senior Software Engineer hands-on IC
+target secundario: Staff / Lead / Principal IC y architect hands-on selectivos
+no target: people management, infrastructure/DevOps-only, governance/presales
+```
+
 Versiones publicadas relevantes:
 
 ```text
 BACKEND_SOFTWARE_V1
 ARGENTINA_V1
 OCCUPATION_V3
-SKILLS_V1
+SKILLS_V2 (default operacional)
+SKILLS_V3 (evaluación in-memory; no apply)
 SENIORITY_V1
-MATCHING_V1
+MATCHING_V2 (BACKEND_SOFTWARE_V1, default operacional)
+MATCHING_V3 (SENIOR_BACKEND_SOFTWARE_V1, no apply)
 JOB_CONTENT_V1
 OPERATIONAL_PRIORITY_V2
 SHORTLIST_REPORT_V2
 OPENOFFICE_ACTIONS_V1
 ```
 
-No mezclar source recency dentro de `MATCHING_V1`.
+No mezclar source recency dentro de matching profesional.
 
 ---
 
@@ -686,11 +698,25 @@ arquitectura backend. Se bloquea ante evidencia operativa dominante
 de administración IAM/cloud, security operations, production support
 o configuración de plataformas de integración.
 
-### SKILLS_V1
+### SKILLS_V2 / SKILLS_V3
 
 Una skill row significa una mención explícita en title/description.
 
 No significa required/preferred/hard requirement.
+
+`SKILLS_V3` conserva íntegro el catálogo V2 y agrega evidencia conservadora:
+
+```text
+API_DEVELOPMENT / INTEGRATION_DEVELOPMENT (requieren responsabilidad explícita)
+AUTHENTICATION / AUTHORIZATION
+RELIABILITY / RESILIENCE / RETRIES / IDEMPOTENCY / CIRCUIT_BREAKER
+CLOUD_GENERIC / CI_CD_GENERIC / OBSERVABILITY_GENERIC
+```
+
+Los genéricos tienen peso bajo y nunca reemplazan Java/Kotlin/Spring o la
+clasificación de rol. IAM y payments se exponen sólo como contexto derivado
+in-memory (`IAM_DOMAIN`, `PAYMENTS_DOMAIN`), sin categoría nueva en SQLite y
+sin puntaje propio. `SKILLS_V3` no se persiste en este slice.
 
 ### SENIORITY_V1
 
@@ -708,7 +734,7 @@ UNKNOWN
 
 Leadership es una dimensión separada.
 
-### MATCHING_V1
+### MATCHING_V2 / MATCHING_V3
 
 Thresholds:
 
@@ -730,6 +756,51 @@ manual application status
 ```
 
 No cambiar thresholds por una fuente nueva sin evidencia suficiente.
+
+`BACKEND_SOFTWARE_V1 / MATCHING_V2` mantiene exactamente la calibración
+legacy y continúa como default operacional. `SENIOR_BACKEND_SOFTWARE_V1 /
+MATCHING_V3` es seleccionable sólo para dry-run/read-only y no admite
+`--apply` hasta el slice de rollout.
+
+Seniority V3:
+
+```text
+SENIOR 15   MID 10       UNKNOWN 11
+STAFF 10    LEAD 9       PRINCIPAL 7
+JUNIOR 4    ENTRY 2      INTERN 0
+```
+
+Ceilings V3:
+
+```text
+INTERN 45   ENTRY 55     JUNIOR 64
+PRINCIPAL 79
+MANAGER 60  DIRECTOR 55  HEAD 50  VP/C_LEVEL 45
+```
+
+Staff y Lead no tienen ceiling por seniority; leadership permanece separado.
+Principal puede llegar a HIGH pero queda en 79. Los ceilings de ocupación,
+non-backend, title-role mismatch y alternate stack siguen vigentes.
+
+Architect en V3 deja de tener un cap blanket. Para tratarse como hands-on
+exige simultáneamente: stack de aplicación compatible, desarrollo explícito,
+arquitectura backend/application y ownership de entrega/implementación. La
+evidencia de governance, infraestructura/cloud operations, presales o security
+compliance bloquea el rescate. Un architect hands-on queda inicialmente en 79;
+los demás conservan cap 64.
+
+Auditoría reproducible y sin mutación:
+
+```powershell
+python -m chamba_hunter.commands.match_jobs --profile SENIOR_BACKEND_SOFTWARE_V1
+python -m chamba_hunter.commands.audit_search_recall --db data/chamba-hunter.db --profile SENIOR_BACKEND_SOFTWARE_V1
+```
+
+`audit_search_recall` abre SQLite con `mode=ro`, no migra ni crea tracing, y
+separa A) V2 + skills persistidas, B) V3 + skills persistidas, y C) V3 + las
+adiciones SKILLS_V3 recomputadas en memoria. Debe advertir snapshots upstream
+stale; no usar esa comparación como baseline representativo hasta recalcular
+OCCUPATION_V3 en un rollout autorizado.
 
 ### Estado observado después de C2
 

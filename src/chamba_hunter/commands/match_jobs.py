@@ -11,10 +11,11 @@ from chamba_hunter.repositories.tracing_repository import (
     TracingRepository,
 )
 from chamba_hunter.services.job_matching_service import (
+    BACKEND_SOFTWARE_V1,
     JobMatchingService,
+    MATCHING_PROFILES,
     PROFESSIONAL_RELEVANCE_FLOOR,
-    PROFILE_NAME,
-    RULE_VERSION,
+    get_matching_profile,
 )
 
 
@@ -33,6 +34,16 @@ def main() -> None:
             "Evaluate professional fit for the "
             "current backend software search profile."
         )
+    )
+
+    parser.add_argument(
+        "--profile",
+        choices=sorted(MATCHING_PROFILES),
+        default=BACKEND_SOFTWARE_V1.name,
+        help=(
+            "Matching profile to evaluate. The operational default remains "
+            "BACKEND_SOFTWARE_V1."
+        ),
     )
 
     parser.add_argument(
@@ -65,6 +76,13 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    profile = get_matching_profile(args.profile)
+
+    if args.apply and profile is not BACKEND_SOFTWARE_V1:
+        parser.error(
+            "--apply is disabled for SENIOR_BACKEND_SOFTWARE_V1 until the "
+            "rollout slice."
+        )
 
     if args.top < 0:
         parser.error(
@@ -76,7 +94,9 @@ def main() -> None:
             "--borderline cannot be negative."
         )
 
-    database = Database()
+    database = Database(
+        read_only=not args.apply
+    )
 
     if args.apply:
         applied_migrations = migrate(
@@ -99,6 +119,7 @@ def main() -> None:
         tracing_repository=TracingRepository(
             database
         ),
+        profile=profile,
     )
 
     summary = service.run(
@@ -233,11 +254,11 @@ def main() -> None:
     print("---------------------")
     print(
         "Rule version: ",
-        RULE_VERSION,
+        profile.rule_version,
     )
     print(
         "Search profile:",
-        PROFILE_NAME,
+        profile.name,
     )
     print(
         "Scope:         ",

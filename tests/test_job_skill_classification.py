@@ -11,6 +11,7 @@ from chamba_hunter.services import (
 def classify(
     description: str,
     title: str = "Referente Técnico",
+    rule_version: str = service.RULE_VERSION,
 ) -> set[str]:
     decisions = service._extract_candidate_skills(
         SkillCandidateRow(
@@ -24,7 +25,8 @@ def classify(
             backend_relevance="FULL_STACK",
             title=title,
             description=description,
-        )
+        ),
+        rule_version=rule_version,
     )
 
     return {
@@ -35,6 +37,16 @@ def classify(
 
 def test_rule_version_is_v2() -> None:
     assert service.RULE_VERSION == "SKILLS_V2"
+
+
+def test_skills_v3_apply_is_explicitly_disabled() -> None:
+    classifier = service.JobSkillClassificationService(
+        repository=None,  # type: ignore[arg-type]
+        tracing_repository=None,  # type: ignore[arg-type]
+        rule_version=service.SKILLS_V3_RULE_VERSION,
+    )
+    with pytest.raises(ValueError, match="evaluation-only"):
+        classifier.run(apply=True)
 
 
 def test_microservices_spanish_alias() -> None:
@@ -195,3 +207,102 @@ def test_existing_english_global_cases_stay_stable() -> None:
         "SPRING_BOOT",
         "POSTGRESQL",
     } <= skills
+
+
+def classify_v3(description: str, title: str = "Senior Backend Engineer") -> set[str]:
+    return classify(description, title, service.SKILLS_V3_RULE_VERSION)
+
+
+def test_skills_v3_detects_authentication_authorization_service_development() -> None:
+    skills = classify_v3(
+        "Build backend authentication and authorization services with Java and Spring Boot."
+    )
+    assert {"AUTHENTICATION", "AUTHORIZATION", "JAVA", "SPRING_BOOT"} <= skills
+
+
+def test_skills_v3_detects_resilience_implementation() -> None:
+    skills = classify_v3(
+        "Implement reliability and resilience using retries, idempotency, and circuit breakers."
+    )
+    assert {"RELIABILITY", "RESILIENCE", "RETRIES", "IDEMPOTENCY", "CIRCUIT_BREAKER"} <= skills
+
+
+def test_skills_v3_detects_generic_platform_evidence_without_inventing_vendor() -> None:
+    skills = classify_v3("Cloud services with CI/CD and observability practices.")
+    assert {"CLOUD_GENERIC", "CI_CD_GENERIC", "OBSERVABILITY_GENERIC"} <= skills
+    assert not skills & {"AWS", "AZURE", "GCP"}
+
+
+def test_skills_v3_distinguishes_api_development_from_api_consumption() -> None:
+    assert "API_DEVELOPMENT" in classify_v3(
+        "Design and build application APIs for partner integrations."
+    )
+    assert "API_DEVELOPMENT" not in classify_v3(
+        "Consume third-party APIs and review API documentation."
+    )
+
+
+def test_skills_v3_detects_explicit_integration_development() -> None:
+    assert "INTEGRATION_DEVELOPMENT" in classify_v3(
+        "Develop integrations between backend payment services and banking partners."
+    )
+
+
+def test_v3_domain_evidence_is_non_persisted_supporting_context() -> None:
+    candidate = SkillCandidateRow(
+        record_kind="ATS",
+        record_id=2,
+        source_type="ATS",
+        origin="GREENHOUSE",
+        company_name="Example",
+        eligibility_status="ELIGIBLE",
+        occupation_class="SOFTWARE_ENGINEERING",
+        backend_relevance="BACKEND",
+        title="Payments Backend Engineer",
+        description="Build payment processing services and IAM authentication APIs.",
+    )
+    evidence = service.extract_v3_domain_evidence(candidate)
+    assert evidence == ("IAM_DOMAIN", "PAYMENTS_DOMAIN")
+    persisted_keys = {
+        decision.skill_key
+        for decision in service._extract_candidate_skills(
+            candidate,
+            rule_version=service.SKILLS_V3_RULE_VERSION,
+        )
+    }
+    assert "IAM_DOMAIN" not in persisted_keys
+    assert "PAYMENTS_DOMAIN" not in persisted_keys
+
+
+def test_iam_governance_and_kubernetes_terraform_do_not_invent_development() -> None:
+    skills = classify_v3(
+        "IAM provisioning, access reviews and lifecycle governance. "
+        "Administer Kubernetes and Terraform."
+    )
+    assert "API_DEVELOPMENT" not in skills
+    assert "INTEGRATION_DEVELOPMENT" not in skills
+    assert {"KUBERNETES", "TERRAFORM"} <= skills
+
+
+def test_incidental_java_reference_adds_no_development_evidence() -> None:
+    skills = classify_v3(
+        "Review vendor systems; Java familiarity is a plus for production support."
+    )
+    assert "JAVA" in skills
+    assert "API_DEVELOPMENT" not in skills
+    assert "INTEGRATION_DEVELOPMENT" not in skills
+
+
+def test_v2_catalog_remains_unchanged_by_v3_additions() -> None:
+    description = "Build APIs with cloud, CI/CD, observability, retries and idempotency."
+    v2 = classify(description)
+    v3 = classify_v3(description)
+    assert not v2 & {
+        "API_DEVELOPMENT",
+        "CLOUD_GENERIC",
+        "CI_CD_GENERIC",
+        "OBSERVABILITY_GENERIC",
+        "RETRIES",
+        "IDEMPOTENCY",
+    }
+    assert v3 > v2

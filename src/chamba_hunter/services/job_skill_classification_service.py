@@ -20,6 +20,7 @@ from chamba_hunter.repositories.tracing_repository import (
 
 
 RULE_VERSION = "SKILLS_V2"
+SKILLS_V3_RULE_VERSION = "SKILLS_V3"
 
 MAX_EVIDENCE_MATCHES_PER_SOURCE = 3
 CONTEXT_RADIUS = 180
@@ -100,7 +101,7 @@ def _skill(
     )
 
 
-SKILL_CATALOG: tuple[
+SKILL_CATALOG_V2: tuple[
     SkillDefinition,
     ...,
 ] = (
@@ -294,6 +295,53 @@ SKILL_CATALOG: tuple[
 )
 
 
+SKILL_CATALOG_V3_ADDITIONS: tuple[SkillDefinition, ...] = (
+    _skill(
+        "API_DEVELOPMENT",
+        "ARCHITECTURE",
+        r"\b(?:build|building|develop|developing|design|designing|implement|implementing|own|owning|create|creating)\b.{0,80}\b(?:application\s+programming\s+interfaces?|apis?)\b",
+        r"\b(?:application\s+programming\s+interfaces?|apis?)\b.{0,80}\b(?:development|implementation|design|ownership)\b",
+        r"\b(?:desarrollar|diseñar|implementar|construir|mantener)\b.{0,80}\bapis?\b",
+    ),
+    _skill(
+        "INTEGRATION_DEVELOPMENT",
+        "ARCHITECTURE",
+        r"\b(?:build|building|develop|developing|design|designing|implement|implementing|own|owning)\b.{0,80}\bintegrations?\b",
+        r"\bintegrations?\b.{0,80}\b(?:development|implementation|design|ownership|code)\b",
+        r"\b(?:desarrollar|diseñar|implementar|construir)\b.{0,80}\bintegraciones?\b",
+    ),
+    _skill("AUTHENTICATION", "SECURITY", r"\bauthentication\b", r"\bautenticaci[oó]n\b"),
+    _skill("AUTHORIZATION", "SECURITY", r"\bauthori[sz]ation\b", r"\bautorizaci[oó]n\b"),
+    _skill("RELIABILITY", "ENGINEERING_PRACTICE", r"\breliability\b", r"\bconfiabilidad\b"),
+    _skill("RESILIENCE", "ENGINEERING_PRACTICE", r"\bresilien(?:ce|cy|t)\b", r"\bresiliencia\b"),
+    _skill("RETRIES", "ENGINEERING_PRACTICE", r"\bretr(?:y|ies)\b", r"\breintentos?\b"),
+    _skill("IDEMPOTENCY", "ENGINEERING_PRACTICE", r"\bidempoten(?:cy|t)\b", r"\bidempotencia\b"),
+    _skill("CIRCUIT_BREAKER", "ENGINEERING_PRACTICE", r"\bcircuit breakers?\b", r"\binterruptores? de circuito\b"),
+    _skill("CLOUD_GENERIC", "CLOUD", r"\bcloud\b", r"\bnube\b"),
+    _skill("CI_CD_GENERIC", "CI_CD", r"\bci\s*[/&-]?\s*cd\b", r"\bcontinuous integration\b.{0,50}\bcontinuous delivery\b"),
+    _skill("OBSERVABILITY_GENERIC", "OBSERVABILITY", r"\bobservability\b", r"\bobservabilidad\b"),
+)
+
+
+SKILL_CATALOG_V3: tuple[SkillDefinition, ...] = (
+    *SKILL_CATALOG_V2,
+    *SKILL_CATALOG_V3_ADDITIONS,
+)
+
+# Backward-compatible alias: operational classification remains V2.
+SKILL_CATALOG = SKILL_CATALOG_V2
+
+
+_V3_IAM_PATTERN = re.compile(
+    r"\biam\b|\bidentity and access management\b|\bgesti[oó]n de identidades? y accesos?\b",
+    re.I,
+)
+_V3_PAYMENTS_PATTERN = re.compile(
+    r"\bpayments?\b|\bpayment processing\b|\bpagos?\b",
+    re.I,
+)
+
+
 _BLOCK_TAG_PATTERN = re.compile(
     r"</?(?:"
     r"p|div|li|ul|ol|br|"
@@ -317,14 +365,29 @@ class JobSkillClassificationService:
         self,
         repository: JobSkillRepository,
         tracing_repository: TracingRepository,
+        rule_version: str = RULE_VERSION,
     ) -> None:
         self.repository = repository
         self.tracing_repository = tracing_repository
+        if rule_version not in {
+            RULE_VERSION,
+            SKILLS_V3_RULE_VERSION,
+        }:
+            raise ValueError(
+                f"Unsupported skill rule version: {rule_version}"
+            )
+        self.rule_version = rule_version
 
     def run(
         self,
         apply: bool = False,
     ) -> SkillClassificationSummary:
+        if apply and self.rule_version != RULE_VERSION:
+            raise ValueError(
+                "SKILLS_V3 is evaluation-only until the rollout slice; "
+                "persisting it is disabled."
+            )
+
         candidates = (
             self.repository.list_scoped_candidates()
         )
@@ -338,7 +401,8 @@ class JobSkillClassificationService:
         for candidate in candidates:
             summary.decisions.extend(
                 _extract_candidate_skills(
-                    candidate
+                    candidate,
+                    rule_version=self.rule_version,
                 )
             )
 
@@ -420,7 +484,7 @@ class JobSkillClassificationService:
                         decision.description_match
                     ),
                     evidence=decision.evidence,
-                    rule_version=RULE_VERSION,
+                    rule_version=self.rule_version,
                 )
                 for decision in summary.decisions
             ]
@@ -453,7 +517,7 @@ class JobSkillClassificationService:
             )
 
             metadata = {
-                "rule_version": RULE_VERSION,
+                "rule_version": self.rule_version,
                 "scope": (
                     "ARGENTINA_ELIGIBLE_OR_UNKNOWN"
                 ),
@@ -515,7 +579,7 @@ class JobSkillClassificationService:
                     summary.total_candidates
                 ),
                 metadata={
-                    "rule_version": RULE_VERSION,
+                    "rule_version": self.rule_version,
                 },
                 error_message=str(error),
             )
@@ -530,6 +594,7 @@ class JobSkillClassificationService:
 
 def _extract_candidate_skills(
     candidate: SkillCandidateRow,
+    rule_version: str = RULE_VERSION,
 ) -> list[SkillDecision]:
     title = _clean_text(
         candidate.title
@@ -543,7 +608,16 @@ def _extract_candidate_skills(
         SkillDecision
     ] = []
 
-    for skill in SKILL_CATALOG:
+    if rule_version == RULE_VERSION:
+        catalog = SKILL_CATALOG_V2
+    elif rule_version == SKILLS_V3_RULE_VERSION:
+        catalog = SKILL_CATALOG_V3
+    else:
+        raise ValueError(
+            f"Unsupported skill rule version: {rule_version}"
+        )
+
+    for skill in catalog:
         title_matches = _find_matches(
             text=title,
             patterns=skill.patterns,
@@ -607,6 +681,73 @@ def _extract_candidate_skills(
         )
 
     return decisions
+
+
+def extract_v3_domain_evidence(
+    candidate: SkillCandidateRow,
+) -> tuple[str, ...]:
+    """Return non-persisted domain context that never scores by itself."""
+    text = " ".join(
+        (
+            _clean_text(candidate.title),
+            _clean_text(candidate.description),
+        )
+    )
+    evidence = []
+    if _V3_IAM_PATTERN.search(text):
+        evidence.append("IAM_DOMAIN")
+    if _V3_PAYMENTS_PATTERN.search(text):
+        evidence.append("PAYMENTS_DOMAIN")
+    return tuple(evidence)
+
+
+def extract_candidate_skill_keys(
+    candidate: SkillCandidateRow,
+    rule_version: str = RULE_VERSION,
+) -> tuple[str, ...]:
+    """Fast evidence-key extraction for non-persisting comparisons."""
+    if rule_version == RULE_VERSION:
+        catalog = SKILL_CATALOG_V2
+    elif rule_version == SKILLS_V3_RULE_VERSION:
+        catalog = SKILL_CATALOG_V3
+    else:
+        raise ValueError(
+            f"Unsupported skill rule version: {rule_version}"
+        )
+
+    text = " ".join(
+        (
+            _clean_text(candidate.title),
+            _clean_text(candidate.description),
+        )
+    )
+    folded = text.casefold()
+    keys = []
+    for skill in catalog:
+        if skill.required_terms and not any(
+            term in folded for term in skill.required_terms
+        ):
+            continue
+        if any(pattern.search(text) for pattern in skill.patterns):
+            keys.append(skill.key)
+    return tuple(keys)
+
+
+def extract_v3_additional_skill_keys(
+    candidate: SkillCandidateRow,
+) -> tuple[str, ...]:
+    """Recompute only the additive V3 catalog over a persisted V2 snapshot."""
+    text = " ".join(
+        (
+            _clean_text(candidate.title),
+            _clean_text(candidate.description),
+        )
+    )
+    return tuple(
+        skill.key
+        for skill in SKILL_CATALOG_V3_ADDITIONS
+        if any(pattern.search(text) for pattern in skill.patterns)
+    )
 
 
 def _clean_text(

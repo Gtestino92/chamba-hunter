@@ -1,6 +1,7 @@
 from collections import Counter
 from dataclasses import dataclass, field
 import re
+from types import MappingProxyType
 
 from chamba_hunter.domain.common import (
     JsonObject,
@@ -39,6 +40,26 @@ class SkillGroup:
     name: str
     max_points: float
     signals: tuple[SkillSignal, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchingProfile:
+    name: str
+    description: str
+    rule_version: str
+    seniority_target: str
+    seniority_scores: tuple[tuple[str, float], ...]
+    seniority_score_ceilings: tuple[tuple[str, float], ...]
+    skill_groups: tuple[SkillGroup, ...]
+    conditional_architect_handling: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class RoleResponsibilityAssessment:
+    is_architect: bool
+    hands_on: bool
+    positive_signals: tuple[str, ...]
+    negative_signals: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -642,6 +663,134 @@ TITLE_ALTERNATE_STACK_PATTERNS: tuple[
 )
 
 
+ARCHITECT_TITLE_PATTERN = re.compile(
+    r"\b(?:architect|arquitecto|arquitecta)\b",
+    re.I,
+)
+APPLICATION_DEVELOPMENT_PATTERN = re.compile(
+    r"\b(?:build|develop|implement|write|code|create|maintain|ship|deliver|construir|desarrollar|implementar|programar|mantener)\w*\b.{0,100}\b(?:backend|application|software|services?|microservices?|apis?|code|aplicaciones?|servicios?|c[oó]digo)\b",
+    re.I,
+)
+BACKEND_ARCHITECTURE_PATTERN = re.compile(
+    r"\b(?:rest(?:ful)?\s+apis?|microservices?|distributed systems?|event[- ]driven|backend services?|application architecture|sistemas? distribuidos?|microservicios?|servicios? backend)\b",
+    re.I,
+)
+DELIVERY_OWNERSHIP_PATTERN = re.compile(
+    r"\b(?:own|ownership|lead|deliver|ship|deploy|responsible for|end[- ]to[- ]end|production|propietario|liderar|entregar|desplegar|producci[oó]n)\b.{0,100}\b(?:software|application|services?|apis?|code|delivery|implementation|aplicaciones?|servicios?|c[oó]digo|implementaci[oó]n)\b",
+    re.I,
+)
+ARCHITECT_NEGATIVE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "GOVERNANCE_ONLY",
+        re.compile(r"\b(?:enterprise architecture governance|architecture governance|standards and governance|roadmaps? and governance|gobierno de arquitectura)\b", re.I),
+    ),
+    (
+        "INFRASTRUCTURE_OPERATIONS",
+        re.compile(r"\b(?:landing zones?|network architecture|cloud administration|infrastructure operations?|terraform modules?|networking|administraci[oó]n cloud)\b", re.I),
+    ),
+    (
+        "PRESALES",
+        re.compile(r"\b(?:pre[- ]?sales|sales engineering|rfps?|customer demos?|commercial proposals?|preventas?)\b", re.I),
+    ),
+    (
+        "SECURITY_GOVERNANCE",
+        re.compile(r"\b(?:security compliance|risk assessments?|security governance|audit controls?|vulnerability management|cumplimiento|gesti[oó]n de vulnerabilidades)\b", re.I),
+    ),
+    (
+        "PRODUCTION_SUPPORT_ONLY",
+        re.compile(r"\b(?:production support only|support[- ]only|incident management and on-call support|soporte de producci[oó]n sin desarrollo)\b", re.I),
+    ),
+)
+
+
+SENIOR_SKILL_GROUPS: tuple[SkillGroup, ...] = tuple(
+    SkillGroup(
+        name=group.name,
+        max_points=group.max_points,
+        signals=(
+            *group.signals,
+            *(
+                (
+                    SkillSignal("API_DEVELOPMENT", "RELATED", 1.0),
+                    SkillSignal("INTEGRATION_DEVELOPMENT", "RELATED", 0.75),
+                )
+                if group.name == "ARCHITECTURE_API"
+                else ()
+            ),
+            *(
+                (SkillSignal("CLOUD_GENERIC", "RELATED", 0.5),)
+                if group.name == "CLOUD"
+                else ()
+            ),
+            *(
+                (SkillSignal("CI_CD_GENERIC", "RELATED", 0.5),)
+                if group.name == "DELIVERY"
+                else ()
+            ),
+        ),
+    )
+    for group in SKILL_GROUPS
+) + (
+    SkillGroup(
+        name="RELIABILITY_RESILIENCE",
+        max_points=1.5,
+        signals=(
+            SkillSignal("RELIABILITY", "RELATED", 0.5),
+            SkillSignal("RESILIENCE", "RELATED", 0.5),
+            SkillSignal("RETRIES", "RELATED", 0.25),
+            SkillSignal("IDEMPOTENCY", "RELATED", 0.5),
+            SkillSignal("CIRCUIT_BREAKER", "RELATED", 0.5),
+            SkillSignal("OBSERVABILITY_GENERIC", "RELATED", 0.25),
+        ),
+    ),
+)
+
+
+BACKEND_SOFTWARE_V1 = MatchingProfile(
+    name=PROFILE_NAME,
+    description=PROFILE_DESCRIPTION,
+    rule_version=RULE_VERSION,
+    seniority_target="semisenior / mid-level",
+    seniority_scores=tuple(SENIORITY_SCORES.items()),
+    seniority_score_ceilings=tuple(SENIORITY_SCORE_CEILINGS.items()),
+    skill_groups=SKILL_GROUPS,
+)
+
+SENIOR_BACKEND_SOFTWARE_V1 = MatchingProfile(
+    name="SENIOR_BACKEND_SOFTWARE_V1",
+    description=(
+        "Senior backend software engineering profile for hands-on IC roles, "
+        "with selective Staff, Lead, Principal, and implementation-owning architects."
+    ),
+    rule_version="MATCHING_V3",
+    seniority_target="senior hands-on backend software IC",
+    seniority_scores=(
+        ("SENIOR", 15.0),
+        ("MID", 10.0),
+        ("UNKNOWN", 11.0),
+        ("STAFF", 10.0),
+        ("LEAD", 9.0),
+        ("PRINCIPAL", 7.0),
+        ("JUNIOR", 4.0),
+        ("ENTRY", 2.0),
+        ("INTERN", 0.0),
+    ),
+    seniority_score_ceilings=(
+        ("INTERN", 45.0),
+        ("ENTRY", 55.0),
+        ("JUNIOR", 64.0),
+        ("PRINCIPAL", 79.0),
+    ),
+    skill_groups=SENIOR_SKILL_GROUPS,
+    conditional_architect_handling=True,
+)
+
+MATCHING_PROFILES = MappingProxyType({
+    BACKEND_SOFTWARE_V1.name: BACKEND_SOFTWARE_V1,
+    SENIOR_BACKEND_SOFTWARE_V1.name: SENIOR_BACKEND_SOFTWARE_V1,
+})
+
+
 def _has_strong_backend_core(
     skills: set[str],
 ) -> bool:
@@ -717,10 +866,98 @@ def _title_has_compatible_core(
     )
 
 
-def profile_rules() -> JsonObject:
+def get_matching_profile(
+    name: str,
+) -> MatchingProfile:
+    try:
+        return MATCHING_PROFILES[name]
+    except KeyError as error:
+        raise ValueError(
+            f"Unsupported matching profile: {name}"
+        ) from error
+
+
+def _role_responsibility_assessment(
+    candidate: MatchingCandidateRow,
+) -> RoleResponsibilityAssessment:
+    if not ARCHITECT_TITLE_PATTERN.search(candidate.title):
+        return RoleResponsibilityAssessment(False, False, (), ())
+
+    text = f"{candidate.title} {candidate.description}"
+    skills = set(candidate.skills)
+    positive = []
+
+    if skills & COMPATIBLE_CORE_SKILLS or TITLE_COMPATIBLE_CORE_PATTERN.search(text):
+        positive.append("COMPATIBLE_APPLICATION_STACK")
+    if APPLICATION_DEVELOPMENT_PATTERN.search(text):
+        positive.append("EXPLICIT_APPLICATION_DEVELOPMENT")
+    if (
+        skills
+        & {
+            "REST",
+            "API_DEVELOPMENT",
+            "MICROSERVICES",
+            "DISTRIBUTED_SYSTEMS",
+            "EVENT_DRIVEN",
+        }
+        or BACKEND_ARCHITECTURE_PATTERN.search(text)
+    ):
+        positive.append("BACKEND_APPLICATION_ARCHITECTURE")
+    if DELIVERY_OWNERSHIP_PATTERN.search(text):
+        positive.append("SOFTWARE_DELIVERY_OWNERSHIP")
+
+    negative = tuple(
+        key
+        for key, pattern in ARCHITECT_NEGATIVE_PATTERNS
+        if pattern.search(text)
+    )
+
+    return RoleResponsibilityAssessment(
+        is_architect=True,
+        hands_on=(len(positive) == 4 and not negative),
+        positive_signals=tuple(positive),
+        negative_signals=negative,
+    )
+
+
+def profile_rules(
+    profile: MatchingProfile = BACKEND_SOFTWARE_V1,
+) -> JsonObject:
+    principles = [
+        "occupation/backend dominates",
+        "missing skill evidence is not a rejection",
+        "peer technology is partial transfer, not equality",
+        "explicit alternate backend stack is a mild penalty and title-level ceiling",
+        "clear non-engineering title-role mismatch cannot rank as a strong backend match",
+    ]
+    if profile is BACKEND_SOFTWARE_V1:
+        principles.extend(
+            [
+                "junior remains viable but cannot rank HIGH for the mid-level target",
+                "architect titles remain visible but cannot rank HIGH for the mid-level target",
+            ]
+        )
+    else:
+        principles.extend(
+            [
+                "Staff and Lead IC seniority is not people management",
+                "Principal remains selective through a 79-point ceiling",
+                "architect roles require orthogonal implementation-ownership evidence",
+                "IAM and payments domain context never establishes backend relevance",
+            ]
+        )
+    principles.extend(
+        [
+            "software backend UNKNOWN may receive a role boost only from strong profile-specific backend evidence",
+            "UNKNOWN remains viable",
+            "professional score excludes freshness and application priority",
+            "only scores at or above the professional relevance floor are persisted as current professional matches",
+        ]
+    )
+
     return {
-        "profile_name": PROFILE_NAME,
-        "rule_version": RULE_VERSION,
+        "profile_name": profile.name,
+        "rule_version": profile.rule_version,
         "score_components": {
             "role_max": 45,
             "skills_max": 30,
@@ -738,7 +975,7 @@ def profile_rules() -> JsonObject:
             PROFESSIONAL_RELEVANCE_FLOOR
         ),
         "seniority_target": (
-            "semisenior / mid-level"
+            profile.seniority_target
         ),
         "skill_relations": [
             "EXACT",
@@ -746,19 +983,7 @@ def profile_rules() -> JsonObject:
             "RELATED",
             "SECONDARY",
         ],
-        "principles": [
-            "occupation/backend dominates",
-            "missing skill evidence is not a rejection",
-            "peer technology is partial transfer, not equality",
-            "explicit alternate backend stack is a mild penalty and title-level ceiling",
-            "clear non-engineering title-role mismatch cannot rank as a strong backend match",
-            "junior remains viable but cannot rank HIGH for the mid-level target",
-            "architect titles remain visible but cannot rank HIGH for the mid-level target",
-            "software backend UNKNOWN may receive a role boost only from strong profile-specific backend evidence",
-            "UNKNOWN remains viable",
-            "professional score excludes freshness and application priority",
-            "only scores at or above the professional relevance floor are persisted as current professional matches",
-        ],
+        "principles": principles,
         "skill_groups": [
             {
                 "name": group.name,
@@ -772,7 +997,7 @@ def profile_rules() -> JsonObject:
                     for signal in group.signals
                 ],
             }
-            for group in SKILL_GROUPS
+            for group in profile.skill_groups
         ],
     }
 
@@ -782,14 +1007,22 @@ class JobMatchingService:
         self,
         repository: JobMatchingRepository,
         tracing_repository: TracingRepository,
+        profile: MatchingProfile = BACKEND_SOFTWARE_V1,
     ) -> None:
         self.repository = repository
         self.tracing_repository = tracing_repository
+        self.profile = profile
 
     def run(
         self,
         apply: bool = False,
     ) -> MatchingSummary:
+        if apply and self.profile is not BACKEND_SOFTWARE_V1:
+            raise ValueError(
+                "SENIOR_BACKEND_SOFTWARE_V1 is evaluation-only until the "
+                "rollout slice; --apply is disabled."
+            )
+
         candidates = (
             self.repository.list_scoped_candidates()
         )
@@ -800,7 +1033,7 @@ class JobMatchingService:
         )
 
         summary.decisions = [
-            _match(candidate)
+            _match(candidate, profile=self.profile)
             for candidate in candidates
         ]
 
@@ -826,9 +1059,9 @@ class JobMatchingService:
 
         search_profile_id = (
             self.repository.upsert_search_profile(
-                name=PROFILE_NAME,
-                description=PROFILE_DESCRIPTION,
-                rules=profile_rules(),
+                name=self.profile.name,
+                description=self.profile.description,
+                rules=profile_rules(self.profile),
                 now=now,
             )
         )
@@ -895,7 +1128,7 @@ class JobMatchingService:
                         decision.score_ceiling
                     ),
                     reasons=decision.reasons,
-                    rule_version=RULE_VERSION,
+                    rule_version=self.profile.rule_version,
                 )
                 for decision in relevant_decisions
             ]
@@ -921,8 +1154,8 @@ class JobMatchingService:
             )
 
             metadata = {
-                "rule_version": RULE_VERSION,
-                "search_profile": PROFILE_NAME,
+                "rule_version": self.profile.rule_version,
+                "search_profile": self.profile.name,
                 "search_profile_id": (
                     search_profile_id
                 ),
@@ -975,8 +1208,8 @@ class JobMatchingService:
                 items_failed=1,
                 items_skipped=summary.total,
                 metadata={
-                    "rule_version": RULE_VERSION,
-                    "search_profile": PROFILE_NAME,
+                    "rule_version": self.profile.rule_version,
+                    "search_profile": self.profile.name,
                     "professional_relevance_floor": (
                         PROFESSIONAL_RELEVANCE_FLOOR
                     ),
@@ -994,23 +1227,28 @@ class JobMatchingService:
 
 def _match(
     candidate: MatchingCandidateRow,
+    profile: MatchingProfile = BACKEND_SOFTWARE_V1,
 ) -> MatchDecision:
     skills = set(
         candidate.skills
     )
 
-    role_score, role_reason = (
-        _role_score(candidate)
+    responsibility = _role_responsibility_assessment(candidate)
+    role_score, role_reason = _role_score(
+        candidate,
+        profile=profile,
+        responsibility=responsibility,
     )
 
     (
         skills_score,
         skill_reasons,
     ) = _skills_score(
-        skills
+        skills,
+        skill_groups=profile.skill_groups,
     )
 
-    seniority_score = SENIORITY_SCORES.get(
+    seniority_score = dict(profile.seniority_scores).get(
         candidate.seniority_class,
         0.0,
     )
@@ -1039,7 +1277,11 @@ def _match(
     )
 
     score_ceiling, ceiling_reasons = (
-        _score_ceiling(candidate)
+        _score_ceiling(
+            candidate,
+            profile=profile,
+            responsibility=responsibility,
+        )
     )
 
     score = round(
@@ -1091,8 +1333,8 @@ def _match(
     )
 
     reasons: JsonObject = {
-        "profile_name": PROFILE_NAME,
-        "rule_version": RULE_VERSION,
+        "profile_name": profile.name,
+        "rule_version": profile.rule_version,
         "candidate": {
             "source_type": candidate.source_type,
             "origin": candidate.origin,
@@ -1156,6 +1398,17 @@ def _match(
         "match_level": match_level,
     }
 
+    if profile.conditional_architect_handling:
+        reasons["components"]["role_responsibility"] = {
+            "is_architect": responsibility.is_architect,
+            "hands_on": responsibility.hands_on,
+            "positive_signals": list(responsibility.positive_signals),
+            "negative_signals": list(responsibility.negative_signals),
+        }
+        reasons["components"]["skills"]["supporting_domain_evidence"] = sorted(
+            skills & {"IAM_DOMAIN", "PAYMENTS_DOMAIN"}
+        )
+
     return MatchDecision(
         record_kind=candidate.record_kind,
         record_id=candidate.record_id,
@@ -1191,7 +1444,18 @@ def _match(
 
 def _role_score(
     candidate: MatchingCandidateRow,
+    profile: MatchingProfile = BACKEND_SOFTWARE_V1,
+    responsibility: RoleResponsibilityAssessment | None = None,
 ) -> tuple[float, str]:
+    responsibility = responsibility or _role_responsibility_assessment(candidate)
+
+    if (
+        profile.conditional_architect_handling
+        and responsibility.hands_on
+        and candidate.occupation_class in {"TECH_ADJACENT", "UNKNOWN"}
+    ):
+        return 35.0, "HANDS_ON_APPLICATION_ARCHITECT"
+
     key = (
         candidate.occupation_class,
         candidate.backend_relevance,
@@ -1248,6 +1512,7 @@ def _role_score(
 
 def _skills_score(
     skills: set[str],
+    skill_groups: tuple[SkillGroup, ...] = SKILL_GROUPS,
 ) -> tuple[
     float,
     list[JsonObject],
@@ -1255,7 +1520,7 @@ def _skills_score(
     total = 0.0
     reasons: list[JsonObject] = []
 
-    for group in SKILL_GROUPS:
+    for group in skill_groups:
         matched_signals = [
             signal
             for signal in group.signals
@@ -1378,6 +1643,8 @@ def _technology_penalty(
 
 def _score_ceiling(
     candidate: MatchingCandidateRow,
+    profile: MatchingProfile = BACKEND_SOFTWARE_V1,
+    responsibility: RoleResponsibilityAssessment | None = None,
 ) -> tuple[
     float,
     list[str],
@@ -1387,6 +1654,8 @@ def _score_ceiling(
     ]
 
     reasons = []
+
+    responsibility = responsibility or _role_responsibility_assessment(candidate)
 
     occupation_ceiling = (
         OCCUPATION_SCORE_CEILINGS.get(
@@ -1401,6 +1670,13 @@ def _score_ceiling(
         == "NON_BACKEND"
     ):
         occupation_ceiling = 60.0
+
+    if (
+        profile.conditional_architect_handling
+        and responsibility.hands_on
+        and candidate.occupation_class in {"TECH_ADJACENT", "UNKNOWN"}
+    ):
+        occupation_ceiling = None
 
     if occupation_ceiling is not None:
         ceilings.append(
@@ -1435,7 +1711,7 @@ def _score_ceiling(
         )
 
     seniority_ceiling = (
-        SENIORITY_SCORE_CEILINGS.get(
+        dict(profile.seniority_score_ceilings).get(
             candidate.seniority_class
         )
     )
@@ -1453,11 +1729,17 @@ def _score_ceiling(
             )
         )
 
-    title_seniority_risks = (
-        _title_seniority_risks(
-            candidate.title
-        )
-    )
+    title_seniority_risks = []
+    if not profile.conditional_architect_handling:
+        title_seniority_risks = _title_seniority_risks(candidate.title)
+    elif responsibility.is_architect:
+        architect_ceiling = 79.0 if responsibility.hands_on else 64.0
+        title_seniority_risks = [
+            (
+                "ARCHITECT_HANDS_ON" if responsibility.hands_on else "ARCHITECT_RESPONSIBILITY_RISK",
+                architect_ceiling,
+            )
+        ]
 
     for (
         risk_key,

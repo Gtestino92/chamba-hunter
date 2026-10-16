@@ -28,6 +28,7 @@ class MatchingCandidateRow:
     leadership_class: str
 
     skills: tuple[str, ...]
+    description: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +82,7 @@ class JobMatchingRepository:
                     END AS origin,
                     companies.name AS company_name,
                     jc.title,
+                    COALESCE(jc.description, '') AS description,
                     eligibility.status AS eligibility_status,
                     occupation.occupation_class,
                     occupation.backend_relevance,
@@ -195,6 +197,9 @@ class JobMatchingRepository:
                             key,
                             [],
                         )
+                    ),
+                    description=str(
+                        row["description"]
                     ),
                 )
             )
