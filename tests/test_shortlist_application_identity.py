@@ -684,6 +684,42 @@ def test_pending_canonical_lead_does_not_suppress_ats(
     assert summary.all_current[0].source.application_applied_at is None
 
 
+def test_status_without_applied_timestamp_does_not_hide_current_opportunity(
+    tmp_path: Path,
+) -> None:
+    database = _setup_database(tmp_path)
+    _add_company(database, 1, "TimestampCo")
+    _add_ats_job(
+        database,
+        job_id=551,
+        company_id=1,
+        title="Backend Engineer",
+    )
+    _add_priority(
+        database,
+        record_kind="ATS",
+        record_id=551,
+        company_id=1,
+        company_name="TimestampCo",
+        title="Backend Engineer",
+    )
+    _add_application(
+        database,
+        app_id=1,
+        company_id=1,
+        record_kind="ATS",
+        record_id=551,
+        status="APPLIED",
+        applied=False,
+    )
+
+    summary = _summary(database)
+
+    assert len(summary.all_current) == 1
+    assert summary.all_current[0].source.application_status == "APPLIED"
+    assert summary.all_current[0].source.application_applied_at is None
+
+
 def test_any_applied_alias_wins_over_pending_duplicate(
     tmp_path: Path,
 ) -> None:

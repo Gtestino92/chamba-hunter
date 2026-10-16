@@ -3,8 +3,10 @@ from collections import Counter
 from pathlib import Path
 
 from chamba_hunter.db.connection import DEFAULT_DB_PATH, Database
+from chamba_hunter.domain.common import utc_now
 from chamba_hunter.repositories.job_matching_repository import JobMatchingRepository
 from chamba_hunter.services.job_matching_service import (
+    MAX_PROFESSIONAL_MATCH_AGE_DAYS,
     SSR_SENIOR_BACKEND_SOFTWARE_V1,
 )
 from chamba_hunter.services.pipeline_snapshot_service import inspect_pipeline_snapshots
@@ -80,9 +82,17 @@ def main() -> None:
         parser.error(f"Database does not exist: {args.db}")
 
     database = Database(args.db, read_only=True)
-    candidates = JobMatchingRepository(database).list_scoped_candidates()
+    as_of = utc_now()
+    candidates = JobMatchingRepository(database).list_scoped_candidates(
+        as_of=as_of,
+        max_age_days=MAX_PROFESSIONAL_MATCH_AGE_DAYS,
+    )
     audit = evaluate_search_recall(candidates)
-    snapshot_report = inspect_pipeline_snapshots(database, args.profile)
+    snapshot_report = inspect_pipeline_snapshots(
+        database,
+        args.profile,
+        as_of=as_of,
+    )
 
     print("Search recall audit (strictly read-only)")
     print("----------------------------------------")

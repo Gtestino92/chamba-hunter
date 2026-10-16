@@ -32,6 +32,8 @@ from chamba_hunter.services.search_profile_registry import (
 
 RULE_VERSION = "MATCHING_V2"
 PROFESSIONAL_RELEVANCE_FLOOR = 50.0
+MAX_PROFESSIONAL_MATCH_AGE_DAYS = 60
+MATCHING_SCOPE_VERSION = "PROFESSIONAL_MATCH_SCOPE_V1"
 PROFILE_NAME = LEGACY_PROFILE_NAME
 PROFILE_DESCRIPTION = (
     "Backend Software Engineer search profile calibrated "
@@ -1046,6 +1048,13 @@ def profile_rules(
         "profile_name": profile.name,
         "rule_version": profile.rule_version,
         "skill_evidence_version": profile.skill_evidence_version,
+        "matching_scope": {
+            "version": MATCHING_SCOPE_VERSION,
+            "max_age_days": MAX_PROFESSIONAL_MATCH_AGE_DAYS,
+            "date_precedence": ["published_at", "first_seen_at"],
+            "last_seen_at_refreshes_publication": False,
+            "expired_job_leads_excluded": True,
+        },
         "score_components": {
             "role_max": 45,
             "skills_max": 30,
@@ -1125,8 +1134,15 @@ class JobMatchingService:
                 "new-profile matching apply",
             )
 
+        now = utc_now()
+
         candidates = (
-            self.repository.list_scoped_candidates()
+            self.repository.list_scoped_candidates(
+                as_of=now,
+                max_age_days=(
+                    MAX_PROFESSIONAL_MATCH_AGE_DAYS
+                ),
+            )
         )
 
         summary = MatchingSummary(
@@ -1263,6 +1279,12 @@ class JobMatchingService:
                 ),
                 "scope": (
                     "ARGENTINA_ELIGIBLE_OR_UNKNOWN"
+                ),
+                "matching_scope_version": (
+                    MATCHING_SCOPE_VERSION
+                ),
+                "max_professional_match_age_days": (
+                    MAX_PROFESSIONAL_MATCH_AGE_DAYS
                 ),
                 "professional_relevance_floor": (
                     PROFESSIONAL_RELEVANCE_FLOOR

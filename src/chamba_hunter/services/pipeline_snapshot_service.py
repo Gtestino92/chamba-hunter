@@ -1,6 +1,10 @@
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from chamba_hunter.db.connection import Database
+from chamba_hunter.db.converters import datetime_to_db
+from chamba_hunter.domain.common import utc_now
+from chamba_hunter.services.job_matching_service import MAX_PROFESSIONAL_MATCH_AGE_DAYS
 from chamba_hunter.services.search_profile_registry import (
     LEGACY_PROFILE_NAME,
     expected_matching_rule,
@@ -34,7 +38,15 @@ class PipelineSnapshotReport:
 def inspect_pipeline_snapshots(
     database: Database,
     profile_name: str,
+    *,
+    as_of: datetime | None = None,
 ) -> PipelineSnapshotReport:
+    effective_as_of = as_of or utc_now()
+    cutoff = datetime_to_db(
+        effective_as_of
+        - timedelta(days=MAX_PROFESSIONAL_MATCH_AGE_DAYS)
+    )
+    as_of_db = datetime_to_db(effective_as_of)
     expected_rule = expected_matching_rule(profile_name)
     issues: list[SnapshotIssue] = []
     with database.connection() as connection:
@@ -47,10 +59,19 @@ def inspect_pipeline_snapshots(
                  AND eligibility.record_id = jc.record_id
                 WHERE jc.is_active = 1
                   AND eligibility.status IN ('ELIGIBLE', 'UNKNOWN')
+                  AND datetime(
+                      COALESCE(jc.published_at, jc.first_seen_at)
+                  ) >= datetime(?)
+                  AND (
+                      jc.record_kind != 'LEAD'
+                      OR jc.expires_at IS NULL
+                      OR datetime(jc.expires_at) > datetime(?)
+                  )
             )
         """
         scoped = int(connection.execute(
-            scoped_cte + "SELECT COUNT(*) FROM scoped"
+            scoped_cte + "SELECT COUNT(*) FROM scoped",
+            (cutoff, as_of_db),
         ).fetchone()[0])
 
         checks = (
@@ -125,7 +146,10 @@ def inspect_pipeline_snapshots(
             ),
         )
         for severity, code, sql, detail in checks:
-            count = int(connection.execute(scoped_cte + sql).fetchone()[0])
+            count = int(connection.execute(
+                scoped_cte + sql,
+                (cutoff, as_of_db),
+            ).fetchone()[0])
             if count:
                 issues.append(SnapshotIssue(severity, code, count, detail))
 

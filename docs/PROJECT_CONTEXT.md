@@ -850,6 +850,62 @@ Rollback no destructivo: volver a ejecutar priority/export con
 `--profile BACKEND_SOFTWARE_V1`; las filas de ambos profiles coexisten por
 `search_profile_id`.
 
+### Retención de matching y limpieza física
+
+`PROFESSIONAL_MATCH_SCOPE_V1` limita todo matching profesional rutinario a
+oportunidades de hasta 60 días. La fecha efectiva es `published_at` cuando
+existe y `first_seen_at` sólo como fallback. `last_seen_at` nunca rejuvenece
+una publicación. Los leads con `expires_at` alcanzado quedan fuera incluso si
+son recientes. El filtro se ejecuta en SQL antes de cargar descriptions y de
+reconstruir SKILLS_V3. Esto no modifica la regla separada de actionability de
+30 días de `OPERATIONAL_PRIORITY_V5`.
+
+Cuando un match deja el scope de 60 días, el apply de matching elimina sólo la
+fila profesional del profile evaluado. El siguiente priority apply conserva la
+fila histórica y la convierte en `OUT_OF_SCOPE` o `INACTIVE`; applications y
+otros profiles no se modifican.
+
+Preview read-only de limpieza física a 180 días:
+
+```powershell
+python -m chamba_hunter.commands.cleanup_old_jobs --database data/chamba-hunter.db
+```
+
+Apply destructivo, sólo después de revisar el preview y con autorización:
+
+```powershell
+python -m chamba_hunter.commands.cleanup_old_jobs --database data/chamba-hunter.db --apply
+```
+
+La limpieza física sólo elimina fuentes inactivas y sin application,
+canonicalization, ATS hint, professional match, legacy match u operational
+priority history. El criterio de edad también usa `published_at` y luego
+`first_seen_at`; nunca score o `last_seen_at`. No ejecuta migrations.
+
+La shortlist considera una oportunidad ya aplicada únicamente cuando el
+registro de application elegido tiene `applied_at` no nulo. El status por sí
+solo no la oculta. Applications de leads canonicalized se propagan a la
+identidad ATS exacta; no existe matching fuzzy por company/title.
+
+Medición read-only del snapshot local del 2026-10-15:
+
+```text
+scope activo eligible/unknown anterior: 13,820
+scope profesional <= 60 días:            10,543
+excluidos por edad:                        3,189
+leads recientes pero expirados:               88
+reducción de evaluaciones SKILLS_V3:       3,277 (23.7%)
+
+KNOWN:                                     1,383
+KNOWN con application_applied_at:            577
+  identidad directa:                         576
+  alias exacto LEAD -> ATS:                     1
+KNOWN HIGH/VERY_HIGH aplicados:               570
+```
+
+Los 577 tienen application `JOB`, status `APPLIED` y `applied_at` persistido.
+No se encontró un join fuzzy ni un filtro incorrecto y no se reseteó history.
+
 ### JOOBLE_QUERY_SET_V2
 
 El query set experimental V2 está implementado pero deshabilitado por default.

@@ -15,6 +15,7 @@ from chamba_hunter.db.migrations import (
 from chamba_hunter.repositories.job_freshness_repository import (
     JobFreshnessRepository,
 )
+from chamba_hunter.repositories.job_matching_repository import JobMatchingRepository
 from chamba_hunter.repositories.job_operational_priority_repository import (
     JobOperationalPriorityRepository,
 )
@@ -436,6 +437,38 @@ def _decision(
         if decision.record_kind == record_kind
         and decision.record_id == record_id
     )
+
+
+def test_removed_professional_match_becomes_non_actionable_without_losing_history(
+    tmp_path: Path,
+) -> None:
+    database = _setup_database(tmp_path)
+    _add_company(database, 1, "RetentionCo")
+    _add_ats_job(database, job_id=99, company_id=1)
+    _add_match(database, record_kind="ATS", record_id=99)
+
+    _service(database).run(apply=True)
+    JobMatchingRepository(database).upsert_matches(
+        search_profile_id=1,
+        matches=[],
+        matched_at=AFTER_WATERMARK,
+    )
+
+    summary = _service(database).run(apply=True)
+    decision = next(item for item in summary.decisions if item.record_id == 99)
+    assert decision.operational_state == "OUT_OF_SCOPE"
+    assert decision.actionable is False
+
+    with database.connection() as connection:
+        row = connection.execute(
+            """
+            SELECT operational_state, professional_score
+            FROM job_operational_priorities
+            WHERE search_profile_id=1 AND record_kind='ATS' AND record_id=99
+            """
+        ).fetchone()
+    assert row["operational_state"] == "OUT_OF_SCOPE"
+    assert row["professional_score"] == 90.0
 
 
 def test_canonical_transition_uses_lead_history_not_false_new(

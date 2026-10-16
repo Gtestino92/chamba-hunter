@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.converters import (
@@ -67,7 +67,15 @@ class JobMatchingRepository:
 
     def list_scoped_candidates(
         self,
+        *,
+        as_of: datetime,
+        max_age_days: int,
     ) -> list[MatchingCandidateRow]:
+        cutoff = datetime_to_db(
+            as_of - timedelta(days=max_age_days)
+        )
+        as_of_db = datetime_to_db(as_of)
+
         with self.database.connection() as connection:
             rows = connection.execute(
                 """
@@ -107,10 +115,25 @@ class JobMatchingRepository:
                       'ELIGIBLE',
                       'UNKNOWN'
                   )
+                  AND datetime(
+                      COALESCE(
+                          jc.published_at,
+                          jc.first_seen_at
+                      )
+                  ) >= datetime(?)
+                  AND (
+                      jc.record_kind != 'LEAD'
+                      OR jc.expires_at IS NULL
+                      OR datetime(jc.expires_at) > datetime(?)
+                  )
                 ORDER BY
                     jc.record_kind,
                     jc.record_id
-                """
+                """,
+                (
+                    cutoff,
+                    as_of_db,
+                ),
             ).fetchall()
 
             skill_rows = connection.execute(
@@ -131,11 +154,26 @@ class JobMatchingRepository:
                       'ELIGIBLE',
                       'UNKNOWN'
                   )
+                  AND datetime(
+                      COALESCE(
+                          jc.published_at,
+                          jc.first_seen_at
+                      )
+                  ) >= datetime(?)
+                  AND (
+                      jc.record_kind != 'LEAD'
+                      OR jc.expires_at IS NULL
+                      OR datetime(jc.expires_at) > datetime(?)
+                  )
                 ORDER BY
                     skills.record_kind,
                     skills.record_id,
                     skills.skill_key
-                """
+                """,
+                (
+                    cutoff,
+                    as_of_db,
+                ),
             ).fetchall()
 
         skills_by_candidate: dict[

@@ -1,5 +1,6 @@
 import hashlib
 import sys
+from datetime import UTC, datetime
 
 from chamba_hunter.commands import audit_search_recall
 from chamba_hunter.db.connection import Database
@@ -60,6 +61,11 @@ def test_read_only_audit_leaves_database_unchanged(tmp_path, monkeypatch, capsys
         "argv",
         ["audit_search_recall", "--db", str(path), "--samples", "1"],
     )
+    monkeypatch.setattr(
+        audit_search_recall,
+        "utc_now",
+        lambda: datetime(2026, 1, 15, tzinfo=UTC),
+    )
     audit_search_recall.main()
     after = _digest(path)
 
@@ -109,6 +115,7 @@ def test_snapshot_audit_detects_missing_upstream_rows(tmp_path) -> None:
     report = inspect_pipeline_snapshots(
         Database(path, read_only=True),
         SSR_SENIOR_PROFILE_NAME,
+        as_of=datetime(2026, 1, 15, tzinfo=UTC),
     )
     codes = {issue.code for issue in report.errors}
     assert {"MISSING_OCCUPATION", "MISSING_SENIORITY", "PROFILE_NOT_PERSISTED"} <= codes
