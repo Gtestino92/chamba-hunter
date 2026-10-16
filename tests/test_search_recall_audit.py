@@ -2,10 +2,17 @@ import hashlib
 import sys
 from datetime import UTC, datetime
 
+import pytest
+
 from chamba_hunter.commands import audit_search_recall
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.migrations import migrate
-from chamba_hunter.services.pipeline_snapshot_service import inspect_pipeline_snapshots
+from chamba_hunter.services.pipeline_snapshot_service import (
+    PipelineSnapshotReport,
+    SnapshotIssue,
+    inspect_pipeline_snapshots,
+    require_operational_priority_apply,
+)
 from chamba_hunter.services.search_profile_registry import SSR_SENIOR_PROFILE_NAME
 
 
@@ -119,3 +126,43 @@ def test_snapshot_audit_detects_missing_upstream_rows(tmp_path) -> None:
     )
     codes = {issue.code for issue in report.errors}
     assert {"MISSING_OCCUPATION", "MISSING_SENIORITY", "PROFILE_NOT_PERSISTED"} <= codes
+
+
+@pytest.mark.parametrize(
+    "code",
+    (
+        "MISSING_OCCUPATION",
+        "MISSING_SENIORITY",
+        "OCCUPATION_VERSION_MISMATCH",
+        "SENIORITY_VERSION_MISMATCH",
+        "OCCUPATION_OLDER_THAN_ELIGIBILITY",
+        "SENIORITY_OLDER_THAN_ELIGIBILITY",
+        "MATCH_RULE_MISMATCH",
+        "MATCH_OLDER_THAN_CLASSIFICATION",
+        "PROFILE_NOT_PERSISTED",
+    ),
+)
+def test_priority_apply_preflight_blocks_invalid_upstream(code: str) -> None:
+    report = PipelineSnapshotReport(
+        profile_name=SSR_SENIOR_PROFILE_NAME,
+        scoped_candidates=1,
+        issues=(SnapshotIssue("ERROR", code, 1, "fixture"),),
+    )
+    with pytest.raises(RuntimeError, match=code):
+        require_operational_priority_apply(report, "operational priority apply")
+
+
+def test_priority_apply_preflight_allows_stale_priority() -> None:
+    report = PipelineSnapshotReport(
+        profile_name=SSR_SENIOR_PROFILE_NAME,
+        scoped_candidates=1,
+        issues=(
+            SnapshotIssue(
+                "ERROR",
+                "PRIORITY_OLDER_OR_INCOMPATIBLE",
+                1,
+                "fixture",
+            ),
+        ),
+    )
+    require_operational_priority_apply(report, "operational priority apply")

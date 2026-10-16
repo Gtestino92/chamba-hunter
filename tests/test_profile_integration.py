@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from chamba_hunter.db.connection import Database
 from chamba_hunter.db.converters import datetime_to_db
 from chamba_hunter.db.migrations import migrate
@@ -13,7 +15,14 @@ from chamba_hunter.services.job_matching_service import (
     SSR_SENIOR_BACKEND_SOFTWARE_V1,
 )
 from chamba_hunter.services.job_operational_priority_service import JobOperationalPriorityService
-from chamba_hunter.services.job_shortlist_report_service import build_summary
+from chamba_hunter.services.job_shortlist_report_service import (
+    build_summary,
+    export_shortlist,
+)
+from chamba_hunter.services.pipeline_snapshot_service import (
+    inspect_pipeline_snapshots,
+    require_complete,
+)
 from chamba_hunter.services.search_profile_registry import (
     LEGACY_PROFILE_NAME,
     SSR_SENIOR_PROFILE_NAME,
@@ -73,6 +82,18 @@ def _database(tmp_path) -> Database:
     return database
 
 
+def _strict_export(database: Database, output_path):
+    require_complete(
+        inspect_pipeline_snapshots(database, SSR_SENIOR_PROFILE_NAME),
+        "shortlist export",
+    )
+    return export_shortlist(
+        repository=JobShortlistReportRepository(database),
+        output_path=output_path,
+        profile_name=SSR_SENIOR_PROFILE_NAME,
+    )
+
+
 def test_new_profile_persistence_isolated_and_propagates_to_priority_and_export(tmp_path) -> None:
     database = _database(tmp_path)
     matching = JobMatchingService(
@@ -109,3 +130,93 @@ def test_new_profile_persistence_isolated_and_propagates_to_priority_and_export(
     )
     assert report.source.profile_name == SSR_SENIOR_PROFILE_NAME
     assert report.all_current[0].source.professional_rule_version == "MATCHING_V4"
+
+
+def test_priority_apply_refreshes_stale_rows_while_export_stays_strict(
+    tmp_path,
+) -> None:
+    database = _database(tmp_path)
+    matching_service = JobMatchingService(
+        JobMatchingRepository(database),
+        TracingRepository(database),
+        profile=SSR_SENIOR_BACKEND_SOFTWARE_V1,
+    )
+    priority_service = JobOperationalPriorityService(
+        repository=JobOperationalPriorityRepository(database),
+        freshness_repository=JobFreshnessRepository(database),
+        tracing_repository=TracingRepository(database),
+        profile_name=SSR_SENIOR_PROFILE_NAME,
+    )
+
+    matching_service.run(apply=True)
+    priority_service.run(apply=True)
+    with database.connection() as connection:
+        before = str(connection.execute(
+            """
+            SELECT evaluated_at
+            FROM job_operational_priorities priority
+            JOIN search_profiles profile
+              ON profile.id=priority.search_profile_id
+            WHERE profile.name=?
+            """,
+            (SSR_SENIOR_PROFILE_NAME,),
+        ).fetchone()["evaluated_at"])
+
+    matching_service.run(apply=True)
+    stale = inspect_pipeline_snapshots(database, SSR_SENIOR_PROFILE_NAME)
+    assert any(
+        issue.code == "PRIORITY_OLDER_OR_INCOMPATIBLE"
+        for issue in stale.errors
+    )
+    output_path = tmp_path / "shortlist.xlsx"
+    with pytest.raises(RuntimeError, match="PRIORITY_OLDER_OR_INCOMPATIBLE"):
+        _strict_export(database, output_path)
+    assert not output_path.exists()
+
+    priority_service.run(apply=True)
+    current = inspect_pipeline_snapshots(database, SSR_SENIOR_PROFILE_NAME)
+    require_complete(current, "shortlist export")
+
+    with database.connection() as connection:
+        row = connection.execute(
+            """
+            SELECT priority.evaluated_at, match.matched_at
+            FROM job_operational_priorities priority
+            JOIN search_profiles profile
+              ON profile.id=priority.search_profile_id
+            JOIN job_professional_matches match
+              ON match.search_profile_id=priority.search_profile_id
+             AND match.record_kind=priority.record_kind
+             AND match.record_id=priority.record_id
+            WHERE profile.name=?
+            """,
+            (SSR_SENIOR_PROFILE_NAME,),
+        ).fetchone()
+    assert str(row["evaluated_at"]) > before
+    assert str(row["evaluated_at"]) >= str(row["matched_at"])
+
+    report = _strict_export(database, output_path)
+    assert output_path.exists()
+    assert len(report.all_current) == 1
+
+
+def test_priority_apply_still_blocks_genuine_upstream_errors(tmp_path) -> None:
+    database = _database(tmp_path)
+    JobMatchingService(
+        JobMatchingRepository(database),
+        TracingRepository(database),
+        profile=SSR_SENIOR_BACKEND_SOFTWARE_V1,
+    ).run(apply=True)
+
+    with database.transaction() as connection:
+        connection.execute(
+            "DELETE FROM job_seniority_classifications WHERE record_kind='ATS' AND record_id=1"
+        )
+
+    with pytest.raises(RuntimeError, match="MISSING_SENIORITY"):
+        JobOperationalPriorityService(
+            repository=JobOperationalPriorityRepository(database),
+            freshness_repository=JobFreshnessRepository(database),
+            tracing_repository=TracingRepository(database),
+            profile_name=SSR_SENIOR_PROFILE_NAME,
+        ).run(apply=True)

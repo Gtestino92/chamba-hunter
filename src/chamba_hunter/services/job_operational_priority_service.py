@@ -451,10 +451,10 @@ class JobOperationalPriorityService:
         if apply and self.profile_name != DEFAULT_PROFILE_NAME:
             from chamba_hunter.services.pipeline_snapshot_service import (
                 inspect_pipeline_snapshots,
-                require_complete,
+                require_operational_priority_apply,
             )
 
-            require_complete(
+            require_operational_priority_apply(
                 inspect_pipeline_snapshots(
                     self.repository.database,
                     self.profile_name,

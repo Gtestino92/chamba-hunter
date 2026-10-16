@@ -236,6 +236,24 @@ def require_complete(report: PipelineSnapshotReport, operation: str) -> None:
         raise RuntimeError(f"{operation} blocked by incomplete pipeline: {rendered}")
 
 
+def require_operational_priority_apply(
+    report: PipelineSnapshotReport,
+    operation: str,
+) -> None:
+    errors = tuple(
+        issue
+        for issue in report.errors
+        if issue.code != "PRIORITY_OLDER_OR_INCOMPATIBLE"
+    )
+    if errors:
+        rendered = "; ".join(
+            f"{issue.code}={issue.count}" for issue in errors
+        )
+        raise RuntimeError(
+            f"{operation} blocked by incomplete pipeline: {rendered}"
+        )
+
+
 def require_matching_upstream(
     report: PipelineSnapshotReport,
     operation: str,
